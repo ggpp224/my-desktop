@@ -5,19 +5,43 @@ import { WorkflowPanel } from './WorkflowPanel';
 import { ToolPanel } from './ToolPanel';
 import { LogsPanel } from './LogsPanel';
 
-const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:3000';
+const DEFAULT_API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:3000';
+
+declare global {
+  interface Window {
+    electronAPI?: { getApiBase: () => Promise<string> };
+  }
+}
 
 export default function App() {
+  const [apiBase, setApiBase] = useState<string | null>(() =>
+    typeof window !== 'undefined' && window.electronAPI ? null : DEFAULT_API_BASE
+  );
   const [logs, setLogs] = useState<string[]>([]);
   const [ollamaOk, setOllamaOk] = useState<boolean | null>(null);
   const addLog = (line: string) => setLogs((prev) => [...prev, `${new Date().toISOString().slice(11, 19)} ${line}`]);
 
   useEffect(() => {
-    fetch(`${API_BASE}/health`)
+    if (apiBase === null && window.electronAPI) {
+      window.electronAPI.getApiBase().then(setApiBase);
+    }
+  }, [apiBase]);
+
+  useEffect(() => {
+    if (!apiBase) return;
+    fetch(`${apiBase}/health`)
       .then((r) => r.json())
       .then((d) => setOllamaOk(d.ok))
       .catch(() => setOllamaOk(false));
-  }, []);
+  }, [apiBase]);
+
+  if (apiBase === null) {
+    return (
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100vh', background: '#16213e', color: '#94a3b8' }}>
+        加载中…
+      </div>
+    );
+  }
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100vh' }}>
@@ -31,11 +55,11 @@ export default function App() {
       </header>
       <div style={{ display: 'flex', flex: 1, minHeight: 0 }}>
         <aside style={{ width: 280, borderRight: '1px solid #333', display: 'flex', flexDirection: 'column' }}>
-          <WorkflowPanel apiBase={API_BASE} addLog={addLog} />
+          <WorkflowPanel apiBase={apiBase} addLog={addLog} />
           <ToolPanel />
         </aside>
         <main style={{ flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0 }}>
-          <ChatPanel apiBase={API_BASE} addLog={addLog} />
+          <ChatPanel apiBase={apiBase} addLog={addLog} />
           <LogsPanel logs={logs} />
         </main>
       </div>

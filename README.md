@@ -60,6 +60,28 @@ npm run start
 
 Electron 主进程内会启动 Express，并加载打包后的 UI。
 
+### 6. 打包成 Mac 应用程序
+
+在项目根目录执行：
+
+```bash
+npm install
+npm run pack
+```
+
+或直接：
+
+```bash
+npm run pack:mac
+```
+
+会先执行 `npm run build`（编译 TS + 构建 UI），再使用 **electron-builder** 打出 Mac 安装包，输出在 **`release/`** 目录：
+
+- **AI Dev Control Center-0.1.0.dmg**：可拖到「应用程序」安装的镜像
+- **AI Dev Control Center-0.1.0-mac.zip**：解压即用的 .app 包
+
+首次打包需安装 `electron-builder`（已在 devDependencies 中）。若需自定义图标，在项目根目录放 `build/icon.icns`，并在 `package.json` 的 `build.mac.icon` 中指定路径。
+
 ## 配置
 
 - **Ollama**：`OLLAMA_BASE`（默认 `http://localhost:11434`）、`OLLAMA_MODEL`（默认 `qwen2.5`）

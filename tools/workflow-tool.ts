@@ -1,11 +1,25 @@
 /* AI 生成 By Peng.Guo */
 import { readFile } from 'fs/promises';
 import path from 'path';
+import { createRequire } from 'module';
 import { run as shellRun, runInTerminal } from './shell-tool.js';
 import { open as browserOpen } from './browser-tool.js';
 import { deploy as jenkinsDeploy } from './jenkins-tool.js';
 
-const WORKFLOWS_DIR = path.join(process.cwd(), 'workflows');
+const require = createRequire(import.meta.url);
+
+/** 安装后 .app 内 cwd 不是应用目录，需用 Electron 应用路径 */
+function getWorkflowsDir(): string {
+  if (typeof process !== 'undefined' && process.versions?.electron) {
+    try {
+      const { app } = require('electron');
+      return path.join(app.getAppPath(), 'workflows');
+    } catch {
+      return path.join(process.cwd(), 'workflows');
+    }
+  }
+  return path.join(process.cwd(), 'workflows');
+}
 
 export type Step =
   | { tool: 'shell'; cmd: string; visible?: boolean }
@@ -15,7 +29,7 @@ export type Step =
 export type WorkflowDef = { steps: Step[] };
 
 export async function runWorkflow(name: string): Promise<{ success: boolean; results: unknown[]; error?: string }> {
-  const filePath = path.join(WORKFLOWS_DIR, `${name.replace(/\.json$/i, '')}.json`);
+  const filePath = path.join(getWorkflowsDir(), `${name.replace(/\.json$/i, '')}.json`);
   let raw: string;
   try {
     raw = await readFile(filePath, 'utf-8');
