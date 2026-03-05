@@ -9,6 +9,8 @@ const app = express();
 app.use(cors());
 app.use(express.json());
 
+app.get('/', (_req, res) => res.status(200).json({ ok: true, service: 'ai-dev-control-center' }));
+
 app.get('/health', async (_req, res) => {
   const ok = await healthCheck();
   res.status(ok ? 200 : 503).json({ ok, service: 'ai-dev-control-center' });

@@ -1,13 +1,16 @@
 /* AI 生成 By Peng.Guo */
 import { readFile } from 'fs/promises';
 import path from 'path';
-import { run as shellRun } from './shell-tool.js';
+import { run as shellRun, runInTerminal } from './shell-tool.js';
 import { open as browserOpen } from './browser-tool.js';
 import { deploy as jenkinsDeploy } from './jenkins-tool.js';
 
 const WORKFLOWS_DIR = path.join(process.cwd(), 'workflows');
 
-export type Step = { tool: 'shell'; cmd: string } | { tool: 'browser'; url: string } | { tool: 'jenkins'; jobName: string };
+export type Step =
+  | { tool: 'shell'; cmd: string; visible?: boolean }
+  | { tool: 'browser'; url: string }
+  | { tool: 'jenkins'; jobName: string };
 
 export type WorkflowDef = { steps: Step[] };
 
@@ -34,8 +37,13 @@ export async function runWorkflow(name: string): Promise<{ success: boolean; res
     const step = steps[i];
     try {
       if (step.tool === 'shell' && 'cmd' in step) {
-        const out = await shellRun(step.cmd);
-        results.push({ step: i, tool: 'shell', ...out });
+        if (step.visible) {
+          await runInTerminal(step.cmd);
+          results.push({ step: i, tool: 'shell', visible: true, cmd: step.cmd });
+        } else {
+          const out = await shellRun(step.cmd);
+          results.push({ step: i, tool: 'shell', ...out });
+        }
       } else if (step.tool === 'browser' && 'url' in step) {
         await browserOpen(step.url);
         results.push({ step: i, tool: 'browser', url: step.url });

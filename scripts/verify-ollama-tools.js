@@ -78,5 +78,11 @@ verifyToolCalling()
   })
   .catch((err) => {
     console.error('Verification failed:', err.message);
+    if (err.message === 'fetch failed' || err.cause?.code === 'ECONNREFUSED') {
+      console.error('\n可能原因：Ollama 未启动或地址不正确。');
+      console.error('请尝试：');
+      console.error('  1. 启动 Ollama：ollama serve  或  ollama run qwen2.5');
+      console.error('  2. 若 Ollama 在其他机器/端口，设置环境变量：OLLAMA_BASE=http://<host>:<port>');
+    }
     process.exit(1);
   });

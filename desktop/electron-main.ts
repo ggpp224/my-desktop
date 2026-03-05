@@ -13,10 +13,21 @@ function createWindow(): void {
   mainWindow = new BrowserWindow({
     width: 1200,
     height: 800,
+    show: false,
     webPreferences: { nodeIntegration: false, contextIsolation: true },
   });
+  mainWindow.once('ready-to-show', () => {
+    mainWindow?.show();
+  });
+  mainWindow.webContents.on('did-fail-load', (_event, code, desc) => {
+    console.error('Window load failed:', code, desc);
+    mainWindow?.show();
+  });
   if (isDev) {
-    mainWindow.loadURL('http://localhost:5173');
+    mainWindow.loadURL('http://localhost:5173').catch((err) => {
+      console.error('loadURL failed:', err);
+      mainWindow?.show();
+    });
     mainWindow.webContents.openDevTools();
   } else {
     mainWindow.loadFile(path.join(__dirname, '../ui/dist/index.html'));

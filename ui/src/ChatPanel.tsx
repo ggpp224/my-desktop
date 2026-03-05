@@ -9,7 +9,7 @@ interface ChatPanelProps {
 }
 
 const QUICK_ACTIONS = [
-  { label: '开始工作', message: '开始工作' },
+  { label: '开始工作', message: '执行工作流 start-work' },
   { label: '打开开发环境', message: '打开开发环境' },
   { label: '打开 Jenkins', message: '打开 Jenkins' },
 ];
