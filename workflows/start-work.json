@@ -1,0 +1,7 @@
+{
+  "steps": [
+    { "tool": "shell", "cmd": "docker compose up -d" },
+    { "tool": "browser", "url": "https://github.com" },
+    { "tool": "browser", "url": "http://localhost:8080" }
+  ]
+}

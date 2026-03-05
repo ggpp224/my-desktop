@@ -1,0 +1,35 @@
+{
+  "name": "ai-dev-control-center",
+  "version": "0.1.0",
+  "type": "module",
+  "description": "Desktop app: AI controls dev workflow via local LLM and tools",
+  "main": "dist/desktop/electron-main.js",
+  "scripts": {
+    "verify-ollama": "node scripts/verify-ollama-tools.js",
+    "build": "tsc && npm run build:ui",
+    "build:ui": "cd ui && npm run build",
+    "dev": "tsc && concurrently \"npm run dev:ui\" \"npm run dev:server\" \"wait-on http://localhost:5173 http://localhost:3000 && electron .\"",
+    "dev:server": "tsx watch server/api.ts",
+    "dev:electron": "wait-on http://localhost:5173 http://localhost:3000 && electron .",
+    "dev:ui": "cd ui && npm run dev",
+    "start": "npm run build && electron .",
+    "postinstall": "cd ui && npm install"
+  },
+  "dependencies": {
+    "cors": "^2.8.5",
+    "express": "^4.21.0"
+  },
+  "devDependencies": {
+    "@types/cors": "^2.8.17",
+    "@types/express": "^4.17.21",
+    "@types/node": "^22.0.0",
+    "concurrently": "^9.0.1",
+    "electron": "^33.0.0",
+    "tsx": "^4.19.2",
+    "typescript": "^5.6.0",
+    "wait-on": "^8.0.1"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}

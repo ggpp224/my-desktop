@@ -1,0 +1,14 @@
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "NodeNext",
+    "moduleResolution": "NodeNext",
+    "outDir": "dist",
+    "rootDir": ".",
+    "strict": true,
+    "esModuleInterop": true,
+    "skipLibCheck": true
+  },
+  "include": ["agent/**/*.ts", "tools/**/*.ts", "server/**/*.ts", "desktop/**/*.ts", "config/**/*.ts"],
+  "exclude": ["node_modules", "ui", "dist"]
+}
