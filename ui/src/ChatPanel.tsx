@@ -1,5 +1,5 @@
 /* AI 生成 By Peng.Guo */
-import { useState } from 'react';
+import { useState, useRef, useEffect } from 'react';
 
 type AgentResult = { success: boolean; text?: string; toolResults?: unknown[]; error?: string };
 
@@ -20,13 +20,25 @@ const DEPLOY_OPTIONS = [
   { value: 'nova', label: '部署nova' },
 ];
 
-type DeployResult = { success: boolean; message: string };
+type DeployResult = { success: boolean; message: string; queueUrl?: string; jobName?: string };
+type DeployStatusResult = { status: string; message?: string; buildUrl?: string; buildNumber?: number; buildName?: string };
+
+const DEPLOY_POLL_INTERVAL_MS = 3000;
+const DEPLOY_POLL_MAX = 200; // 3 秒一次，约 10 分钟
+const DEPLOY_CONSECUTIVE_FAIL_MAX = 4;
+/** 至少轮询几次后才把 success/failure/aborted 当作最终结果，避免任务未出现在 buildHistory 时误用上一次构建状态 */
+const DEPLOY_POLL_MIN_BEFORE_TERMINAL = 4;
 
 export function ChatPanel({ apiBase, addLog }: ChatPanelProps) {
   const [input, setInput] = useState('');
   const [loading, setLoading] = useState(false);
   const [deploySelect, setDeploySelect] = useState('');
   const [messages, setMessages] = useState<Array<{ role: 'user' | 'assistant'; content: string; toolResults?: unknown[] }>>([]);
+  const deployPollRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  useEffect(() => () => {
+    if (deployPollRef.current) clearInterval(deployPollRef.current);
+  }, []);
 
   const send = async (text: string) => {
     const msg = text.trim();
@@ -74,16 +86,83 @@ export function ChatPanel({ apiBase, addLog }: ChatPanelProps) {
         body: JSON.stringify({ job: jobKey }),
       });
       const data: DeployResult = await res.json();
-      addLog(data.success ? '部署已触发' : `部署失败: ${data.message}`);
-      setMessages((prev) => [
-        ...prev,
-        { role: 'assistant', content: data.success ? data.message : `失败: ${data.message}` },
-      ]);
+      setLoading(false);
+      if (!data.success) {
+        addLog(`部署失败: ${data.message}`);
+        setMessages((prev) => [...prev, { role: 'assistant', content: `失败: ${data.message}` }]);
+        return;
+      }
+      addLog('已触发，构建中…');
+      setMessages((prev) => [...prev, { role: 'assistant', content: data.message }]);
+      const pollByQueueUrl = data.queueUrl;
+      const pollByJobName = data.jobName;
+      if (!pollByQueueUrl && !pollByJobName) return;
+      let pollCount = 0;
+      let consecutiveFail = 0;
+      const statusUrl = pollByQueueUrl
+        ? `${apiBase}/jenkins/deploy/status?queueUrl=${encodeURIComponent(pollByQueueUrl)}`
+        : `${apiBase}/jenkins/deploy/status?jobName=${encodeURIComponent(pollByJobName!)}`;
+
+      const formatDeployMsg = (s: DeployStatusResult) => {
+        const name = s.buildName ?? label;
+        const num = s.buildNumber != null ? ` #${s.buildNumber}` : '';
+        const progress = s.message ?? '';
+        return progress ? `${name}${num} ${progress}` : `${name}${num}`;
+      };
+
+      deployPollRef.current = setInterval(async () => {
+        pollCount += 1;
+        if (pollCount > DEPLOY_POLL_MAX) {
+          if (deployPollRef.current) clearInterval(deployPollRef.current);
+          deployPollRef.current = null;
+          setMessages((prev) => [...prev, { role: 'assistant', content: '部署状态查询超时，请到 Jenkins 查看。' }]);
+          addLog('部署轮询超时');
+          return;
+        }
+        try {
+          const statusRes = await fetch(statusUrl);
+          const status: DeployStatusResult = await statusRes.json();
+          const isTerminal = status.status === 'success' || status.status === 'failure' || status.status === 'aborted';
+          const isFail = status.status === 'unknown' || !statusRes.ok;
+          if (isTerminal) {
+            consecutiveFail = 0;
+            if (pollCount < DEPLOY_POLL_MIN_BEFORE_TERMINAL) {
+              return;
+            }
+            if (deployPollRef.current) clearInterval(deployPollRef.current);
+            deployPollRef.current = null;
+            const msg = formatDeployMsg(status);
+            addLog(status.status === 'success' ? '部署成功' : msg);
+            setMessages((prev) => [...prev, { role: 'assistant', content: msg }]);
+            return;
+          }
+          if (isFail) {
+            consecutiveFail += 1;
+          if (consecutiveFail >= DEPLOY_CONSECUTIVE_FAIL_MAX) {
+            if (deployPollRef.current) clearInterval(deployPollRef.current);
+            deployPollRef.current = null;
+            const errMsg = `轮询失败：连续 ${DEPLOY_CONSECUTIVE_FAIL_MAX} 次无法获取状态，请到 Jenkins 查看。`;
+            setMessages((prev) => [...prev, { role: 'assistant', content: errMsg }]);
+            addLog(errMsg);
+          }
+            return;
+          }
+          consecutiveFail = 0;
+        } catch {
+          consecutiveFail += 1;
+          if (consecutiveFail >= DEPLOY_CONSECUTIVE_FAIL_MAX) {
+            if (deployPollRef.current) clearInterval(deployPollRef.current);
+            deployPollRef.current = null;
+            const errMsg = `轮询失败：连续 ${DEPLOY_CONSECUTIVE_FAIL_MAX} 次请求异常，请到 Jenkins 查看。`;
+            setMessages((prev) => [...prev, { role: 'assistant', content: errMsg }]);
+            addLog(errMsg);
+          }
+        }
+      }, DEPLOY_POLL_INTERVAL_MS);
     } catch (e) {
       const err = e instanceof Error ? e.message : String(e);
       addLog(`部署请求异常: ${err}`);
       setMessages((prev) => [...prev, { role: 'assistant', content: `请求失败: ${err}` }]);
-    } finally {
       setLoading(false);
     }
   };
@@ -148,7 +227,7 @@ export function ChatPanel({ apiBase, addLog }: ChatPanelProps) {
             )}
           </div>
         ))}
-        {loading && <p style={{ color: '#888' }}>Loading...</p>}
+        {loading && <p style={{ color: '#888' }}>处理中…</p>}
       </div>
       <form
         onSubmit={(e) => { e.preventDefault(); send(input); }}

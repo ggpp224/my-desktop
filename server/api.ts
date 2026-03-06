@@ -5,7 +5,7 @@ import cors from 'cors';
 import { runAgent } from '../agent/agent.js';
 import { healthCheck } from '../agent/ollama-client.js';
 import { config } from '../config/default.js';
-import { deploy as jenkinsDeploy } from '../tools/jenkins-tool.js';
+import { deploy as jenkinsDeploy, getDeployStatus, getDeployStatusByBuildHistory } from '../tools/jenkins-tool.js';
 
 const app = express();
 app.use(cors());
@@ -48,11 +48,52 @@ app.post('/jenkins/deploy', async (req, res) => {
   const parameters = preset?.parameters;
   try {
     const result = await jenkinsDeploy(jobName, parameters);
-    res.json(result);
+    res.json({ ...result, jobName });
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
     res.status(500).json({ success: false, message: msg });
   }
+});
+
+/** 从 URL 中判断是否为 job 页地址（非队列项），并提取 job 名。队列项格式为 .../queue/item/123/ */
+function parseJobNameFromUrl(url: string): string | null {
+  try {
+    const u = new URL(url);
+    const path = u.pathname.replace(/\/$/, '');
+    if (path.includes('/queue/item/')) return null;
+    const m = path.match(/\/job\/([^/]+)$/);
+    return m ? decodeURIComponent(m[1]) : null;
+  } catch {
+    return null;
+  }
+}
+
+/** 查询一次部署状态（不阻塞），由前端轮询。支持 queueUrl（队列 API）或 jobName（buildHistory/ajax）。若 queueUrl 实为 job 页地址则按 jobName 用 buildHistory 查 */
+app.get('/jenkins/deploy/status', async (req, res) => {
+  const queueUrlRaw = (req.query?.queueUrl ?? '').toString().trim();
+  const jobNameParam = (req.query?.jobName ?? '').toString().trim();
+  const queueUrl = queueUrlRaw ? decodeURIComponent(queueUrlRaw) : '';
+  const jobNameFromUrl = queueUrl ? parseJobNameFromUrl(queueUrl) : null;
+  const jobName = jobNameParam ? decodeURIComponent(jobNameParam) : jobNameFromUrl;
+  if (jobName) {
+    try {
+      const result = await getDeployStatusByBuildHistory(jobName);
+      return res.json(result);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      return res.status(500).json({ status: 'unknown', message: msg });
+    }
+  }
+  if (queueUrl) {
+    try {
+      const result = await getDeployStatus(queueUrl);
+      return res.json(result);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      return res.status(500).json({ status: 'unknown', message: msg });
+    }
+  }
+  res.status(400).json({ status: 'unknown', message: '缺少 queueUrl 或 jobName' });
 });
 
 /** 启动 API 服务；若端口被占用则尝试 3001、3002…，返回实际监听端口 */
