@@ -18,6 +18,11 @@ const QUICK_ACTIONS = [
 const DEPLOY_OPTIONS = [
   { value: '', label: '快捷部署...' },
   { value: 'nova', label: '部署nova' },
+  { value: 'cc-web', label: '部署 cc-web' },
+  { value: 'react18', label: '部署 react18' },
+  { value: 'biz-solution', label: '部署 biz-solution' },
+  { value: 'biz-guide', label: '部署 biz-guide' },
+  { value: 'scm', label: '部署 scm' },
 ];
 
 type DeployResult = { success: boolean; message: string; queueUrl?: string; jobName?: string };

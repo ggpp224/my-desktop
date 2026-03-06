@@ -61,6 +61,9 @@ export async function getDeployStatusByBuildHistory(jobName: string): Promise<De
       return { status: 'unknown', message: `buildHistory 请求失败: ${res.status}` };
     }
     const html = await res.text();
+    if (/Oops!|A problem occurred|log in|Logging ID=/i.test(html) && !/<tr[^>]*class="[^"]*build-row/i.test(html)) {
+      return { status: 'unknown', message: 'Jenkins 返回错误页：需登录或无权访问该任务，请检查 JENKINS_USERNAME/JENKINS_TOKEN 与任务权限', buildName: jobName };
+    }
     const firstRowMatch = html.match(/<tr[^>]*class="[^"]*build-row[^"]*"[^>]*>[\s\S]*?<\/tr>/);
     const row = firstRowMatch ? firstRowMatch[0] : html;
     const buildLinkMatch = row.match(/href="(\/job\/[^"]+\/(\d+))\/"/);
@@ -153,20 +156,30 @@ export async function deploy(
   if (!base) {
     return { success: false, message: 'Jenkins 未配置：请设置 JENKINS_BASE_URL' };
   }
-  const url = `${base}/job/${encodeURIComponent(jobName)}/build`;
   const authHeaders = getAuthHeaders();
   const headers: Record<string, string> = { ...authHeaders };
   const crumb = await getCrumb(base);
   if (crumb) headers[crumb.field] = crumb.value;
-  headers['Content-Type'] = 'application/x-www-form-urlencoded';
-  const parameter = parameters
-    ? Object.entries(parameters).map(([name, value]) => ({ name, value }))
-    : [];
-  const body = new URLSearchParams({ json: JSON.stringify({ parameter }) }).toString();
+
+  let url: string;
+  let body: string | undefined;
+  if (parameters && Object.keys(parameters).length > 0) {
+    url = `${base}/job/${encodeURIComponent(jobName)}/buildWithParameters?${new URLSearchParams(parameters).toString()}`;
+    body = undefined;
+  } else {
+    url = `${base}/job/${encodeURIComponent(jobName)}/build`;
+    headers['Content-Type'] = 'application/x-www-form-urlencoded';
+    body = new URLSearchParams({ json: JSON.stringify({ parameter: [] }) }).toString();
+  }
+
   const res = await fetch(url, { method: 'POST', headers, body, redirect: 'manual' as RequestRedirect });
   if (res.status !== 201 && res.status !== 200) {
     const text = await res.text();
-    return { success: false, message: `Jenkins 请求失败 ${res.status}: ${text}` };
+    const isErrorPage = /Oops!|log in|A problem occurred|Logging ID=/i.test(text);
+    const shortMsg = isErrorPage
+      ? `Jenkins 返回 ${res.status}：需登录或该任务无权触发，请检查 JENKINS_USERNAME/JENKINS_TOKEN 与任务权限`
+      : `Jenkins 请求失败 ${res.status}: ${text.slice(0, 200)}`;
+    return { success: false, message: shortMsg };
   }
 
   const location = res.headers.get('Location');
