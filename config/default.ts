@@ -9,7 +9,14 @@ export const config = {
   },
   jenkins: {
     baseUrl: process.env.JENKINS_BASE_URL || '',
+    /** Basic 认证：username，与 token 一起使用 */
+    username: process.env.JENKINS_USERNAME || '',
+    /** API Token，用作 Basic 认证的密码 */
     token: process.env.JENKINS_TOKEN || '',
+    /** 预定义任务，供下拉等快捷操作使用 */
+    jobs: {
+      nova: process.env.JENKINS_JOB_NOVA || 'BUILD-to-CNPM__nova_nova-next',
+    },
   },
   shell: {
     allowedCwd: process.env.SHELL_CWD || process.cwd(),

@@ -14,9 +14,18 @@ const QUICK_ACTIONS = [
   { label: '打开 Jenkins', message: '打开 Jenkins' },
 ];
 
+/** 下拉列表：快捷部署 Jenkins 任务 */
+const DEPLOY_OPTIONS = [
+  { value: '', label: '快捷部署...' },
+  { value: 'nova', label: '部署nova' },
+];
+
+type DeployResult = { success: boolean; message: string };
+
 export function ChatPanel({ apiBase, addLog }: ChatPanelProps) {
   const [input, setInput] = useState('');
   const [loading, setLoading] = useState(false);
+  const [deploySelect, setDeploySelect] = useState('');
   const [messages, setMessages] = useState<Array<{ role: 'user' | 'assistant'; content: string; toolResults?: unknown[] }>>([]);
 
   const send = async (text: string) => {
@@ -51,9 +60,37 @@ export function ChatPanel({ apiBase, addLog }: ChatPanelProps) {
     }
   };
 
+  const runDeploy = async (jobKey: string) => {
+    if (!jobKey) return;
+    const label = DEPLOY_OPTIONS.find((o) => o.value === jobKey)?.label ?? jobKey;
+    setMessages((prev) => [...prev, { role: 'user', content: label }]);
+    setDeploySelect('');
+    setLoading(true);
+    addLog(`部署: ${label}`);
+    try {
+      const res = await fetch(`${apiBase}/jenkins/deploy`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ job: jobKey }),
+      });
+      const data: DeployResult = await res.json();
+      addLog(data.success ? '部署已触发' : `部署失败: ${data.message}`);
+      setMessages((prev) => [
+        ...prev,
+        { role: 'assistant', content: data.success ? data.message : `失败: ${data.message}` },
+      ]);
+    } catch (e) {
+      const err = e instanceof Error ? e.message : String(e);
+      addLog(`部署请求异常: ${err}`);
+      setMessages((prev) => [...prev, { role: 'assistant', content: `请求失败: ${err}` }]);
+    } finally {
+      setLoading(false);
+    }
+  };
+
   return (
     <section style={{ flex: 1, display: 'flex', flexDirection: 'column', minHeight: 0, padding: 16 }}>
-      <div style={{ marginBottom: 12, display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+      <div style={{ marginBottom: 12, display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
         {QUICK_ACTIONS.map(({ label, message }) => (
           <button
             key={label}
@@ -72,6 +109,29 @@ export function ChatPanel({ apiBase, addLog }: ChatPanelProps) {
             {label}
           </button>
         ))}
+        <select
+          value={deploySelect}
+          onChange={(e) => {
+            const v = e.target.value;
+            setDeploySelect(v);
+            if (v) runDeploy(v);
+          }}
+          disabled={loading}
+          style={{
+            padding: '8px 14px',
+            background: '#16213e',
+            color: '#eaeaea',
+            border: '1px solid #333',
+            borderRadius: 6,
+            cursor: loading ? 'not-allowed' : 'pointer',
+          }}
+        >
+          {DEPLOY_OPTIONS.map((o) => (
+            <option key={o.value || 'placeholder'} value={o.value}>
+              {o.label}
+            </option>
+          ))}
+        </select>
       </div>
       <div style={{ flex: 1, overflow: 'auto', marginBottom: 12, background: '#0d0d1a', borderRadius: 8, padding: 12 }}>
         {messages.length === 0 && (

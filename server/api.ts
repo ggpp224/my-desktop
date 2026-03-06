@@ -1,9 +1,11 @@
 /* AI 生成 By Peng.Guo */
+import 'dotenv/config';
 import express from 'express';
 import cors from 'cors';
 import { runAgent } from '../agent/agent.js';
 import { healthCheck } from '../agent/ollama-client.js';
 import { config } from '../config/default.js';
+import { deploy as jenkinsDeploy } from '../tools/jenkins-tool.js';
 
 const app = express();
 app.use(cors());
@@ -28,6 +30,28 @@ app.post('/agent/chat', async (req, res) => {
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
     res.status(500).json({ success: false, error: msg });
+  }
+});
+
+/** 快捷触发 Jenkins 部署：body.job 为预定义 key（如 nova）或完整 job 名称；预定义可带固定构建参数 */
+const JENKINS_JOB_PRESETS: Record<string, { name: string; parameters?: Record<string, string> }> = {
+  nova: { name: config.jenkins.jobs.nova, parameters: { BRANCH_NAME: 'test' } },
+};
+app.post('/jenkins/deploy', async (req, res) => {
+  const jobKey = (req.body?.job ?? '').trim();
+  if (!jobKey) {
+    res.status(400).json({ success: false, error: '缺少 job' });
+    return;
+  }
+  const preset = JENKINS_JOB_PRESETS[jobKey];
+  const jobName = preset ? preset.name : jobKey;
+  const parameters = preset?.parameters;
+  try {
+    const result = await jenkinsDeploy(jobName, parameters);
+    res.json(result);
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    res.status(500).json({ success: false, message: msg });
   }
 });
 
