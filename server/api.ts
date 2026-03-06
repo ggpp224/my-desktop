@@ -7,7 +7,7 @@ import { healthCheck } from '../agent/ollama-client.js';
 import { config } from '../config/default.js';
 import { deploy as jenkinsDeploy, getDeployStatus, getDeployStatusByBuildHistory } from '../tools/jenkins-tool.js';
 import { open as openBrowser } from '../tools/browser-tool.js';
-import { mergeNova } from '../tools/merge-nova-tool.js';
+import { mergeNova, mergeBizSolution, mergeScm } from '../tools/merge-tool.js';
 
 const app = express();
 app.use(cors());
@@ -138,6 +138,58 @@ app.post('/merge/nova', async (_req, res) => {
   };
   try {
     const result = await mergeNova({ onStep: send });
+    res.write(`data: ${JSON.stringify({ done: true, success: result.success, error: result.error })}\n\n`);
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    res.write(`data: ${JSON.stringify({ done: true, success: false, error: msg })}\n\n`);
+  }
+  res.end();
+});
+
+/** 合并 biz-solution：目标分支 test-260127，无 pnpm run release，SSE 流式输出 */
+app.post('/merge/biz-solution', async (_req, res) => {
+  res.setHeader('Content-Type', 'text/event-stream');
+  res.setHeader('Cache-Control', 'no-cache');
+  res.setHeader('Connection', 'keep-alive');
+  res.setHeader('X-Accel-Buffering', 'no');
+  const socket = (res as unknown as { socket?: { setNoDelay?: (v: boolean) => void } }).socket;
+  if (socket?.setNoDelay) socket.setNoDelay(true);
+  res.flushHeaders?.();
+  const send = (msg: string) => {
+    res.write(`data: ${JSON.stringify({ step: msg })}\n\n`, 'utf8', () => {
+      if (typeof (res as unknown as { flush?: () => void }).flush === 'function') {
+        (res as unknown as { flush: () => void }).flush();
+      }
+    });
+  };
+  try {
+    const result = await mergeBizSolution({ onStep: send });
+    res.write(`data: ${JSON.stringify({ done: true, success: result.success, error: result.error })}\n\n`);
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    res.write(`data: ${JSON.stringify({ done: true, success: false, error: msg })}\n\n`);
+  }
+  res.end();
+});
+
+/** 合并 scm：目标分支 test-260127，无 pnpm run release，SSE 流式输出 */
+app.post('/merge/scm', async (_req, res) => {
+  res.setHeader('Content-Type', 'text/event-stream');
+  res.setHeader('Cache-Control', 'no-cache');
+  res.setHeader('Connection', 'keep-alive');
+  res.setHeader('X-Accel-Buffering', 'no');
+  const socket = (res as unknown as { socket?: { setNoDelay?: (v: boolean) => void } }).socket;
+  if (socket?.setNoDelay) socket.setNoDelay(true);
+  res.flushHeaders?.();
+  const send = (msg: string) => {
+    res.write(`data: ${JSON.stringify({ step: msg })}\n\n`, 'utf8', () => {
+      if (typeof (res as unknown as { flush?: () => void }).flush === 'function') {
+        (res as unknown as { flush: () => void }).flush();
+      }
+    });
+  };
+  try {
+    const result = await mergeScm({ onStep: send });
     res.write(`data: ${JSON.stringify({ done: true, success: result.success, error: result.error })}\n\n`);
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);

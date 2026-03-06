@@ -13,9 +13,19 @@ const QUICK_ACTIONS: Array<{ label: string; message: string; url?: string }> = [
   { label: '打开 Jenkins', message: '打开 Jenkins', url: 'https://jenkins.rd.chanjet.com/' },
 ];
 
-/** 输入指令是否表示「合并 nova」 */
-function isMergeNovaCommand(msg: string): boolean {
-  return /合并\s*nova/i.test(msg.trim());
+/** 合并任务类型：与菜单项、指令、API 对应 */
+const MERGE_TASKS = [
+  { key: 'nova', label: '合并 nova', path: '/merge/nova', cmd: /合并\s*nova/i },
+  { key: 'biz-solution', label: '合并 biz-solution', path: '/merge/biz-solution', cmd: /合并\s*biz-solution/i },
+  { key: 'scm', label: '合并 scm', path: '/merge/scm', cmd: /合并\s*scm/i },
+] as const;
+
+function getMergeCommandType(msg: string): (typeof MERGE_TASKS)[number] | null {
+  const t = msg.trim();
+  for (const task of MERGE_TASKS) {
+    if (task.cmd.test(t)) return task;
+  }
+  return null;
 }
 
 /** 下拉列表：快捷部署 Jenkins 任务 */
@@ -60,10 +70,10 @@ export function ChatPanel({ apiBase, addLog }: ChatPanelProps) {
     return () => document.removeEventListener('click', onOutside);
   }, [mergeMenuOpen]);
 
-  const executeMergeNova = async (): Promise<{ success: boolean; error?: string }> => {
+  const executeMerge = async (endpoint: string, doneLabel: string): Promise<{ success: boolean; error?: string }> => {
     if (!apiBase) return { success: false, error: '未就绪' };
     try {
-      const res = await fetch(`${apiBase}/merge/nova`, { method: 'POST', headers: { 'Content-Type': 'application/json' } });
+      const res = await fetch(`${apiBase}${endpoint}`, { method: 'POST', headers: { 'Content-Type': 'application/json' } });
       if (!res.ok || !res.body) {
         addLog(`请求失败: ${res.status}`);
         return { success: false, error: `请求失败: ${res.status}` };
@@ -88,7 +98,7 @@ export function ChatPanel({ apiBase, addLog }: ChatPanelProps) {
                 if (!data.success) {
                   addLog(data.error || '合并失败');
                   if (data.error === '代码有冲突，需手工合并') alert('代码有冲突，需手工合并');
-                } else addLog('合并 nova 完成');
+                } else addLog(doneLabel);
               }
             } catch (_) {}
           }
@@ -103,7 +113,7 @@ export function ChatPanel({ apiBase, addLog }: ChatPanelProps) {
             if (!data.success) {
               addLog(data.error || '合并失败');
               if (data.error === '代码有冲突，需手工合并') alert('代码有冲突，需手工合并');
-            } else addLog('合并 nova 完成');
+            } else addLog(doneLabel);
           }
         } catch (_) {}
       }
@@ -114,13 +124,13 @@ export function ChatPanel({ apiBase, addLog }: ChatPanelProps) {
     }
   };
 
-  const runMergeNova = async () => {
+  const runMerge = (task: (typeof MERGE_TASKS)[number]) => async () => {
     if (!apiBase || mergeRunning) return;
     setMergeMenuOpen(false);
     setMergeRunning(true);
-    addLog('开始合并 nova…');
+    addLog(`开始${task.label}…`);
     try {
-      await executeMergeNova();
+      await executeMerge(task.path, `${task.label} 完成`);
     } finally {
       setMergeRunning(false);
     }
@@ -157,14 +167,15 @@ export function ChatPanel({ apiBase, addLog }: ChatPanelProps) {
     setMergeRunning(true);
     addLog(`发送: ${msg}`);
     try {
-      if (isMergeNovaCommand(msg)) {
-        addLog('开始合并 nova…');
-        const result = await executeMergeNova();
+      const mergeTask = getMergeCommandType(msg);
+      if (mergeTask) {
+        addLog(`开始${mergeTask.label}…`);
+        const result = await executeMerge(mergeTask.path, `${mergeTask.label} 完成`);
         setMessages((prev) => [
           ...prev,
           {
             role: 'assistant',
-            content: result.success ? '已执行合并 nova，请查看下方 Logs。' : (result.error ?? '合并失败'),
+            content: result.success ? `已执行${mergeTask.label}，请查看下方 Logs。` : (result.error ?? '合并失败'),
           },
         ]);
         return;
@@ -366,7 +377,7 @@ export function ChatPanel({ apiBase, addLog }: ChatPanelProps) {
                 top: '100%',
                 left: 0,
                 marginTop: 4,
-                minWidth: 120,
+                minWidth: 160,
                 background: '#16213e',
                 border: '1px solid #333',
                 borderRadius: 6,
@@ -374,24 +385,27 @@ export function ChatPanel({ apiBase, addLog }: ChatPanelProps) {
                 zIndex: 10,
               }}
             >
-              <button
-                type="button"
-                onClick={runMergeNova}
-                disabled={mergeRunning}
-                style={{
-                  display: 'block',
-                  width: '100%',
-                  padding: '8px 12px',
-                  background: 'transparent',
-                  color: '#eaeaea',
-                  border: 'none',
-                  borderRadius: 4,
-                  cursor: mergeRunning ? 'not-allowed' : 'pointer',
-                  textAlign: 'left',
-                }}
-              >
-                合并 nova
-              </button>
+              {MERGE_TASKS.map((task) => (
+                <button
+                  key={task.key}
+                  type="button"
+                  onClick={runMerge(task)}
+                  disabled={mergeRunning}
+                  style={{
+                    display: 'block',
+                    width: '100%',
+                    padding: '8px 12px',
+                    background: 'transparent',
+                    color: '#eaeaea',
+                    border: 'none',
+                    borderRadius: 4,
+                    cursor: mergeRunning ? 'not-allowed' : 'pointer',
+                    textAlign: 'left',
+                  }}
+                >
+                  {task.label}
+                </button>
+              ))}
             </div>
           )}
         </div>
