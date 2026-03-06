@@ -13,6 +13,11 @@ const QUICK_ACTIONS: Array<{ label: string; message: string; url?: string }> = [
   { label: '打开 Jenkins', message: '打开 Jenkins', url: 'https://jenkins.rd.chanjet.com/' },
 ];
 
+/** 输入指令是否表示「合并 nova」 */
+function isMergeNovaCommand(msg: string): boolean {
+  return /合并\s*nova/i.test(msg.trim());
+}
+
 /** 下拉列表：快捷部署 Jenkins 任务 */
 const DEPLOY_OPTIONS = [
   { value: '', label: '快捷部署...' },
@@ -55,21 +60,18 @@ export function ChatPanel({ apiBase, addLog }: ChatPanelProps) {
     return () => document.removeEventListener('click', onOutside);
   }, [mergeMenuOpen]);
 
-  const runMergeNova = async () => {
-    if (!apiBase || mergeRunning) return;
-    setMergeMenuOpen(false);
-    setMergeRunning(true);
-    addLog('开始合并 nova…');
+  const executeMergeNova = async (): Promise<{ success: boolean; error?: string }> => {
+    if (!apiBase) return { success: false, error: '未就绪' };
     try {
       const res = await fetch(`${apiBase}/merge/nova`, { method: 'POST', headers: { 'Content-Type': 'application/json' } });
       if (!res.ok || !res.body) {
         addLog(`请求失败: ${res.status}`);
-        setMergeRunning(false);
-        return;
+        return { success: false, error: `请求失败: ${res.status}` };
       }
       const reader = res.body.getReader();
       const dec = new TextDecoder();
       let buf = '';
+      let lastDone: { success: boolean; error?: string } | null = null;
       while (true) {
         const { done, value } = await reader.read();
         if (done) break;
@@ -82,6 +84,7 @@ export function ChatPanel({ apiBase, addLog }: ChatPanelProps) {
               const data = JSON.parse(line.slice(6)) as { step?: string; done?: boolean; success?: boolean; error?: string };
               if (data.step != null) addLog(data.step);
               if (data.done) {
+                lastDone = { success: !!data.success, error: data.error };
                 if (!data.success) {
                   addLog(data.error || '合并失败');
                   if (data.error === '代码有冲突，需手工合并') alert('代码有冲突，需手工合并');
@@ -96,6 +99,7 @@ export function ChatPanel({ apiBase, addLog }: ChatPanelProps) {
           const data = JSON.parse(buf.slice(6)) as { step?: string; done?: boolean; success?: boolean; error?: string };
           if (data.step != null) addLog(data.step);
           if (data.done) {
+            lastDone = { success: !!data.success, error: data.error };
             if (!data.success) {
               addLog(data.error || '合并失败');
               if (data.error === '代码有冲突，需手工合并') alert('代码有冲突，需手工合并');
@@ -103,8 +107,20 @@ export function ChatPanel({ apiBase, addLog }: ChatPanelProps) {
           }
         } catch (_) {}
       }
+      return lastDone ?? { success: false, error: '未收到完成事件' };
     } catch (e) {
       addLog(`请求失败: ${e}`);
+      return { success: false, error: String(e) };
+    }
+  };
+
+  const runMergeNova = async () => {
+    if (!apiBase || mergeRunning) return;
+    setMergeMenuOpen(false);
+    setMergeRunning(true);
+    addLog('开始合并 nova…');
+    try {
+      await executeMergeNova();
     } finally {
       setMergeRunning(false);
     }
@@ -138,8 +154,21 @@ export function ChatPanel({ apiBase, addLog }: ChatPanelProps) {
     setMessages((prev) => [...prev, { role: 'user', content: msg }]);
     setInput('');
     setLoading(true);
+    setMergeRunning(true);
     addLog(`发送: ${msg}`);
     try {
+      if (isMergeNovaCommand(msg)) {
+        addLog('开始合并 nova…');
+        const result = await executeMergeNova();
+        setMessages((prev) => [
+          ...prev,
+          {
+            role: 'assistant',
+            content: result.success ? '已执行合并 nova，请查看下方 Logs。' : (result.error ?? '合并失败'),
+          },
+        ]);
+        return;
+      }
       const res = await fetch(`${apiBase}/agent/chat`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -161,6 +190,7 @@ export function ChatPanel({ apiBase, addLog }: ChatPanelProps) {
       setMessages((prev) => [...prev, { role: 'assistant', content: `请求失败: ${err}` }]);
     } finally {
       setLoading(false);
+      setMergeRunning(false);
     }
   };
 
