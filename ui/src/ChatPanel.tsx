@@ -37,12 +37,78 @@ export function ChatPanel({ apiBase, addLog }: ChatPanelProps) {
   const [input, setInput] = useState('');
   const [loading, setLoading] = useState(false);
   const [deploySelect, setDeploySelect] = useState('');
+  const [mergeMenuOpen, setMergeMenuOpen] = useState(false);
+  const [mergeRunning, setMergeRunning] = useState(false);
   const [messages, setMessages] = useState<Array<{ role: 'user' | 'assistant'; content: string; toolResults?: unknown[] }>>([]);
   const deployPollRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const mergeMenuRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => () => {
     if (deployPollRef.current) clearInterval(deployPollRef.current);
   }, []);
+
+  useEffect(() => {
+    const onOutside = (e: MouseEvent) => {
+      if (mergeMenuRef.current && !mergeMenuRef.current.contains(e.target as Node)) setMergeMenuOpen(false);
+    };
+    if (mergeMenuOpen) document.addEventListener('click', onOutside);
+    return () => document.removeEventListener('click', onOutside);
+  }, [mergeMenuOpen]);
+
+  const runMergeNova = async () => {
+    if (!apiBase || mergeRunning) return;
+    setMergeMenuOpen(false);
+    setMergeRunning(true);
+    addLog('开始合并 nova…');
+    try {
+      const res = await fetch(`${apiBase}/merge/nova`, { method: 'POST', headers: { 'Content-Type': 'application/json' } });
+      if (!res.ok || !res.body) {
+        addLog(`请求失败: ${res.status}`);
+        setMergeRunning(false);
+        return;
+      }
+      const reader = res.body.getReader();
+      const dec = new TextDecoder();
+      let buf = '';
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        buf += dec.decode(value, { stream: true });
+        const lines = buf.split('\n');
+        buf = lines.pop() ?? '';
+        for (const line of lines) {
+          if (line.startsWith('data: ')) {
+            try {
+              const data = JSON.parse(line.slice(6)) as { step?: string; done?: boolean; success?: boolean; error?: string };
+              if (data.step != null) addLog(data.step);
+              if (data.done) {
+                if (!data.success) {
+                  addLog(data.error || '合并失败');
+                  if (data.error === '代码有冲突，需手工合并') alert('代码有冲突，需手工合并');
+                } else addLog('合并 nova 完成');
+              }
+            } catch (_) {}
+          }
+        }
+      }
+      if (buf.startsWith('data: ')) {
+        try {
+          const data = JSON.parse(buf.slice(6)) as { step?: string; done?: boolean; success?: boolean; error?: string };
+          if (data.step != null) addLog(data.step);
+          if (data.done) {
+            if (!data.success) {
+              addLog(data.error || '合并失败');
+              if (data.error === '代码有冲突，需手工合并') alert('代码有冲突，需手工合并');
+            } else addLog('合并 nova 完成');
+          }
+        } catch (_) {}
+      }
+    } catch (e) {
+      addLog(`请求失败: ${e}`);
+    } finally {
+      setMergeRunning(false);
+    }
+  };
 
   const openUrl = async (url: string, label: string) => {
     setMessages((prev) => [...prev, { role: 'user', content: label }]);
@@ -247,6 +313,58 @@ export function ChatPanel({ apiBase, addLog }: ChatPanelProps) {
             </option>
           ))}
         </select>
+        <div ref={mergeMenuRef} style={{ position: 'relative' }}>
+          <button
+            type="button"
+            onClick={() => setMergeMenuOpen((o) => !o)}
+            disabled={loading || mergeRunning}
+            style={{
+              padding: '8px 14px',
+              background: mergeMenuOpen ? '#0f3460' : '#16213e',
+              color: '#eaeaea',
+              border: '1px solid #333',
+              borderRadius: 6,
+              cursor: loading || mergeRunning ? 'not-allowed' : 'pointer',
+            }}
+          >
+            合并代码 ▾
+          </button>
+          {mergeMenuOpen && (
+            <div
+              style={{
+                position: 'absolute',
+                top: '100%',
+                left: 0,
+                marginTop: 4,
+                minWidth: 120,
+                background: '#16213e',
+                border: '1px solid #333',
+                borderRadius: 6,
+                boxShadow: '0 4px 12px rgba(0,0,0,0.3)',
+                zIndex: 10,
+              }}
+            >
+              <button
+                type="button"
+                onClick={runMergeNova}
+                disabled={mergeRunning}
+                style={{
+                  display: 'block',
+                  width: '100%',
+                  padding: '8px 12px',
+                  background: 'transparent',
+                  color: '#eaeaea',
+                  border: 'none',
+                  borderRadius: 4,
+                  cursor: mergeRunning ? 'not-allowed' : 'pointer',
+                  textAlign: 'left',
+                }}
+              >
+                合并 nova
+              </button>
+            </div>
+          )}
+        </div>
       </div>
       <div style={{ flex: 1, overflow: 'auto', marginBottom: 12, background: '#0d0d1a', borderRadius: 8, padding: 12 }}>
         {messages.length === 0 && (

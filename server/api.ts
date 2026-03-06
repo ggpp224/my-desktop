@@ -7,6 +7,7 @@ import { healthCheck } from '../agent/ollama-client.js';
 import { config } from '../config/default.js';
 import { deploy as jenkinsDeploy, getDeployStatus, getDeployStatusByBuildHistory } from '../tools/jenkins-tool.js';
 import { open as openBrowser } from '../tools/browser-tool.js';
+import { mergeNova } from '../tools/merge-nova-tool.js';
 
 const app = express();
 app.use(cors());
@@ -116,6 +117,33 @@ app.get('/jenkins/deploy/status', async (req, res) => {
     }
   }
   res.status(400).json({ status: 'unknown', message: '缺少 queueUrl 或 jobName' });
+});
+
+/** 合并 nova：SSE 流式输出每步，前端可实时展示 */
+app.post('/merge/nova', async (_req, res) => {
+  res.setHeader('Content-Type', 'text/event-stream');
+  res.setHeader('Cache-Control', 'no-cache');
+  res.setHeader('Connection', 'keep-alive');
+  res.setHeader('X-Accel-Buffering', 'no');
+  const socket = (res as unknown as { socket?: { setNoDelay?: (v: boolean) => void } }).socket;
+  if (socket?.setNoDelay) socket.setNoDelay(true);
+  res.flushHeaders?.();
+  const send = (msg: string) => {
+    const payload = `data: ${JSON.stringify({ step: msg })}\n\n`;
+    res.write(payload, 'utf8', () => {
+      if (typeof (res as unknown as { flush?: () => void }).flush === 'function') {
+        (res as unknown as { flush: () => void }).flush();
+      }
+    });
+  };
+  try {
+    const result = await mergeNova({ onStep: send });
+    res.write(`data: ${JSON.stringify({ done: true, success: result.success, error: result.error })}\n\n`);
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    res.write(`data: ${JSON.stringify({ done: true, success: false, error: msg })}\n\n`);
+  }
+  res.end();
 });
 
 /** 启动 API 服务；若端口被占用则尝试 3001、3002…，返回实际监听端口 */
