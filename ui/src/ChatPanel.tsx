@@ -21,7 +21,7 @@ const DEPLOY_OPTIONS = [
 ];
 
 type DeployResult = { success: boolean; message: string; queueUrl?: string; jobName?: string };
-type DeployStatusResult = { status: string; message?: string; buildUrl?: string; buildNumber?: number; buildName?: string };
+type DeployStatusResult = { status: string; message?: string; buildUrl?: string; buildNumber?: number; buildName?: string; progressPercent?: number };
 
 const DEPLOY_POLL_INTERVAL_MS = 3000;
 const DEPLOY_POLL_MAX = 200; // 3 秒一次，约 10 分钟
@@ -148,6 +148,16 @@ export function ChatPanel({ apiBase, addLog }: ChatPanelProps) {
             return;
           }
           consecutiveFail = 0;
+          const progressMsg = formatDeployMsg(status);
+          setMessages((prev) => {
+            const next = [...prev];
+            const last = next[next.length - 1];
+            if (last?.role === 'assistant' && (last.content.includes('构建中') || last.content.includes('排队') || last.content.includes(label))) {
+              next[next.length - 1] = { ...last, content: progressMsg };
+              return next;
+            }
+            return [...prev, { role: 'assistant', content: progressMsg }];
+          });
         } catch {
           consecutiveFail += 1;
           if (consecutiveFail >= DEPLOY_CONSECUTIVE_FAIL_MAX) {

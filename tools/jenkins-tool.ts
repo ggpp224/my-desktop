@@ -36,6 +36,8 @@ export type DeployStatusResult = {
   buildNumber?: number;
   /** 任务名，用于展示构建名称 */
   buildName?: string;
+  /** 执行中时的进度 0–100，来自 progress-bar-done 的 width */
+  progressPercent?: number;
 };
 
 /**
@@ -66,9 +68,12 @@ export async function getDeployStatusByBuildHistory(jobName: string): Promise<De
     const buildNum = buildLinkMatch ? parseInt(buildLinkMatch[2], 10) : undefined;
     const buildUrl = buildPath ? `${base}${buildPath.startsWith('/') ? '' : '/'}${buildPath}` : undefined;
     const buildName = jobName;
+    const progressMatch = row.match(/progress-bar-done[\s\S]*?width:\s*(\d+)\s*%|width:\s*(\d+)\s*%[\s\S]*?progress-bar-done/);
+    const progressPercent = progressMatch ? parseInt(progressMatch[1] || progressMatch[2], 10) : undefined;
     // 仅根据第一行（最新构建）判断状态，避免表中旧构建的「失败」被误用
     if (/icon-blue-anime|build-status-in-progress|执行中|in-progress/.test(row)) {
-      return { status: 'building', message: '构建中…', buildUrl, buildNumber: buildNum, buildName };
+      const msg = progressPercent != null ? `构建中… ${progressPercent}%` : '构建中…';
+      return { status: 'building', message: msg, buildUrl, buildNumber: buildNum, buildName, progressPercent };
     }
     if (/icon-red|build-status-failure|失败|failure/.test(row)) {
       return { status: 'failure', message: '部署失败：构建失败', buildUrl, buildNumber: buildNum, buildName };
