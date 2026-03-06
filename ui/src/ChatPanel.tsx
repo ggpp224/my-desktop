@@ -8,10 +8,9 @@ interface ChatPanelProps {
   addLog: (line: string) => void;
 }
 
-const QUICK_ACTIONS = [
+const QUICK_ACTIONS: Array<{ label: string; message: string; url?: string }> = [
   { label: '开始工作', message: '执行工作流 start-work' },
-  { label: '打开开发环境', message: '打开开发环境' },
-  { label: '打开 Jenkins', message: '打开 Jenkins' },
+  { label: '打开 Jenkins', message: '打开 Jenkins', url: 'https://jenkins.rd.chanjet.com/' },
 ];
 
 /** 下拉列表：快捷部署 Jenkins 任务 */
@@ -44,6 +43,28 @@ export function ChatPanel({ apiBase, addLog }: ChatPanelProps) {
   useEffect(() => () => {
     if (deployPollRef.current) clearInterval(deployPollRef.current);
   }, []);
+
+  const openUrl = async (url: string, label: string) => {
+    setMessages((prev) => [...prev, { role: 'user', content: label }]);
+    setLoading(true);
+    addLog(`${label}: ${url}`);
+    try {
+      const res = await fetch(`${apiBase}/open-url`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ url }),
+      });
+      const data = await res.json();
+      setLoading(false);
+      setMessages((prev) => [...prev, { role: 'assistant', content: data.success ? '已打开' : (data.error ?? '打开失败') }]);
+      if (!data.success) addLog(`打开失败: ${data.error}`);
+    } catch (e) {
+      const err = e instanceof Error ? e.message : String(e);
+      setLoading(false);
+      addLog(`打开异常: ${err}`);
+      setMessages((prev) => [...prev, { role: 'assistant', content: `请求失败: ${err}` }]);
+    }
+  };
 
   const send = async (text: string) => {
     const msg = text.trim();
@@ -185,11 +206,11 @@ export function ChatPanel({ apiBase, addLog }: ChatPanelProps) {
   return (
     <section style={{ flex: 1, display: 'flex', flexDirection: 'column', minHeight: 0, padding: 16 }}>
       <div style={{ marginBottom: 12, display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
-        {QUICK_ACTIONS.map(({ label, message }) => (
+        {QUICK_ACTIONS.map(({ label, message, url }) => (
           <button
             key={label}
             type="button"
-            onClick={() => send(message)}
+            onClick={() => (url ? openUrl(url, label) : send(message))}
             disabled={loading}
             style={{
               padding: '8px 14px',

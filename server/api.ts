@@ -6,6 +6,7 @@ import { runAgent } from '../agent/agent.js';
 import { healthCheck } from '../agent/ollama-client.js';
 import { config } from '../config/default.js';
 import { deploy as jenkinsDeploy, getDeployStatus, getDeployStatusByBuildHistory } from '../tools/jenkins-tool.js';
+import { open as openBrowser } from '../tools/browser-tool.js';
 
 const app = express();
 app.use(cors());
@@ -27,6 +28,22 @@ app.post('/agent/chat', async (req, res) => {
   try {
     const result = await runAgent(message);
     res.json(result);
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    res.status(500).json({ success: false, error: msg });
+  }
+});
+
+/** 在系统默认浏览器中打开 URL */
+app.post('/open-url', async (req, res) => {
+  const url = (req.body?.url ?? '').toString().trim();
+  if (!url || (!url.startsWith('http://') && !url.startsWith('https://'))) {
+    res.status(400).json({ success: false, error: '缺少或无效的 url（需 http/https）' });
+    return;
+  }
+  try {
+    await openBrowser(url);
+    res.json({ success: true });
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
     res.status(500).json({ success: false, error: msg });
