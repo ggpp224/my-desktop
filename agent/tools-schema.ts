@@ -40,7 +40,7 @@ export const toolsSchema = [
     type: 'function' as const,
     function: {
       name: 'run_workflow',
-      description: '执行预定义工作流，例如 start_work',
+      description: '执行预定义工作流，例如 start-work（工作流名对应 workflows 目录下 JSON 文件名，不含 .json）',
       parameters: {
         type: 'object',
         required: ['name'],

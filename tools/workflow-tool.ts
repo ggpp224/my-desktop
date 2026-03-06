@@ -29,12 +29,25 @@ export type Step =
 export type WorkflowDef = { steps: Step[] };
 
 export async function runWorkflow(name: string): Promise<{ success: boolean; results: unknown[]; error?: string }> {
-  const filePath = path.join(getWorkflowsDir(), `${name.replace(/\.json$/i, '')}.json`);
+  const baseName = name.replace(/\.json$/i, '');
+  const workflowsDir = getWorkflowsDir();
+  // 先按原名查找，再尝试将下划线转为连字符（AI 可能输出 start_work，实际文件为 start-work.json）
+  let filePath = path.join(workflowsDir, `${baseName}.json`);
   let raw: string;
   try {
     raw = await readFile(filePath, 'utf-8');
   } catch {
-    return { success: false, results: [], error: `工作流文件不存在: ${name}` };
+    const altName = baseName.replace(/_/g, '-');
+    if (altName !== baseName) {
+      filePath = path.join(workflowsDir, `${altName}.json`);
+      try {
+        raw = await readFile(filePath, 'utf-8');
+      } catch {
+        return { success: false, results: [], error: `工作流文件不存在: ${name}` };
+      }
+    } else {
+      return { success: false, results: [], error: `工作流文件不存在: ${name}` };
+    }
   }
   let def: WorkflowDef;
   try {
