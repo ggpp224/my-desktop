@@ -137,6 +137,31 @@ export function ChatPanel({ apiBase, addLog }: ChatPanelProps) {
     return () => document.removeEventListener('click', onOutside);
   }, [mergeMenuOpen]);
 
+  const handleAgentResponse = (data: AgentResult, clearLoading: boolean) => {
+    addLog(data.success ? 'Agent 完成' : `错误: ${data.error}`);
+    const deployResult = data.toolResults?.find(
+      (t): t is { tool: string; result?: { queueUrl?: string; jobName?: string; message?: string } } =>
+        (t as { tool: string }).tool === 'deploy_jenkins' && (t as { result?: unknown }).result != null
+    ) as { tool: string; result?: { queueUrl?: string; jobName?: string; message?: string } } | undefined;
+    const deployPayload = deployResult?.result;
+    const hasDeployPoll = deployPayload && (deployPayload.queueUrl || deployPayload.jobName);
+    const content = hasDeployPoll ? (deployPayload.message ?? '已触发，构建中…') : (data.success ? (data.text ?? '') : (data.error ?? '请求失败'));
+    setMessages((prev) => [
+      ...prev,
+      { role: 'assistant', content, toolResults: data.toolResults },
+    ]);
+    if (hasDeployPoll) {
+      startDeployStatusPolling(apiBase, { queueUrl: deployPayload.queueUrl, jobName: deployPayload.jobName, label: '部署' }, setMessages, addLog, deployPollRef);
+    }
+    const mergeResult = data.toolResults?.find(
+      (t): t is { tool: string; result?: { steps?: string[] } } =>
+        (t as { tool: string }).tool === 'merge_repo' && (t as { result?: unknown }).result != null
+    );
+    const mergeSteps = (mergeResult?.result?.steps as string[] | undefined);
+    if (Array.isArray(mergeSteps) && mergeSteps.length > 0) mergeSteps.forEach((step) => addLog(step));
+    if (clearLoading) setLoading(false);
+  };
+
   const send = async (text: string) => {
     const msg = text.trim();
     if (!msg) return;
@@ -144,6 +169,8 @@ export function ChatPanel({ apiBase, addLog }: ChatPanelProps) {
     setInput('');
     setLoading(true);
     addLog(`发送: ${msg}`);
+    const isMergeCommand = /合并\s*(nova|biz-solution|scm)/i.test(msg);
+    if (isMergeCommand) setLoading(false);
     try {
       const res = await fetch(`${apiBase}/agent/chat`, {
         method: 'POST',
@@ -151,36 +178,11 @@ export function ChatPanel({ apiBase, addLog }: ChatPanelProps) {
         body: JSON.stringify({ message: msg }),
       });
       const data: AgentResult = await res.json();
-      addLog(data.success ? 'Agent 完成' : `错误: ${data.error}`);
-      const deployResult = data.toolResults?.find(
-        (t): t is { tool: string; result?: { queueUrl?: string; jobName?: string; message?: string } } =>
-          (t as { tool: string }).tool === 'deploy_jenkins' && (t as { result?: unknown }).result != null
-      ) as { tool: string; result?: { queueUrl?: string; jobName?: string; message?: string } } | undefined;
-      const deployPayload = deployResult?.result;
-      const hasDeployPoll = deployPayload && (deployPayload.queueUrl || deployPayload.jobName);
-      const content = hasDeployPoll ? (deployPayload.message ?? '已触发，构建中…') : (data.success ? (data.text ?? '') : (data.error ?? '请求失败'));
-      setMessages((prev) => [
-        ...prev,
-        {
-          role: 'assistant',
-          content,
-          toolResults: data.toolResults,
-        },
-      ]);
-      if (hasDeployPoll) {
-        startDeployStatusPolling(
-          apiBase,
-          { queueUrl: deployPayload.queueUrl, jobName: deployPayload.jobName, label: '部署' },
-          setMessages,
-          addLog,
-          deployPollRef
-        );
-      }
+      handleAgentResponse(data, !isMergeCommand);
     } catch (e) {
       const err = e instanceof Error ? e.message : String(e);
       addLog(`请求异常: ${err}`);
       setMessages((prev) => [...prev, { role: 'assistant', content: `请求失败: ${err}` }]);
-    } finally {
       setLoading(false);
     }
   };

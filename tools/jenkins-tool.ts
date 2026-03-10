@@ -71,7 +71,8 @@ export async function getDeployStatusByBuildHistory(jobName: string): Promise<De
     const buildNum = buildLinkMatch ? parseInt(buildLinkMatch[2], 10) : undefined;
     const buildUrl = buildPath ? `${base}${buildPath.startsWith('/') ? '' : '/'}${buildPath}` : undefined;
     const buildName = jobName;
-    const progressMatch = row.match(/progress-bar-done[\s\S]*?width:\s*(\d+)\s*%|width:\s*(\d+)\s*%[\s\S]*?progress-bar-done/);
+    // 从整段 HTML 解析进度：progress-bar-done 的 td 可能带 style="width:77%;"（在嵌套 table 中，用 row 会因内层 </tr> 截断而漏掉）
+    const progressMatch = html.match(/class="progress-bar-done"[^>]*style="[^"]*width:\s*(\d+)\s*%|style="[^"]*width:\s*(\d+)\s*%[^"]*"[^>]*class="progress-bar-done"/);
     const progressPercent = progressMatch ? parseInt(progressMatch[1] || progressMatch[2], 10) : undefined;
     // 仅根据第一行（最新构建）判断状态，避免表中旧构建的「失败」被误用
     if (/icon-blue-anime|build-status-in-progress|执行中|in-progress/.test(row)) {
@@ -123,6 +124,14 @@ export async function getDeployStatus(queueUrl: string): Promise<DeployStatusRes
     }
     const buildData = (await buildRes.json()) as { building?: boolean; result?: string | null };
     if (buildData.building === true) {
+      // 从 buildUrl 解析 jobName（如 /job/JOB_NAME/6406/），再查 buildHistory 获取进度条百分比
+      const jobNameFromUrl = buildUrl.match(/\/job\/([^/]+)\/\d+/)?.[1];
+      if (jobNameFromUrl) {
+        const withProgress = await getDeployStatusByBuildHistory(decodeURIComponent(jobNameFromUrl));
+        if (withProgress.status === 'building' && (withProgress.progressPercent != null || withProgress.message)) {
+          return { status: 'building', message: withProgress.message ?? '构建中…', buildUrl, buildNumber: buildNum, buildName: jobNameFromUrl, progressPercent: withProgress.progressPercent };
+        }
+      }
       return { status: 'building', message: '构建中…', buildUrl, buildNumber: buildNum };
     }
     const result = (buildData.result ?? 'UNKNOWN').toUpperCase();
