@@ -87,39 +87,62 @@ async function mergeMerge(
     onStep?.(msg);
   };
 
+  const addOutput = (stdout: string, stderr: string) => {
+    if (stdout) {
+      stdout.split(/\r?\n/).forEach((line) => {
+        const t = line.trim();
+        if (t) add(`[输出] ${t}`);
+      });
+    }
+    if (stderr) {
+      stderr.split(/\r?\n/).forEach((line) => {
+        const t = line.trim();
+        if (t) add(`[stderr] ${t}`);
+      });
+    }
+  };
+
   const branchOut = run('git branch --show-current', cwd);
   if (branchOut.code !== 0) {
     add('获取当前分支失败');
+    addOutput(branchOut.stdout, branchOut.stderr);
     return { success: false, steps, error: branchOut.stderr || '无法获取当前分支' };
   }
   const currentBranch = branchOut.stdout || 'unknown';
   add(`当前分支: ${currentBranch}`);
+  addOutput(branchOut.stdout, branchOut.stderr);
 
   const coTarget = run(`git checkout ${targetBranch}`, cwd);
   if (coTarget.code !== 0) {
     add(`切换到 ${targetBranch} 分支失败`);
+    addOutput(coTarget.stdout, coTarget.stderr);
     return { success: false, steps, error: coTarget.stderr || `git checkout ${targetBranch} 失败` };
   }
   add(`已切换到 ${targetBranch} 分支`);
+  addOutput(coTarget.stdout, coTarget.stderr);
 
   const pull = run('git pull', cwd);
   if (pull.code !== 0) {
     add(`拉取 ${targetBranch} 最新代码失败，请检查网络或权限`);
+    addOutput(pull.stdout, pull.stderr);
     run(`git checkout ${currentBranch}`, cwd);
     add(`已切回分支: ${currentBranch}`);
     return { success: false, steps, error: pull.stderr || 'git pull 失败' };
   }
   add(`已更新 ${targetBranch} 最新代码`);
+  addOutput(pull.stdout, pull.stderr);
 
   const merge = run(`git merge ${currentBranch}`, cwd);
   if (merge.code !== 0) {
     add('合并时发生冲突，已取消合并');
-    run('git merge --abort', cwd);
+    addOutput(merge.stdout, merge.stderr);
+    run(`git merge --abort`, cwd);
     run(`git checkout ${currentBranch}`, cwd);
     add(`已切回分支: ${currentBranch}`);
     return { success: false, steps, error: '代码有冲突，需手工合并' };
   }
   add(`已将 ${currentBranch} 合并到 ${targetBranch}`);
+  addOutput(merge.stdout, merge.stderr);
 
   add(`正在 push ${targetBranch} 分支…`);
   const pushResult = run('git push', cwd);
@@ -132,7 +155,7 @@ async function mergeMerge(
   if (pushResult.stderr) {
     pushResult.stderr.split(/\r?\n/).forEach((line) => {
       const t = line.trim();
-      if (t) add(t);
+      if (t) add(`[stderr] ${t}`);
     });
   }
   if (pushResult.code !== 0) {
@@ -161,9 +184,11 @@ async function mergeMerge(
   const coBack = run(`git checkout ${currentBranch}`, cwd);
   if (coBack.code !== 0) {
     add(`切回 ${currentBranch} 失败`);
+    addOutput(coBack.stdout, coBack.stderr);
     return { success: false, steps, error: coBack.stderr || '切回原分支失败' };
   }
   add(`已切回分支: ${currentBranch}`);
+  addOutput(coBack.stdout, coBack.stderr);
 
   return { success: true, steps };
 }

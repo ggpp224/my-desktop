@@ -14,11 +14,11 @@ const QUICK_ACTIONS: Array<{ label: string; message: string }> = [
   { label: '打开 Jenkins', message: '打开 Jenkins' },
 ];
 
-/** 合并菜单项：点击后发送指令给 Agent 统一处理 */
+/** 合并菜单项：走 SSE 流式接口，每步实时写入 Logs */
 const MERGE_TASKS = [
-  { key: 'nova', label: '合并 nova' },
-  { key: 'biz-solution', label: '合并 biz-solution' },
-  { key: 'scm', label: '合并 scm' },
+  { key: 'nova', label: '合并 nova', path: '/merge/nova' },
+  { key: 'biz-solution', label: '合并 biz-solution', path: '/merge/biz-solution' },
+  { key: 'scm', label: '合并 scm', path: '/merge/scm' },
 ] as const;
 
 /** 下拉列表：快捷部署 Jenkins 任务 */
@@ -137,6 +137,59 @@ export function ChatPanel({ apiBase, addLog }: ChatPanelProps) {
     return () => document.removeEventListener('click', onOutside);
   }, [mergeMenuOpen]);
 
+  const executeMerge = async (path: string, doneLabel: string) => {
+    if (!apiBase) return;
+    addLog(`开始${doneLabel}…`);
+    try {
+      const res = await fetch(`${apiBase}${path}`, { method: 'POST', headers: { 'Content-Type': 'application/json' } });
+      if (!res.ok || !res.body) {
+        addLog(`请求失败: ${res.status}`);
+        setMessages((prev) => [...prev, { role: 'assistant', content: `请求失败: ${res.status}` }]);
+        return;
+      }
+      const reader = res.body.getReader();
+      const dec = new TextDecoder();
+      let buf = '';
+      let lastDone: { success: boolean; error?: string } | null = null;
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        buf += dec.decode(value, { stream: true });
+        const lines = buf.split('\n');
+        buf = lines.pop() ?? '';
+        for (const line of lines) {
+          if (line.startsWith('data: ')) {
+            try {
+              const data = JSON.parse(line.slice(6)) as { step?: string; done?: boolean; success?: boolean; error?: string };
+              if (data.step != null) addLog(data.step);
+              if (data.done) {
+                lastDone = { success: !!data.success, error: data.error };
+                if (!data.success) {
+                  addLog(data.error || '合并失败');
+                  if (data.error === '代码有冲突，需手工合并') alert('代码有冲突，需手工合并');
+                } else addLog(doneLabel);
+              }
+            } catch (_) {}
+          }
+        }
+      }
+      if (buf.startsWith('data: ')) {
+        try {
+          const data = JSON.parse(buf.slice(6)) as { step?: string; done?: boolean; success?: boolean; error?: string };
+          if (data.step != null) addLog(data.step);
+          if (data.done) lastDone = { success: !!data.success, error: data.error };
+        } catch (_) {}
+      }
+      setMessages((prev) => [
+        ...prev,
+        { role: 'assistant', content: lastDone?.success ? `已执行${doneLabel}，请查看下方 Logs。` : (lastDone?.error ?? '合并失败') },
+      ]);
+    } catch (e) {
+      addLog(`请求失败: ${e}`);
+      setMessages((prev) => [...prev, { role: 'assistant', content: `请求失败: ${String(e)}` }]);
+    }
+  };
+
   const handleAgentResponse = (data: AgentResult, clearLoading: boolean) => {
     addLog(data.success ? 'Agent 完成' : `错误: ${data.error}`);
     const deployResult = data.toolResults?.find(
@@ -169,8 +222,12 @@ export function ChatPanel({ apiBase, addLog }: ChatPanelProps) {
     setInput('');
     setLoading(true);
     addLog(`发送: ${msg}`);
-    const isMergeCommand = /合并\s*(nova|biz-solution|scm)/i.test(msg);
-    if (isMergeCommand) setLoading(false);
+    const mergeTask = MERGE_TASKS.find((t) => msg === t.label || new RegExp(`合并\\s*${t.key}`, 'i').test(msg));
+    if (mergeTask) {
+      setLoading(false);
+      await executeMerge(mergeTask.path, mergeTask.label);
+      return;
+    }
     try {
       const res = await fetch(`${apiBase}/agent/chat`, {
         method: 'POST',
@@ -178,7 +235,7 @@ export function ChatPanel({ apiBase, addLog }: ChatPanelProps) {
         body: JSON.stringify({ message: msg }),
       });
       const data: AgentResult = await res.json();
-      handleAgentResponse(data, !isMergeCommand);
+      handleAgentResponse(data, true);
     } catch (e) {
       const err = e instanceof Error ? e.message : String(e);
       addLog(`请求异常: ${err}`);
@@ -271,7 +328,9 @@ export function ChatPanel({ apiBase, addLog }: ChatPanelProps) {
                   type="button"
                   onClick={() => {
                     setMergeMenuOpen(false);
-                    send(task.label);
+                    setMessages((prev) => [...prev, { role: 'user', content: task.label }]);
+                    addLog(`发送: ${task.label}`);
+                    executeMerge(task.path, task.label);
                   }}
                   disabled={loading}
                   style={{
