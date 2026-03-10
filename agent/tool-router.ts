@@ -17,7 +17,10 @@ export async function routeAndExecute(call: ToolCall): Promise<unknown> {
     case 'deploy_jenkins': {
       const job = (args?.job as string) ?? '';
       const preset = getJenkinsPreset(job);
-      if (preset) return jenkinsDeploy(preset.name, preset.parameters);
+      if (preset) {
+        const result = await jenkinsDeploy(preset.name, preset.parameters);
+        return { ...result, jobKey: job };
+      }
       return jenkinsDeploy(job);
     }
     case 'run_workflow':

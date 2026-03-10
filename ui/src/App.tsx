@@ -217,7 +217,7 @@ export default function App() {
             background: resizing ? '#475569' : '#334155',
           }}
         />
-        <LogsPanel logs={logs} width={rightWidth} />
+        <LogsPanel logs={logs} width={rightWidth} onClear={() => setLogs([])} />
       </div>
     </div>
   );
