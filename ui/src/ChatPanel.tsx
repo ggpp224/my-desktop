@@ -371,21 +371,30 @@ export function ChatPanel({ apiBase, addLog }: ChatPanelProps) {
       </div>
       <form
         onSubmit={(e) => { e.preventDefault(); send(input); }}
-        style={{ display: 'flex', gap: 8 }}
+        style={{ display: 'flex', gap: 8, alignItems: 'center' }}
       >
-        <input
-          type="text"
+        <textarea
           value={input}
           onChange={(e) => setInput(e.target.value)}
-          placeholder="输入指令..."
+          onKeyDown={(e) => {
+            if (e.key === 'Enter' && !e.shiftKey) {
+              e.preventDefault();
+              if (input.trim()) send(input);
+            }
+          }}
+          placeholder="输入指令...（Enter 发送，Shift+Enter 换行）"
           disabled={loading}
+          rows={3}
           style={{
             flex: 1,
+            minHeight: 60,
             padding: 10,
             background: '#16213e',
             border: '1px solid #333',
             borderRadius: 6,
             color: '#eaeaea',
+            resize: 'vertical',
+            font: 'inherit',
           }}
         />
         <button

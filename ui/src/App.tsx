@@ -38,6 +38,7 @@ export default function App() {
   const [logs, setLogs] = useState<string[]>([]);
   const [ollamaOk, setOllamaOk] = useState<boolean | null>(null);
   const [helpOpen, setHelpOpen] = useState(false);
+  const [leftCollapsed, setLeftCollapsed] = useState(true);
   const helpRef = useRef<HTMLDivElement>(null);
   const addLog = (line: string) => setLogs((prev) => [...prev, `${new Date().toISOString().slice(11, 19)} ${line}`]);
 
@@ -138,14 +139,47 @@ export default function App() {
         </div>
       </header>
       <div style={{ display: 'flex', flex: 1, minHeight: 0 }}>
-        <aside style={{ width: 280, borderRight: '1px solid #333', display: 'flex', flexDirection: 'column' }}>
-          <WorkflowPanel apiBase={apiBase} addLog={addLog} />
-          <ToolPanel />
+        <aside
+          style={{
+            width: leftCollapsed ? 40 : 250,
+            flexShrink: 0,
+            borderRight: '1px solid #333',
+            display: 'flex',
+            flexDirection: 'column',
+            background: '#16213e',
+            overflow: 'hidden',
+            transition: 'width 0.2s ease',
+          }}
+        >
+          <button
+            type="button"
+            onClick={() => setLeftCollapsed((c) => !c)}
+            title={leftCollapsed ? '展开左侧' : '收起左侧'}
+            style={{
+              flexShrink: 0,
+              width: '100%',
+              padding: '10px 0',
+              border: 'none',
+              borderBottom: '1px solid #333',
+              background: '#0f3460',
+              color: '#94a3b8',
+              cursor: 'pointer',
+              fontSize: 14,
+            }}
+          >
+            {leftCollapsed ? '▶' : '◀'}
+          </button>
+          {!leftCollapsed && (
+            <>
+              <WorkflowPanel apiBase={apiBase} addLog={addLog} />
+              <ToolPanel />
+            </>
+          )}
         </aside>
-        <main style={{ flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0 }}>
+        <main style={{ flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0, borderRight: '1px solid #333' }}>
           <ChatPanel apiBase={apiBase} addLog={addLog} />
-          <LogsPanel logs={logs} />
         </main>
+        <LogsPanel logs={logs} />
       </div>
     </div>
   );
