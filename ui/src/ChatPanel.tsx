@@ -28,15 +28,16 @@ function getMergeCommandType(msg: string): (typeof MERGE_TASKS)[number] | null {
   return null;
 }
 
-/** 开始工作子任务：通过指令单独执行 start-work 中的某一项（与图中指令对应） */
-const START_WORK_TASKS = [
+/** 开始工作子任务及独立任务：通过指令单独执行；workflow 默认为 start-work，独立任务用 standalone（不参与「开始工作」流程） */
+const START_WORK_TASKS: Array<{ key: string; label: string; cmd: RegExp; workflow?: string }> = [
   { key: 'cpxy', label: '启动 cpxy', cmd: /启动\s*cpxy/i },
   { key: 'react18', label: '启动 react18', cmd: /启动\s*react18/i },
   { key: 'cc-web', label: '启动 cc-web', cmd: /启动\s*cc-web/i },
   { key: 'biz-solution', label: '启动 biz-solution', cmd: /启动\s*biz-solution/i },
   { key: 'uikit', label: '启动 uikit', cmd: /启动\s*uikit/i },
   { key: 'shared', label: '启动 shared', cmd: /启动\s*shared/i },
-] as const;
+  { key: 'scm', label: '启动 scm', cmd: /启动\s*scm/i, workflow: 'standalone' },
+];
 
 function getStartWorkStepTask(msg: string): (typeof START_WORK_TASKS)[number] | null {
   const t = msg.trim();
@@ -202,7 +203,7 @@ export function ChatPanel({ apiBase, addLog }: ChatPanelProps) {
       if (startWorkTask) {
         addLog(`${startWorkTask.label}…`);
         try {
-          const stepRes = await fetch(`${apiBase}/workflow/start-work/step`, {
+          const stepRes = await fetch(`${apiBase}/workflow/${startWorkTask.workflow ?? 'start-work'}/step`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ taskKey: startWorkTask.key }),
@@ -458,7 +459,7 @@ export function ChatPanel({ apiBase, addLog }: ChatPanelProps) {
       </div>
       <div style={{ flex: 1, overflow: 'auto', marginBottom: 12, background: '#0d0d1a', borderRadius: 8, padding: 12 }}>
         {messages.length === 0 && (
-          <p style={{ color: '#888' }}>[Chat] 输入指令或点击上方快捷按钮，例如：开始工作、启动 cpxy、启动 react18、打开 Jenkins、部署 order-service</p>
+          <p style={{ color: '#888' }}>[Chat] 输入指令或点击上方快捷按钮，例如：开始工作、启动 cpxy、启动 react18、启动 scm、打开 Jenkins、部署 order-service</p>
         )}
         {messages.map((m, i) => (
           <div key={i} style={{ marginBottom: 12 }}>

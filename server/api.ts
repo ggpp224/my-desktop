@@ -120,8 +120,9 @@ app.get('/jenkins/deploy/status', async (req, res) => {
   res.status(400).json({ status: 'unknown', message: '缺少 queueUrl 或 jobName' });
 });
 
-/** 执行 start-work 工作流中的单步，body: { taskKey?: string; stepIndex?: number } */
-app.post('/workflow/start-work/step', async (req, res) => {
+/** 执行指定工作流中的单步，path: /workflow/:workflowName/step，body: { taskKey?: string; stepIndex?: number } */
+app.post('/workflow/:workflowName/step', async (req, res) => {
+  const workflowName = (req.params?.workflowName ?? '').trim() || 'start-work';
   const taskKey = (req.body?.taskKey ?? '').toString().trim();
   const stepIndex = req.body?.stepIndex;
   if (!taskKey && typeof stepIndex !== 'number') {
@@ -129,7 +130,7 @@ app.post('/workflow/start-work/step', async (req, res) => {
     return;
   }
   try {
-    const result = await runWorkflowStep('start-work', {
+    const result = await runWorkflowStep(workflowName, {
       ...(taskKey ? { taskKey } : {}),
       ...(typeof stepIndex === 'number' ? { stepIndex } : {}),
     });
