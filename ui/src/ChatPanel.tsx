@@ -51,11 +51,11 @@ function getStartWorkStepTask(msg: string): (typeof START_WORK_TASKS)[number] | 
 const DEPLOY_OPTIONS = [
   { value: '', label: '快捷部署...' },
   { value: 'nova', label: '部署nova' },
-  { value: 'cc-web', label: '部署 cc-web' },
-  { value: 'react18', label: '部署 react18' },
-  { value: 'biz-solution', label: '部署 biz-solution' },
-  { value: 'biz-guide', label: '部署 biz-guide' },
-  { value: 'scm', label: '部署 scm' },
+  { value: 'cc-web', label: '部署cc-web' },
+  { value: 'react18', label: '部署react18' },
+  { value: 'biz-solution', label: '部署biz-solution' },
+  { value: 'biz-guide', label: '部署biz-guide' },
+  { value: 'scm', label: '部署scm' },
 ];
 
 type DeployResult = { success: boolean; message: string; queueUrl?: string; jobName?: string };
@@ -459,7 +459,7 @@ export function ChatPanel({ apiBase, addLog }: ChatPanelProps) {
       </div>
       <div style={{ flex: 1, overflow: 'auto', marginBottom: 12, background: '#0d0d1a', borderRadius: 8, padding: 12 }}>
         {messages.length === 0 && (
-          <p style={{ color: '#888' }}>[Chat] 输入指令或点击上方快捷按钮，例如：开始工作、启动 cpxy、启动 react18、启动 scm、打开 Jenkins、部署 order-service</p>
+          <p style={{ color: '#888' }}>[Chat] 输入指令或点击上方快捷按钮，例如：开始工作、启动 cpxy、启动 react18、启动 scm、打开 Jenkins、部署order-service</p>
         )}
         {messages.map((m, i) => (
           <div key={i} style={{ marginBottom: 12 }}>
