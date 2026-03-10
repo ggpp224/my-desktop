@@ -1,13 +1,23 @@
 /* AI 生成 By Peng.Guo */
+import { useEffect, useRef } from 'react';
+
 interface LogsPanelProps {
   logs: string[];
+  width?: number;
 }
 
-export function LogsPanel({ logs }: LogsPanelProps) {
+export function LogsPanel({ logs, width = 400 }: LogsPanelProps) {
+  const preRef = useRef<HTMLPreElement>(null);
+
+  useEffect(() => {
+    const el = preRef.current;
+    if (el) el.scrollTop = el.scrollHeight;
+  }, [logs]);
+
   return (
     <section
       style={{
-        width: 300,
+        width,
         minWidth: 200,
         flexShrink: 0,
         display: 'flex',
@@ -19,6 +29,7 @@ export function LogsPanel({ logs }: LogsPanelProps) {
     >
       <h3 style={{ margin: 0, padding: 12, fontSize: 14, borderBottom: '1px solid #333', flexShrink: 0 }}>Logs</h3>
       <pre
+        ref={preRef}
         style={{
           margin: 0,
           padding: 12,

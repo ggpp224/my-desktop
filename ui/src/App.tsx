@@ -39,8 +39,35 @@ export default function App() {
   const [ollamaOk, setOllamaOk] = useState<boolean | null>(null);
   const [helpOpen, setHelpOpen] = useState(false);
   const [leftCollapsed, setLeftCollapsed] = useState(true);
+  const [rightWidth, setRightWidth] = useState(400);
+  const [resizing, setResizing] = useState(false);
   const helpRef = useRef<HTMLDivElement>(null);
+  const contentRef = useRef<HTMLDivElement>(null);
   const addLog = (line: string) => setLogs((prev) => [...prev, `${new Date().toISOString().slice(11, 19)} ${line}`]);
+
+  useEffect(() => {
+    if (!resizing) return;
+    const minRight = 200;
+    const maxRight = 800;
+    const onMove = (e: MouseEvent) => {
+      const el = contentRef.current;
+      if (!el) return;
+      const rect = el.getBoundingClientRect();
+      const w = rect.right - e.clientX;
+      setRightWidth(Math.min(maxRight, Math.max(minRight, w)));
+    };
+    const onUp = () => setResizing(false);
+    document.addEventListener('mousemove', onMove);
+    document.addEventListener('mouseup', onUp);
+    document.body.style.cursor = 'col-resize';
+    document.body.style.userSelect = 'none';
+    return () => {
+      document.removeEventListener('mousemove', onMove);
+      document.removeEventListener('mouseup', onUp);
+      document.body.style.cursor = '';
+      document.body.style.userSelect = '';
+    };
+  }, [resizing]);
 
   useEffect(() => {
     if (!helpOpen) return;
@@ -138,7 +165,7 @@ export default function App() {
           )}
         </div>
       </header>
-      <div style={{ display: 'flex', flex: 1, minHeight: 0 }}>
+      <div ref={contentRef} style={{ display: 'flex', flex: 1, minHeight: 0 }}>
         <aside
           style={{
             width: leftCollapsed ? 40 : 250,
@@ -179,7 +206,18 @@ export default function App() {
         <main style={{ flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0, borderRight: '1px solid #333' }}>
           <ChatPanel apiBase={apiBase} addLog={addLog} />
         </main>
-        <LogsPanel logs={logs} />
+        <div
+          role="separator"
+          aria-label="调节中间与右侧宽度"
+          onMouseDown={() => setResizing(true)}
+          style={{
+            width: 6,
+            flexShrink: 0,
+            cursor: 'col-resize',
+            background: resizing ? '#475569' : '#334155',
+          }}
+        />
+        <LogsPanel logs={logs} width={rightWidth} />
       </div>
     </div>
   );
