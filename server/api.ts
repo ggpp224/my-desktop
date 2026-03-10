@@ -8,6 +8,7 @@ import { config } from '../config/default.js';
 import { deploy as jenkinsDeploy, getDeployStatus, getDeployStatusByBuildHistory } from '../tools/jenkins-tool.js';
 import { open as openBrowser } from '../tools/browser-tool.js';
 import { mergeNova, mergeBizSolution, mergeScm } from '../tools/merge-tool.js';
+import { runWorkflowStep } from '../tools/workflow-tool.js';
 
 const app = express();
 app.use(cors());
@@ -117,6 +118,30 @@ app.get('/jenkins/deploy/status', async (req, res) => {
     }
   }
   res.status(400).json({ status: 'unknown', message: '缺少 queueUrl 或 jobName' });
+});
+
+/** 执行 start-work 工作流中的单步，body: { taskKey?: string; stepIndex?: number } */
+app.post('/workflow/start-work/step', async (req, res) => {
+  const taskKey = (req.body?.taskKey ?? '').toString().trim();
+  const stepIndex = req.body?.stepIndex;
+  if (!taskKey && typeof stepIndex !== 'number') {
+    res.status(400).json({ success: false, error: '缺少 taskKey 或 stepIndex' });
+    return;
+  }
+  try {
+    const result = await runWorkflowStep('start-work', {
+      ...(taskKey ? { taskKey } : {}),
+      ...(typeof stepIndex === 'number' ? { stepIndex } : {}),
+    });
+    if (result.success) {
+      res.json({ success: true, results: result.results });
+    } else {
+      res.status(400).json({ success: false, error: result.error, results: result.results });
+    }
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    res.status(500).json({ success: false, error: msg });
+  }
 });
 
 /** 合并 nova：SSE 流式输出每步，前端可实时展示 */

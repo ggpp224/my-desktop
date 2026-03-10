@@ -28,6 +28,24 @@ function getMergeCommandType(msg: string): (typeof MERGE_TASKS)[number] | null {
   return null;
 }
 
+/** 开始工作子任务：通过指令单独执行 start-work 中的某一项（与图中指令对应） */
+const START_WORK_TASKS = [
+  { key: 'cpxy', label: '启动 cpxy', cmd: /启动\s*cpxy/i },
+  { key: 'react18', label: '启动 react18', cmd: /启动\s*react18/i },
+  { key: 'cc-web', label: '启动 cc-web', cmd: /启动\s*cc-web/i },
+  { key: 'biz-solution', label: '启动 biz-solution', cmd: /启动\s*biz-solution/i },
+  { key: 'uikit', label: '启动 uikit', cmd: /启动\s*uikit/i },
+  { key: 'shared', label: '启动 shared', cmd: /启动\s*shared/i },
+] as const;
+
+function getStartWorkStepTask(msg: string): (typeof START_WORK_TASKS)[number] | null {
+  const t = msg.trim();
+  for (const task of START_WORK_TASKS) {
+    if (task.cmd.test(t)) return task;
+  }
+  return null;
+}
+
 /** 下拉列表：快捷部署 Jenkins 任务 */
 const DEPLOY_OPTIONS = [
   { value: '', label: '快捷部署...' },
@@ -178,6 +196,34 @@ export function ChatPanel({ apiBase, addLog }: ChatPanelProps) {
             content: result.success ? `已执行${mergeTask.label}，请查看下方 Logs。` : (result.error ?? '合并失败'),
           },
         ]);
+        return;
+      }
+      const startWorkTask = getStartWorkStepTask(msg);
+      if (startWorkTask) {
+        addLog(`${startWorkTask.label}…`);
+        try {
+          const stepRes = await fetch(`${apiBase}/workflow/start-work/step`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ taskKey: startWorkTask.key }),
+          });
+          const stepData = await stepRes.json();
+          setMessages((prev) => [
+            ...prev,
+            {
+              role: 'assistant',
+              content: stepData.success
+                ? `已执行${startWorkTask.label}，请查看终端。`
+                : (stepData.error ?? '执行失败'),
+            },
+          ]);
+          if (stepData.success) addLog(`${startWorkTask.label} 已触发`);
+          else addLog(`失败: ${stepData.error}`);
+        } catch (e) {
+          const err = e instanceof Error ? e.message : String(e);
+          addLog(`请求异常: ${err}`);
+          setMessages((prev) => [...prev, { role: 'assistant', content: `请求失败: ${err}` }]);
+        }
         return;
       }
       const res = await fetch(`${apiBase}/agent/chat`, {
@@ -412,7 +458,7 @@ export function ChatPanel({ apiBase, addLog }: ChatPanelProps) {
       </div>
       <div style={{ flex: 1, overflow: 'auto', marginBottom: 12, background: '#0d0d1a', borderRadius: 8, padding: 12 }}>
         {messages.length === 0 && (
-          <p style={{ color: '#888' }}>[Chat] 输入指令或点击上方快捷按钮，例如：开始工作、打开开发环境、部署 order-service</p>
+          <p style={{ color: '#888' }}>[Chat] 输入指令或点击上方快捷按钮，例如：开始工作、启动 cpxy、启动 react18、打开 Jenkins、部署 order-service</p>
         )}
         {messages.map((m, i) => (
           <div key={i} style={{ marginBottom: 12 }}>
