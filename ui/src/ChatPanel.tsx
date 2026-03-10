@@ -1,5 +1,6 @@
 /* AI 生成 By Peng.Guo */
 import { useState, useRef, useEffect } from 'react';
+import type { Dispatch, MutableRefObject, SetStateAction } from 'react';
 
 type AgentResult = { success: boolean; text?: string; toolResults?: unknown[]; error?: string };
 
@@ -9,7 +10,7 @@ interface ChatPanelProps {
 }
 
 const QUICK_ACTIONS: Array<{ label: string; message: string; url?: string }> = [
-  { label: '开始工作', message: '执行工作流 start-work' },
+  { label: '开始工作', message: '开始工作' },
   { label: '打开 Jenkins', message: '打开 Jenkins', url: 'https://jenkins.rd.chanjet.com/' },
 ];
 
@@ -19,33 +20,6 @@ const MERGE_TASKS = [
   { key: 'biz-solution', label: '合并 biz-solution', path: '/merge/biz-solution', cmd: /合并\s*biz-solution/i },
   { key: 'scm', label: '合并 scm', path: '/merge/scm', cmd: /合并\s*scm/i },
 ] as const;
-
-function getMergeCommandType(msg: string): (typeof MERGE_TASKS)[number] | null {
-  const t = msg.trim();
-  for (const task of MERGE_TASKS) {
-    if (task.cmd.test(t)) return task;
-  }
-  return null;
-}
-
-/** 开始工作子任务及独立任务：通过指令单独执行；workflow 默认为 start-work，独立任务用 standalone（不参与「开始工作」流程） */
-const START_WORK_TASKS: Array<{ key: string; label: string; cmd: RegExp; workflow?: string }> = [
-  { key: 'cpxy', label: '启动 cpxy', cmd: /启动\s*cpxy/i },
-  { key: 'react18', label: '启动 react18', cmd: /启动\s*react18/i },
-  { key: 'cc-web', label: '启动 cc-web', cmd: /启动\s*cc-web/i },
-  { key: 'biz-solution', label: '启动 biz-solution', cmd: /启动\s*biz-solution/i },
-  { key: 'uikit', label: '启动 uikit', cmd: /启动\s*uikit/i },
-  { key: 'shared', label: '启动 shared', cmd: /启动\s*shared/i },
-  { key: 'scm', label: '启动 scm', cmd: /启动\s*scm/i, workflow: 'standalone' },
-];
-
-function getStartWorkStepTask(msg: string): (typeof START_WORK_TASKS)[number] | null {
-  const t = msg.trim();
-  for (const task of START_WORK_TASKS) {
-    if (task.cmd.test(t)) return task;
-  }
-  return null;
-}
 
 /** 下拉列表：快捷部署 Jenkins 任务 */
 const DEPLOY_OPTIONS = [
@@ -64,8 +38,84 @@ type DeployStatusResult = { status: string; message?: string; buildUrl?: string;
 const DEPLOY_POLL_INTERVAL_MS = 3000;
 const DEPLOY_POLL_MAX = 200; // 3 秒一次，约 10 分钟
 const DEPLOY_CONSECUTIVE_FAIL_MAX = 4;
-/** 至少轮询几次后才把 success/failure/aborted 当作最终结果，避免任务未出现在 buildHistory 时误用上一次构建状态 */
 const DEPLOY_POLL_MIN_BEFORE_TERMINAL = 4;
+
+/** 启动部署状态轮询，用于下拉部署与 Agent 触发部署后统一展示进度 */
+function startDeployStatusPolling(
+  apiBase: string,
+  options: { queueUrl?: string; jobName?: string; label: string },
+  setMessages: Dispatch<SetStateAction<Array<{ role: 'user' | 'assistant'; content: string; toolResults?: unknown[] }>>>,
+  addLog: (line: string) => void,
+  pollRef: MutableRefObject<ReturnType<typeof setInterval> | null>
+): void {
+  const { queueUrl, jobName, label } = options;
+  if (!queueUrl && !jobName) return;
+  const statusUrl = queueUrl
+    ? `${apiBase}/jenkins/deploy/status?queueUrl=${encodeURIComponent(queueUrl)}`
+    : `${apiBase}/jenkins/deploy/status?jobName=${encodeURIComponent(jobName!)}`;
+  const formatDeployMsg = (s: DeployStatusResult) => {
+    const name = s.buildName ?? label;
+    const num = s.buildNumber != null ? ` #${s.buildNumber}` : '';
+    const progress = s.message ?? '';
+    return progress ? `${name}${num} ${progress}` : `${name}${num}`;
+  };
+  let pollCount = 0;
+  let consecutiveFail = 0;
+  pollRef.current = setInterval(async () => {
+    pollCount += 1;
+    if (pollCount > DEPLOY_POLL_MAX) {
+      if (pollRef.current) clearInterval(pollRef.current);
+      pollRef.current = null;
+      setMessages((prev) => [...prev, { role: 'assistant', content: '部署状态查询超时，请到 Jenkins 查看。' }]);
+      addLog('部署轮询超时');
+      return;
+    }
+    try {
+      const statusRes = await fetch(statusUrl);
+      const status: DeployStatusResult = await statusRes.json();
+      const isTerminal = status.status === 'success' || status.status === 'failure' || status.status === 'aborted';
+      const isFail = status.status === 'unknown' || !statusRes.ok;
+      if (isTerminal) {
+        if (pollCount < DEPLOY_POLL_MIN_BEFORE_TERMINAL) return;
+        if (pollRef.current) clearInterval(pollRef.current);
+        pollRef.current = null;
+        const msg = formatDeployMsg(status);
+        addLog(status.status === 'success' ? '部署成功' : msg);
+        setMessages((prev) => [...prev, { role: 'assistant', content: msg }]);
+        return;
+      }
+      if (isFail) {
+        consecutiveFail += 1;
+        if (consecutiveFail >= DEPLOY_CONSECUTIVE_FAIL_MAX) {
+          if (pollRef.current) clearInterval(pollRef.current);
+          pollRef.current = null;
+          setMessages((prev) => [...prev, { role: 'assistant', content: '轮询失败：连续多次无法获取状态，请到 Jenkins 查看。' }]);
+          addLog('部署轮询失败');
+        }
+        return;
+      }
+      consecutiveFail = 0;
+      const progressMsg = formatDeployMsg(status);
+      setMessages((prev) => {
+        const next = [...prev];
+        const last = next[next.length - 1];
+        if (last?.role === 'assistant' && (last.content.includes('构建中') || last.content.includes('排队') || last.content.includes(label))) {
+          next[next.length - 1] = { ...last, content: progressMsg };
+          return next;
+        }
+        return [...prev, { role: 'assistant', content: progressMsg }];
+      });
+    } catch {
+      consecutiveFail += 1;
+      if (consecutiveFail >= DEPLOY_CONSECUTIVE_FAIL_MAX) {
+        if (pollRef.current) clearInterval(pollRef.current);
+        pollRef.current = null;
+        setMessages((prev) => [...prev, { role: 'assistant', content: '轮询失败：连续多次请求异常，请到 Jenkins 查看。' }]);
+        addLog('部署轮询失败');
+      }
+    }
+  }, DEPLOY_POLL_INTERVAL_MS);
+}
 
 export function ChatPanel({ apiBase, addLog }: ChatPanelProps) {
   const [input, setInput] = useState('');
@@ -186,47 +236,6 @@ export function ChatPanel({ apiBase, addLog }: ChatPanelProps) {
     setMergeRunning(true);
     addLog(`发送: ${msg}`);
     try {
-      const mergeTask = getMergeCommandType(msg);
-      if (mergeTask) {
-        addLog(`开始${mergeTask.label}…`);
-        const result = await executeMerge(mergeTask.path, `${mergeTask.label} 完成`);
-        setMessages((prev) => [
-          ...prev,
-          {
-            role: 'assistant',
-            content: result.success ? `已执行${mergeTask.label}，请查看下方 Logs。` : (result.error ?? '合并失败'),
-          },
-        ]);
-        return;
-      }
-      const startWorkTask = getStartWorkStepTask(msg);
-      if (startWorkTask) {
-        addLog(`${startWorkTask.label}…`);
-        try {
-          const stepRes = await fetch(`${apiBase}/workflow/${startWorkTask.workflow ?? 'start-work'}/step`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ taskKey: startWorkTask.key }),
-          });
-          const stepData = await stepRes.json();
-          setMessages((prev) => [
-            ...prev,
-            {
-              role: 'assistant',
-              content: stepData.success
-                ? `已执行${startWorkTask.label}，请查看终端。`
-                : (stepData.error ?? '执行失败'),
-            },
-          ]);
-          if (stepData.success) addLog(`${startWorkTask.label} 已触发`);
-          else addLog(`失败: ${stepData.error}`);
-        } catch (e) {
-          const err = e instanceof Error ? e.message : String(e);
-          addLog(`请求异常: ${err}`);
-          setMessages((prev) => [...prev, { role: 'assistant', content: `请求失败: ${err}` }]);
-        }
-        return;
-      }
       const res = await fetch(`${apiBase}/agent/chat`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -234,14 +243,30 @@ export function ChatPanel({ apiBase, addLog }: ChatPanelProps) {
       });
       const data: AgentResult = await res.json();
       addLog(data.success ? 'Agent 完成' : `错误: ${data.error}`);
+      const deployResult = data.toolResults?.find(
+        (t): t is { tool: string; result?: { queueUrl?: string; jobName?: string; message?: string } } =>
+          (t as { tool: string }).tool === 'deploy_jenkins' && (t as { result?: unknown }).result != null
+      ) as { tool: string; result?: { queueUrl?: string; jobName?: string; message?: string } } | undefined;
+      const deployPayload = deployResult?.result;
+      const hasDeployPoll = deployPayload && (deployPayload.queueUrl || deployPayload.jobName);
+      const content = hasDeployPoll ? (deployPayload.message ?? '已触发，构建中…') : (data.success ? (data.text ?? '') : (data.error ?? '请求失败'));
       setMessages((prev) => [
         ...prev,
         {
           role: 'assistant',
-          content: data.success ? (data.text ?? '') : (data.error ?? '请求失败'),
+          content,
           toolResults: data.toolResults,
         },
       ]);
+      if (hasDeployPoll) {
+        startDeployStatusPolling(
+          apiBase,
+          { queueUrl: deployPayload.queueUrl, jobName: deployPayload.jobName, label: '部署' },
+          setMessages,
+          addLog,
+          deployPollRef
+        );
+      }
     } catch (e) {
       const err = e instanceof Error ? e.message : String(e);
       addLog(`请求异常: ${err}`);
@@ -274,81 +299,13 @@ export function ChatPanel({ apiBase, addLog }: ChatPanelProps) {
       }
       addLog('已触发，构建中…');
       setMessages((prev) => [...prev, { role: 'assistant', content: data.message }]);
-      const pollByQueueUrl = data.queueUrl;
-      const pollByJobName = data.jobName;
-      if (!pollByQueueUrl && !pollByJobName) return;
-      let pollCount = 0;
-      let consecutiveFail = 0;
-      const statusUrl = pollByQueueUrl
-        ? `${apiBase}/jenkins/deploy/status?queueUrl=${encodeURIComponent(pollByQueueUrl)}`
-        : `${apiBase}/jenkins/deploy/status?jobName=${encodeURIComponent(pollByJobName!)}`;
-
-      const formatDeployMsg = (s: DeployStatusResult) => {
-        const name = s.buildName ?? label;
-        const num = s.buildNumber != null ? ` #${s.buildNumber}` : '';
-        const progress = s.message ?? '';
-        return progress ? `${name}${num} ${progress}` : `${name}${num}`;
-      };
-
-      deployPollRef.current = setInterval(async () => {
-        pollCount += 1;
-        if (pollCount > DEPLOY_POLL_MAX) {
-          if (deployPollRef.current) clearInterval(deployPollRef.current);
-          deployPollRef.current = null;
-          setMessages((prev) => [...prev, { role: 'assistant', content: '部署状态查询超时，请到 Jenkins 查看。' }]);
-          addLog('部署轮询超时');
-          return;
-        }
-        try {
-          const statusRes = await fetch(statusUrl);
-          const status: DeployStatusResult = await statusRes.json();
-          const isTerminal = status.status === 'success' || status.status === 'failure' || status.status === 'aborted';
-          const isFail = status.status === 'unknown' || !statusRes.ok;
-          if (isTerminal) {
-            consecutiveFail = 0;
-            if (pollCount < DEPLOY_POLL_MIN_BEFORE_TERMINAL) {
-              return;
-            }
-            if (deployPollRef.current) clearInterval(deployPollRef.current);
-            deployPollRef.current = null;
-            const msg = formatDeployMsg(status);
-            addLog(status.status === 'success' ? '部署成功' : msg);
-            setMessages((prev) => [...prev, { role: 'assistant', content: msg }]);
-            return;
-          }
-          if (isFail) {
-            consecutiveFail += 1;
-          if (consecutiveFail >= DEPLOY_CONSECUTIVE_FAIL_MAX) {
-            if (deployPollRef.current) clearInterval(deployPollRef.current);
-            deployPollRef.current = null;
-            const errMsg = `轮询失败：连续 ${DEPLOY_CONSECUTIVE_FAIL_MAX} 次无法获取状态，请到 Jenkins 查看。`;
-            setMessages((prev) => [...prev, { role: 'assistant', content: errMsg }]);
-            addLog(errMsg);
-          }
-            return;
-          }
-          consecutiveFail = 0;
-          const progressMsg = formatDeployMsg(status);
-          setMessages((prev) => {
-            const next = [...prev];
-            const last = next[next.length - 1];
-            if (last?.role === 'assistant' && (last.content.includes('构建中') || last.content.includes('排队') || last.content.includes(label))) {
-              next[next.length - 1] = { ...last, content: progressMsg };
-              return next;
-            }
-            return [...prev, { role: 'assistant', content: progressMsg }];
-          });
-        } catch {
-          consecutiveFail += 1;
-          if (consecutiveFail >= DEPLOY_CONSECUTIVE_FAIL_MAX) {
-            if (deployPollRef.current) clearInterval(deployPollRef.current);
-            deployPollRef.current = null;
-            const errMsg = `轮询失败：连续 ${DEPLOY_CONSECUTIVE_FAIL_MAX} 次请求异常，请到 Jenkins 查看。`;
-            setMessages((prev) => [...prev, { role: 'assistant', content: errMsg }]);
-            addLog(errMsg);
-          }
-        }
-      }, DEPLOY_POLL_INTERVAL_MS);
+      startDeployStatusPolling(
+        apiBase,
+        { queueUrl: data.queueUrl, jobName: data.jobName, label },
+        setMessages,
+        addLog,
+        deployPollRef
+      );
     } catch (e) {
       const err = e instanceof Error ? e.message : String(e);
       addLog(`部署请求异常: ${err}`);

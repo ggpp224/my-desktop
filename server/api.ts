@@ -5,6 +5,7 @@ import cors from 'cors';
 import { runAgent } from '../agent/agent.js';
 import { healthCheck } from '../agent/ollama-client.js';
 import { config } from '../config/default.js';
+import { getJenkinsPreset } from '../config/jenkins-presets.js';
 import { deploy as jenkinsDeploy, getDeployStatus, getDeployStatusByBuildHistory } from '../tools/jenkins-tool.js';
 import { open as openBrowser } from '../tools/browser-tool.js';
 import { mergeNova, mergeBizSolution, mergeScm } from '../tools/merge-tool.js';
@@ -53,21 +54,13 @@ app.post('/open-url', async (req, res) => {
 });
 
 /** 快捷触发 Jenkins 部署：body.job 为预定义 key（如 nova）或完整 job 名称；预定义可带固定构建参数 */
-const JENKINS_JOB_PRESETS: Record<string, { name: string; parameters?: Record<string, string> }> = {
-  nova: { name: config.jenkins.jobs.nova, parameters: { BRANCH_NAME: 'test' } },
-  'cc-web': { name: 'BUILD-to-HSY_PRETEST__saas-cc-web', parameters: { BRANCH_NAME: 'test-260127' } },
-  react18: { name: 'BUILD-to-HSY_PRETEST__react18-antd5-mobx6', parameters: { BRANCH_NAME: 'test-260127' } },
-  'biz-solution': { name: 'BUILD-to-HSY_PRETEST__biz-solution', parameters: { BRANCH_NAME: 'test-260127' } },
-  'biz-guide': { name: 'BUILD-to-HSY_PRETEST__biz-solution-dev-guide', parameters: { BRANCH_NAME: 'test-260127' } },
-  scm: { name: 'BUILD-to-HSY_PRETEST__saas-cc-web-scm', parameters: { BRANCH_NAME: 'test-260127' } },
-};
 app.post('/jenkins/deploy', async (req, res) => {
   const jobKey = (req.body?.job ?? '').trim();
   if (!jobKey) {
     res.status(400).json({ success: false, error: '缺少 job' });
     return;
   }
-  const preset = JENKINS_JOB_PRESETS[jobKey];
+  const preset = getJenkinsPreset(jobKey);
   const jobName = preset ? preset.name : jobKey;
   const parameters = preset?.parameters;
   try {
