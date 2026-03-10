@@ -9,16 +9,16 @@ interface ChatPanelProps {
   addLog: (line: string) => void;
 }
 
-const QUICK_ACTIONS: Array<{ label: string; message: string; url?: string }> = [
+const QUICK_ACTIONS: Array<{ label: string; message: string }> = [
   { label: '开始工作', message: '开始工作' },
-  { label: '打开 Jenkins', message: '打开 Jenkins', url: 'https://jenkins.rd.chanjet.com/' },
+  { label: '打开 Jenkins', message: '打开 Jenkins' },
 ];
 
-/** 合并任务类型：与菜单项、指令、API 对应 */
+/** 合并菜单项：点击后发送指令给 Agent 统一处理 */
 const MERGE_TASKS = [
-  { key: 'nova', label: '合并 nova', path: '/merge/nova', cmd: /合并\s*nova/i },
-  { key: 'biz-solution', label: '合并 biz-solution', path: '/merge/biz-solution', cmd: /合并\s*biz-solution/i },
-  { key: 'scm', label: '合并 scm', path: '/merge/scm', cmd: /合并\s*scm/i },
+  { key: 'nova', label: '合并 nova' },
+  { key: 'biz-solution', label: '合并 biz-solution' },
+  { key: 'scm', label: '合并 scm' },
 ] as const;
 
 /** 下拉列表：快捷部署 Jenkins 任务 */
@@ -32,7 +32,6 @@ const DEPLOY_OPTIONS = [
   { value: 'scm', label: '部署scm' },
 ];
 
-type DeployResult = { success: boolean; message: string; queueUrl?: string; jobName?: string };
 type DeployStatusResult = { status: string; message?: string; buildUrl?: string; buildNumber?: number; buildName?: string; progressPercent?: number };
 
 const DEPLOY_POLL_INTERVAL_MS = 3000;
@@ -122,7 +121,6 @@ export function ChatPanel({ apiBase, addLog }: ChatPanelProps) {
   const [loading, setLoading] = useState(false);
   const [deploySelect, setDeploySelect] = useState('');
   const [mergeMenuOpen, setMergeMenuOpen] = useState(false);
-  const [mergeRunning, setMergeRunning] = useState(false);
   const [messages, setMessages] = useState<Array<{ role: 'user' | 'assistant'; content: string; toolResults?: unknown[] }>>([]);
   const deployPollRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const mergeMenuRef = useRef<HTMLDivElement>(null);
@@ -139,101 +137,12 @@ export function ChatPanel({ apiBase, addLog }: ChatPanelProps) {
     return () => document.removeEventListener('click', onOutside);
   }, [mergeMenuOpen]);
 
-  const executeMerge = async (endpoint: string, doneLabel: string): Promise<{ success: boolean; error?: string }> => {
-    if (!apiBase) return { success: false, error: '未就绪' };
-    try {
-      const res = await fetch(`${apiBase}${endpoint}`, { method: 'POST', headers: { 'Content-Type': 'application/json' } });
-      if (!res.ok || !res.body) {
-        addLog(`请求失败: ${res.status}`);
-        return { success: false, error: `请求失败: ${res.status}` };
-      }
-      const reader = res.body.getReader();
-      const dec = new TextDecoder();
-      let buf = '';
-      let lastDone: { success: boolean; error?: string } | null = null;
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
-        buf += dec.decode(value, { stream: true });
-        const lines = buf.split('\n');
-        buf = lines.pop() ?? '';
-        for (const line of lines) {
-          if (line.startsWith('data: ')) {
-            try {
-              const data = JSON.parse(line.slice(6)) as { step?: string; done?: boolean; success?: boolean; error?: string };
-              if (data.step != null) addLog(data.step);
-              if (data.done) {
-                lastDone = { success: !!data.success, error: data.error };
-                if (!data.success) {
-                  addLog(data.error || '合并失败');
-                  if (data.error === '代码有冲突，需手工合并') alert('代码有冲突，需手工合并');
-                } else addLog(doneLabel);
-              }
-            } catch (_) {}
-          }
-        }
-      }
-      if (buf.startsWith('data: ')) {
-        try {
-          const data = JSON.parse(buf.slice(6)) as { step?: string; done?: boolean; success?: boolean; error?: string };
-          if (data.step != null) addLog(data.step);
-          if (data.done) {
-            lastDone = { success: !!data.success, error: data.error };
-            if (!data.success) {
-              addLog(data.error || '合并失败');
-              if (data.error === '代码有冲突，需手工合并') alert('代码有冲突，需手工合并');
-            } else addLog(doneLabel);
-          }
-        } catch (_) {}
-      }
-      return lastDone ?? { success: false, error: '未收到完成事件' };
-    } catch (e) {
-      addLog(`请求失败: ${e}`);
-      return { success: false, error: String(e) };
-    }
-  };
-
-  const runMerge = (task: (typeof MERGE_TASKS)[number]) => async () => {
-    if (!apiBase || mergeRunning) return;
-    setMergeMenuOpen(false);
-    setMergeRunning(true);
-    addLog(`开始${task.label}…`);
-    try {
-      await executeMerge(task.path, `${task.label} 完成`);
-    } finally {
-      setMergeRunning(false);
-    }
-  };
-
-  const openUrl = async (url: string, label: string) => {
-    setMessages((prev) => [...prev, { role: 'user', content: label }]);
-    setLoading(true);
-    addLog(`${label}: ${url}`);
-    try {
-      const res = await fetch(`${apiBase}/open-url`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ url }),
-      });
-      const data = await res.json();
-      setLoading(false);
-      setMessages((prev) => [...prev, { role: 'assistant', content: data.success ? '已打开' : (data.error ?? '打开失败') }]);
-      if (!data.success) addLog(`打开失败: ${data.error}`);
-    } catch (e) {
-      const err = e instanceof Error ? e.message : String(e);
-      setLoading(false);
-      addLog(`打开异常: ${err}`);
-      setMessages((prev) => [...prev, { role: 'assistant', content: `请求失败: ${err}` }]);
-    }
-  };
-
   const send = async (text: string) => {
     const msg = text.trim();
     if (!msg) return;
     setMessages((prev) => [...prev, { role: 'user', content: msg }]);
     setInput('');
     setLoading(true);
-    setMergeRunning(true);
     addLog(`发送: ${msg}`);
     try {
       const res = await fetch(`${apiBase}/agent/chat`, {
@@ -273,55 +182,17 @@ export function ChatPanel({ apiBase, addLog }: ChatPanelProps) {
       setMessages((prev) => [...prev, { role: 'assistant', content: `请求失败: ${err}` }]);
     } finally {
       setLoading(false);
-      setMergeRunning(false);
-    }
-  };
-
-  const runDeploy = async (jobKey: string) => {
-    if (!jobKey) return;
-    const label = DEPLOY_OPTIONS.find((o) => o.value === jobKey)?.label ?? jobKey;
-    setMessages((prev) => [...prev, { role: 'user', content: label }]);
-    setDeploySelect('');
-    setLoading(true);
-    addLog(`部署: ${label}`);
-    try {
-      const res = await fetch(`${apiBase}/jenkins/deploy`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ job: jobKey }),
-      });
-      const data: DeployResult = await res.json();
-      setLoading(false);
-      if (!data.success) {
-        addLog(`部署失败: ${data.message}`);
-        setMessages((prev) => [...prev, { role: 'assistant', content: `失败: ${data.message}` }]);
-        return;
-      }
-      addLog('已触发，构建中…');
-      setMessages((prev) => [...prev, { role: 'assistant', content: data.message }]);
-      startDeployStatusPolling(
-        apiBase,
-        { queueUrl: data.queueUrl, jobName: data.jobName, label },
-        setMessages,
-        addLog,
-        deployPollRef
-      );
-    } catch (e) {
-      const err = e instanceof Error ? e.message : String(e);
-      addLog(`部署请求异常: ${err}`);
-      setMessages((prev) => [...prev, { role: 'assistant', content: `请求失败: ${err}` }]);
-      setLoading(false);
     }
   };
 
   return (
     <section style={{ flex: 1, display: 'flex', flexDirection: 'column', minHeight: 0, padding: 16 }}>
       <div style={{ marginBottom: 12, display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
-        {QUICK_ACTIONS.map(({ label, message, url }) => (
+        {QUICK_ACTIONS.map(({ label, message }) => (
           <button
             key={label}
             type="button"
-            onClick={() => (url ? openUrl(url, label) : send(message))}
+            onClick={() => send(message)}
             disabled={loading}
             style={{
               padding: '8px 14px',
@@ -339,8 +210,11 @@ export function ChatPanel({ apiBase, addLog }: ChatPanelProps) {
           value={deploySelect}
           onChange={(e) => {
             const v = e.target.value;
-            setDeploySelect(v);
-            if (v) runDeploy(v);
+            setDeploySelect('');
+            if (v) {
+              const label = DEPLOY_OPTIONS.find((o) => o.value === v)?.label ?? v;
+              send(label);
+            }
           }}
           disabled={loading}
           style={{
@@ -362,14 +236,14 @@ export function ChatPanel({ apiBase, addLog }: ChatPanelProps) {
           <button
             type="button"
             onClick={() => setMergeMenuOpen((o) => !o)}
-            disabled={loading || mergeRunning}
+            disabled={loading}
             style={{
               padding: '8px 14px',
               background: mergeMenuOpen ? '#0f3460' : '#16213e',
               color: '#eaeaea',
               border: '1px solid #333',
               borderRadius: 6,
-              cursor: loading || mergeRunning ? 'not-allowed' : 'pointer',
+              cursor: loading ? 'not-allowed' : 'pointer',
             }}
           >
             合并代码 ▾
@@ -393,8 +267,11 @@ export function ChatPanel({ apiBase, addLog }: ChatPanelProps) {
                 <button
                   key={task.key}
                   type="button"
-                  onClick={runMerge(task)}
-                  disabled={mergeRunning}
+                  onClick={() => {
+                    setMergeMenuOpen(false);
+                    send(task.label);
+                  }}
+                  disabled={loading}
                   style={{
                     display: 'block',
                     width: '100%',
@@ -403,7 +280,7 @@ export function ChatPanel({ apiBase, addLog }: ChatPanelProps) {
                     color: '#eaeaea',
                     border: 'none',
                     borderRadius: 4,
-                    cursor: mergeRunning ? 'not-allowed' : 'pointer',
+                    cursor: loading ? 'not-allowed' : 'pointer',
                     textAlign: 'left',
                   }}
                 >
