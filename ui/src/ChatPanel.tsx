@@ -131,6 +131,7 @@ export function ChatPanel({ apiBase, addLog }: ChatPanelProps) {
   const [deploySelect, setDeploySelect] = useState('');
   const [mergeMenuOpen, setMergeMenuOpen] = useState(false);
   const [messages, setMessages] = useState<Array<{ role: 'user' | 'assistant'; content: string; toolResults?: unknown[] }>>([]);
+  const [currentModel, setCurrentModel] = useState<string>('');
   const deployPollRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const mergeMenuRef = useRef<HTMLDivElement>(null);
   const historyIndexRef = useRef(-1);
@@ -139,6 +140,14 @@ export function ChatPanel({ apiBase, addLog }: ChatPanelProps) {
   useEffect(() => () => {
     if (deployPollRef.current) clearInterval(deployPollRef.current);
   }, []);
+
+  useEffect(() => {
+    if (!apiBase) return;
+    fetch(`${apiBase}/agent/model`)
+      .then((r) => (r.ok ? r.json() : null))
+      .then((data: { model?: string } | null) => data?.model != null && setCurrentModel(data.model))
+      .catch(() => {});
+  }, [apiBase]);
 
   useEffect(() => {
     const onOutside = (e: MouseEvent) => {
@@ -428,7 +437,7 @@ export function ChatPanel({ apiBase, addLog }: ChatPanelProps) {
       </div>
       <form
         onSubmit={(e) => { e.preventDefault(); send(input); }}
-        style={{ display: 'flex', gap: 8, alignItems: 'center' }}
+        style={{ display: 'flex', gap: 8, alignItems: 'flex-end' }}
       >
         <textarea
           value={input}
@@ -484,20 +493,27 @@ export function ChatPanel({ apiBase, addLog }: ChatPanelProps) {
             font: 'inherit',
           }}
         />
-        <button
-          type="submit"
-          disabled={loading}
-          style={{
-            padding: '10px 20px',
-            background: '#0f3460',
-            color: '#eaeaea',
-            border: '1px solid #333',
-            borderRadius: 6,
-            cursor: loading ? 'not-allowed' : 'pointer',
-          }}
-        >
-          发送
-        </button>
+        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 6 }}>
+          {currentModel && (
+            <span style={{ fontSize: 12, color: '#64748b' }} title="当前使用的本地模型">
+              {currentModel}
+            </span>
+          )}
+          <button
+            type="submit"
+            disabled={loading}
+            style={{
+              padding: '10px 20px',
+              background: '#0f3460',
+              color: '#eaeaea',
+              border: '1px solid #333',
+              borderRadius: 6,
+              cursor: loading ? 'not-allowed' : 'pointer',
+            }}
+          >
+            发送
+          </button>
+        </div>
       </form>
     </section>
   );

@@ -23,6 +23,11 @@ app.get('/health', async (_req, res) => {
   res.status(ok ? 200 : 503).json({ ok, service: 'ai-dev-control-center' });
 });
 
+/** 返回当前使用的本地模型名，供前端展示 */
+app.get('/agent/model', (_req, res) => {
+  res.json({ model: config.ollama.model });
+});
+
 app.post('/agent/chat', async (req, res) => {
   const message = (req.body?.message ?? '').trim();
   if (!message) {
