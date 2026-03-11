@@ -2,6 +2,7 @@
   "steps": [
     { "tool": "shell", "cmd": "cpxy", "visible": true, "taskKey": "cpxy" },
     { "tool": "shell", "cmd": "yarn dev", "visible": true, "taskKey": "react18", "cwdCode": "react18" },
+    { "tool": "shell", "cmd": "yarn dev", "visible": true, "taskKey": "base18", "cwdCode": "base18" },
     { "tool": "shell", "cmd": "yarn dev", "visible": true, "taskKey": "cc-web", "cwdCode": "cc-web2" },
     { "tool": "shell", "cmd": "yarn dev", "visible": true, "taskKey": "biz-solution", "cwdCode": "biz-solution" },
     { "tool": "shell", "cmd": "yarn dev", "visible": true, "taskKey": "uikit", "cwdCode": "uikit" },

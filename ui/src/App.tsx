@@ -46,7 +46,12 @@ export default function App() {
   const [resizing, setResizing] = useState(false);
   const helpRef = useRef<HTMLDivElement>(null);
   const contentRef = useRef<HTMLDivElement>(null);
-  const addLog = (line: string) => setLogs((prev) => [...prev, `${new Date().toISOString().slice(11, 19)} ${line}`]);
+  const addLog = (line: string) =>
+    setLogs((prev) => [
+      ...prev,
+      `${new Date()
+        .toLocaleTimeString('zh-CN', { hour12: false, hour: '2-digit', minute: '2-digit', second: '2-digit' })} ${line}`,
+    ]);
 
   useEffect(() => {
     if (!resizing) return;

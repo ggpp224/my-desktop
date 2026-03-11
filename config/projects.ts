@@ -60,7 +60,7 @@ const PROJECT_ENTRIES: ProjectEntry[] = [
   {
     codes: ['base18'],
     path: '/Users/guopeng/disk/cc-web/micro-apps/saas-cc-web-base18',
-    jenkins: { jobName: 'BUILD-to-HKJ_DEV_saas-cc-web-base18', defaultBranch: 'test-260127' },
+    jenkins: { jobName: 'BUILD-to-HSY_PRETEST__saas-cc-web-base18', defaultBranch: 'test-260127' },
   },
   {
     codes: ['cc-web-hkj'],

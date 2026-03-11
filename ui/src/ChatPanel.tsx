@@ -22,12 +22,14 @@ const MERGE_TASKS = [
   { key: 'scm', label: '合并 scm', path: '/merge/scm' },
 ] as const;
 
-/** 下拉列表：快捷部署 Jenkins 任务 */
+/** 下拉列表：快捷部署 Jenkins 任务（与 config/projects 中有 jenkins 的代号一致） */
 const DEPLOY_OPTIONS = [
   { value: '', label: '快捷部署...' },
   { value: 'nova', label: '部署nova' },
   { value: 'cc-web', label: '部署cc-web' },
   { value: 'react18', label: '部署react18' },
+  { value: 'base', label: '部署base' },
+  { value: 'base18', label: '部署base18' },
   { value: 'biz-solution', label: '部署biz-solution' },
   { value: 'biz-guide', label: '部署biz-guide' },
   { value: 'scm', label: '部署scm' },
