@@ -3,11 +3,23 @@ import { chatWithTools, parseToolCalls, type ChatMessage, type ToolCall } from '
 import { routeAndExecute } from './tool-router.js';
 import { toolsSchema } from './tools-schema.js';
 
+/** 各阶段耗时（毫秒），用于在 Logs 中展示 */
+export type AgentTiming = {
+  /** 首次模型推理（解析 tool_calls）耗时 ms */
+  firstLLMMs?: number;
+  /** 各工具执行耗时 ms */
+  tools?: { name: string; ms: number }[];
+  /** 二次模型推理（生成最终回复）耗时 ms */
+  secondLLMMs?: number;
+};
+
 export type AgentResult = {
   success: boolean;
   text?: string;
   toolResults?: unknown[];
   error?: string;
+  /** 各步骤耗时，便于在 Logs 中反馈 */
+  timing?: AgentTiming;
 };
 
 const AGENT_SYSTEM_PROMPT = `你是开发流程助手。根据用户意图选择工具并填对参数。
@@ -34,19 +46,26 @@ export async function runAgent(userMessage: string): Promise<AgentResult> {
     function: t.function,
   }));
 
+  const timing: AgentTiming = { tools: [] };
+
   try {
+    const t0 = Date.now();
     const { message } = await chatWithTools(messages, tools);
+    timing.firstLLMMs = Date.now() - t0;
+
     const calls = parseToolCalls(message);
 
     if (calls.length === 0) {
       const text = (message.content ?? '').trim() || '未解析到可执行操作，请换一种说法试试。';
-      return { success: true, text };
+      return { success: true, text, timing };
     }
 
     const toolResults: unknown[] = [];
     for (const call of calls) {
+      const tTool = Date.now();
       try {
         const result = await routeAndExecute(call);
+        if (timing.tools) timing.tools.push({ name: call.name, ms: Date.now() - tTool });
         toolResults.push({ tool: call.name, result });
         messages.push(message);
         messages.push({
@@ -55,6 +74,7 @@ export async function runAgent(userMessage: string): Promise<AgentResult> {
           content: typeof result === 'object' ? JSON.stringify(result) : String(result),
         } as ChatMessage);
       } catch (err) {
+        if (timing.tools) timing.tools.push({ name: call.name, ms: Date.now() - tTool });
         const msg = err instanceof Error ? err.message : String(err);
         toolResults.push({ tool: call.name, error: msg });
         messages.push(message);
@@ -62,9 +82,11 @@ export async function runAgent(userMessage: string): Promise<AgentResult> {
       }
     }
 
+    const t1 = Date.now();
     const finalRes = await chatWithTools(messages, tools);
+    timing.secondLLMMs = Date.now() - t1;
     const finalText = (finalRes.message.content ?? '').trim() || '已执行完成。';
-    return { success: true, text: finalText, toolResults };
+    return { success: true, text: finalText, toolResults, timing };
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
     return { success: false, error: message };
