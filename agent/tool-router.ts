@@ -6,6 +6,8 @@ import { open as browserOpen } from '../tools/browser-tool.js';
 import { deploy as jenkinsDeploy } from '../tools/jenkins-tool.js';
 import { runWorkflow, runWorkflowStep } from '../tools/workflow-tool.js';
 import { mergeNova, mergeBizSolution, mergeScm } from '../tools/merge-tool.js';
+import { openInIde } from '../tools/open-ide-tool.js';
+import { closeIdeProject } from '../tools/close-ide-tool.js';
 import type { ToolCall } from './ollama-client.js';
 
 export async function routeAndExecute(call: ToolCall): Promise<unknown> {
@@ -46,6 +48,16 @@ export async function routeAndExecute(call: ToolCall): Promise<unknown> {
       if (repo === 'biz-solution') return mergeBizSolution();
       if (repo === 'scm') return mergeScm();
       throw new Error(`不支持的 merge_repo: ${repo}，应为 nova、biz-solution 或 scm`);
+    }
+    case 'open_in_ide': {
+      const app = (args?.app as string) ?? '';
+      const code = (args?.code as string) ?? '';
+      return openInIde(app, code);
+    }
+    case 'close_ide_project': {
+      const app = (args?.app as string) ?? '';
+      const code = (args?.code as string) ?? '';
+      return closeIdeProject(app, code);
     }
     default:
       throw new Error(`未知工具: ${name}`);

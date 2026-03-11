@@ -75,4 +75,34 @@ export const toolsSchema = [
       },
     },
   },
+  {
+    type: 'function' as const,
+    function: {
+      name: 'open_in_ide',
+      description: '用指定 IDE/编辑器打开项目目录。用户说「ws打开base」「cursor打开base」「用 WebStorm 打开 scm」等时使用。app：ws 或 webstorm（WebStorm）、cursor（Cursor）、vscode 或 code（VS Code）；code：项目代号，与 config/projects 一致，如 base、nova、scm、cc-web、react18、biz-solution 等',
+      parameters: {
+        type: 'object',
+        required: ['app', 'code'],
+        properties: {
+          app: { type: 'string', description: '应用：ws / webstorm（WebStorm）、cursor（Cursor）、vscode / code（VS Code）' },
+          code: { type: 'string', description: '项目代号：base、nova、scm、cc-web、react18、biz-solution、biz-guide、base18、cc-web2、uikit、shared 等' },
+        },
+      },
+    },
+  },
+  {
+    type: 'function' as const,
+    function: {
+      name: 'close_ide_project',
+      description: '关闭指定 IDE 中已打开的某项目窗口。用户说「关闭ws的nova」「关闭cursor的base」「关闭 WebStorm 的 scm」等时使用。app：ws/webstorm、cursor、vscode/code；code：项目代号，与 config/projects 一致',
+      parameters: {
+        type: 'object',
+        required: ['app', 'code'],
+        properties: {
+          app: { type: 'string', description: '应用：ws / webstorm、cursor、vscode / code' },
+          code: { type: 'string', description: '项目代号：base、nova、scm、cc-web、react18、biz-solution 等' },
+        },
+      },
+    },
+  },
 ];

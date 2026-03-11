@@ -4,6 +4,8 @@ const TOOLS = [
   { name: 'open_browser', desc: '打开浏览器 URL' },
   { name: 'deploy_jenkins', desc: '触发 Jenkins 部署' },
   { name: 'run_workflow', desc: '执行预定义工作流' },
+  { name: 'open_in_ide', desc: '用 IDE 打开项目（如 ws打开base、cursor打开scm）' },
+  { name: 'close_ide_project', desc: '关闭 IDE 中已打开的项目窗口（如 关闭ws的nova、关闭cursor的base）' },
 ];
 
 export function ToolPanel() {
