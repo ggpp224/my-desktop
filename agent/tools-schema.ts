@@ -28,11 +28,11 @@ export const toolsSchema = [
     type: 'function' as const,
     function: {
       name: 'deploy_jenkins',
-      description: '当用户表达要部署、发布、构建某项目时使用。job 为预定义 key：nova、cc-web、react18、biz-solution、biz-guide、scm；或传入完整 Jenkins Job 名称',
+      description: '当用户表达要部署、发布、构建某项目时使用。job 为预定义 key：nova、cc-web、react18、biz-solution、biz-guide、scm、base、base18；或传入完整 Jenkins Job 名称',
       parameters: {
         type: 'object',
         required: ['job'],
-        properties: { job: { type: 'string', description: '预定义 key（nova/cc-web/react18/biz-solution/biz-guide/scm）或完整 Jenkins Job 名称' } },
+        properties: { job: { type: 'string', description: '预定义 key（nova/cc-web/react18/biz-solution/biz-guide/scm/base/base18）或完整 Jenkins Job 名称' } },
       },
     },
   },

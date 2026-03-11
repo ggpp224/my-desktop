@@ -1,5 +1,6 @@
 /* AI 生成 By Peng.Guo */
 import { getJenkinsPreset } from '../config/jenkins-presets.js';
+import { getProjectByCode } from '../config/projects.js';
 import { run as shellRun } from '../tools/shell-tool.js';
 import { open as browserOpen } from '../tools/browser-tool.js';
 import { deploy as jenkinsDeploy } from '../tools/jenkins-tool.js';
@@ -16,7 +17,16 @@ export async function routeAndExecute(call: ToolCall): Promise<unknown> {
       return browserOpen((args?.url as string) ?? '');
     case 'deploy_jenkins': {
       const job = (args?.job as string) ?? '';
-      const preset = getJenkinsPreset(job);
+      let preset = getJenkinsPreset(job);
+      if (!preset) {
+        const entry = getProjectByCode(job);
+        if (entry?.jenkins) {
+          preset = {
+            name: entry.jenkins.jobName,
+            parameters: { BRANCH_NAME: entry.jenkins.defaultBranch },
+          };
+        }
+      }
       if (preset) {
         const result = await jenkinsDeploy(preset.name, preset.parameters);
         return { ...result, jobKey: job };

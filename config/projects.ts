@@ -152,7 +152,7 @@ const PROJECT_ENTRIES: ProjectEntry[] = [
   {
     codes: ['nova', 'nova-next'],
     path: '/Users/guopeng/disk/cc-web/packages/nova-next',
-    jenkins: { jobName: 'BUILD-to-CNPM_nova_nova-next', defaultBranch: 'test' },
+    jenkins: { jobName: 'BUILD-to-CNPM__nova_nova-next', defaultBranch: 'test' },
     merge: { targetBranch: 'test', runRelease: true },
   },
 ];
