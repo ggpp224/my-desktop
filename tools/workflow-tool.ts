@@ -5,6 +5,7 @@ import { createRequire } from 'module';
 import { run as shellRun, runInTerminal } from './shell-tool.js';
 import { open as browserOpen } from './browser-tool.js';
 import { deploy as jenkinsDeploy } from './jenkins-tool.js';
+import { getProjectPath } from '../config/projects.js';
 
 const require = createRequire(import.meta.url);
 
@@ -21,12 +22,22 @@ function getWorkflowsDir(): string {
   return path.join(process.cwd(), 'workflows');
 }
 
+/** shell 步骤可指定 cwdCode：按项目代号解析工作目录，再执行 cmd */
 export type Step =
-  | { tool: 'shell'; cmd: string; visible?: boolean; taskKey?: string }
+  | { tool: 'shell'; cmd: string; visible?: boolean; taskKey?: string; cwdCode?: string }
   | { tool: 'browser'; url: string; taskKey?: string }
   | { tool: 'jenkins'; jobName: string; taskKey?: string };
 
 export type WorkflowDef = { steps: Step[] };
+
+/** 若步骤带 cwdCode，则按代号解析路径并拼成 cd path && cmd */
+function resolveShellCmd(step: Step & { tool: 'shell'; cmd: string; cwdCode?: string }): string {
+  const code = step.cwdCode?.trim();
+  if (!code) return step.cmd;
+  const dir = getProjectPath(code);
+  if (!dir) return step.cmd;
+  return `cd ${dir} && ${step.cmd}`;
+}
 
 /** 执行工作流中的单步，支持 stepIndex 或 taskKey。用于「启动 cpxy」等指令单独执行某一任务。 */
 export async function runWorkflowStep(
@@ -78,11 +89,12 @@ export async function runWorkflowStep(
   const results: unknown[] = [];
   try {
     if (step.tool === 'shell' && 'cmd' in step) {
+      const cmd = resolveShellCmd(step);
       if (step.visible) {
-        await runInTerminal(step.cmd);
-        results.push({ step: index, tool: 'shell', visible: true, cmd: step.cmd });
+        await runInTerminal(cmd);
+        results.push({ step: index, tool: 'shell', visible: true, cmd });
       } else {
-        const out = await shellRun(step.cmd);
+        const out = await shellRun(cmd);
         results.push({ step: index, tool: 'shell', ...out });
       }
     } else if (step.tool === 'browser' && 'url' in step) {
@@ -142,11 +154,12 @@ export async function runWorkflow(name: string): Promise<{ success: boolean; res
     const step = steps[i];
     try {
       if (step.tool === 'shell' && 'cmd' in step) {
+        const cmd = resolveShellCmd(step);
         if (step.visible) {
-          await runInTerminal(step.cmd);
-          results.push({ step: i, tool: 'shell', visible: true, cmd: step.cmd });
+          await runInTerminal(cmd);
+          results.push({ step: i, tool: 'shell', visible: true, cmd });
         } else {
-          const out = await shellRun(step.cmd);
+          const out = await shellRun(cmd);
           results.push({ step: i, tool: 'shell', ...out });
         }
       } else if (step.tool === 'browser' && 'url' in step) {

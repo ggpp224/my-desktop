@@ -1,11 +1,11 @@
 {
   "steps": [
     { "tool": "shell", "cmd": "cpxy", "visible": true, "taskKey": "cpxy" },
-    { "tool": "shell", "cmd": "cd /Users/guopeng/disk/cc-web/micro-apps/react18-antd5-mobx6 && yarn dev", "visible": true, "taskKey": "react18" },
-    { "tool": "shell", "cmd": "cd /Users/guopeng/disk/cc-web/saas-cc-web-2 && yarn dev", "visible": true, "taskKey": "cc-web" },
-    { "tool": "shell", "cmd": "cd /Users/guopeng/disk/cc-web/micro-apps/biz-solution && yarn dev", "visible": true, "taskKey": "biz-solution" },
-    { "tool": "shell", "cmd": "cd /Users/guopeng/disk/cc-web/packages/nova-next/packages/uikit && yarn dev", "visible": true, "taskKey": "uikit" },
-    { "tool": "shell", "cmd": "cd /Users/guopeng/disk/cc-web/packages/nova-next/packages/shared && yarn dev", "visible": true, "taskKey": "shared" },
+    { "tool": "shell", "cmd": "yarn dev", "visible": true, "taskKey": "react18", "cwdCode": "react18" },
+    { "tool": "shell", "cmd": "yarn dev", "visible": true, "taskKey": "cc-web", "cwdCode": "cc-web2" },
+    { "tool": "shell", "cmd": "yarn dev", "visible": true, "taskKey": "biz-solution", "cwdCode": "biz-solution" },
+    { "tool": "shell", "cmd": "yarn dev", "visible": true, "taskKey": "uikit", "cwdCode": "uikit" },
+    { "tool": "shell", "cmd": "yarn dev", "visible": true, "taskKey": "shared", "cwdCode": "shared" },
     { "tool": "shell", "cmd": "docker compose up -d" }
   ]
 }

@@ -1,9 +1,6 @@
 /* AI 生成 By Peng.Guo */
 import { execSync, spawn } from 'child_process';
-
-const NOVA_PROJECT_PATH = '/Users/guopeng/disk/cc-web/packages/nova-next';
-const BIZ_SOLUTION_PATH = '/Users/guopeng/disk/cc-web/micro-apps/biz-solution';
-const SCM_PROJECT_PATH = '/Users/guopeng/disk/cc-web/micro-apps/saas-cc-web-scm';
+import { getProjectByCode } from '../config/projects.js';
 
 /** 按行缓冲并回调，用于流式输出 */
 function flushLines(buffer: { out: string }, chunk: string, add: (line: string) => void) {
@@ -193,23 +190,35 @@ async function mergeMerge(
   return { success: true, steps };
 }
 
-export async function mergeNova(options?: MergeOptions): Promise<MergeResult> {
+/**
+ * 按项目代号执行合并，配置来自 config/projects（需有 merge 配置）。
+ */
+export async function mergeByCode(code: string, options?: MergeOptions): Promise<MergeResult> {
+  const entry = getProjectByCode(code);
+  if (!entry) {
+    return { success: false, steps: [], error: `未找到项目代号: ${code}` };
+  }
+  if (!entry.merge) {
+    return { success: false, steps: [], error: `项目 ${entry.codes[0]} 未配置 merge` };
+  }
   return mergeMerge(
-    { projectPath: NOVA_PROJECT_PATH, targetBranch: 'test', runRelease: true },
+    {
+      projectPath: entry.path,
+      targetBranch: entry.merge.targetBranch,
+      runRelease: entry.merge.runRelease,
+    },
     options
   );
+}
+
+export async function mergeNova(options?: MergeOptions): Promise<MergeResult> {
+  return mergeByCode('nova', options);
 }
 
 export async function mergeBizSolution(options?: MergeOptions): Promise<MergeResult> {
-  return mergeMerge(
-    { projectPath: BIZ_SOLUTION_PATH, targetBranch: 'test-260127', runRelease: false },
-    options
-  );
+  return mergeByCode('biz-solution', options);
 }
 
 export async function mergeScm(options?: MergeOptions): Promise<MergeResult> {
-  return mergeMerge(
-    { projectPath: SCM_PROJECT_PATH, targetBranch: 'test-260127', runRelease: false },
-    options
-  );
+  return mergeByCode('scm', options);
 }

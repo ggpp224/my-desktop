@@ -1,5 +1,5 @@
 {
   "steps": [
-    { "tool": "shell", "cmd": "cd /Users/guopeng/disk/cc-web/micro-apps/saas-cc-web-scm && yarn dev", "visible": true, "taskKey": "scm" }
+    { "tool": "shell", "cmd": "yarn dev", "visible": true, "taskKey": "scm", "cwdCode": "scm" }
   ]
 }

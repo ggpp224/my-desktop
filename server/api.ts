@@ -8,7 +8,8 @@ import { config } from '../config/default.js';
 import { getJenkinsPreset } from '../config/jenkins-presets.js';
 import { deploy as jenkinsDeploy, getDeployStatus, getDeployStatusByBuildHistory } from '../tools/jenkins-tool.js';
 import { open as openBrowser } from '../tools/browser-tool.js';
-import { mergeNova, mergeBizSolution, mergeScm } from '../tools/merge-tool.js';
+import { getAllProjects, getProjectByCode } from '../config/projects.js';
+import { mergeByCode, mergeNova, mergeBizSolution, mergeScm } from '../tools/merge-tool.js';
 import { runWorkflowStep } from '../tools/workflow-tool.js';
 
 const app = express();
@@ -51,6 +52,21 @@ app.post('/open-url', async (req, res) => {
     const msg = err instanceof Error ? err.message : String(err);
     res.status(500).json({ success: false, error: msg });
   }
+});
+
+/** 获取统一项目列表（代号、路径、Jenkins、merge），便于前端展示与扩展 */
+app.get('/projects', (_req, res) => {
+  const list = getAllProjects().map((p) => ({
+    codes: p.codes,
+    path: p.path,
+    jenkins: p.jenkins
+      ? { jobName: p.jenkins.jobName, defaultBranch: p.jenkins.defaultBranch }
+      : undefined,
+    merge: p.merge
+      ? { targetBranch: p.merge.targetBranch, runRelease: p.merge.runRelease }
+      : undefined,
+  }));
+  res.json(list);
 });
 
 /** 快捷触发 Jenkins 部署：body.job 为预定义 key（如 nova）或完整 job 名称；预定义可带固定构建参数 */
@@ -209,6 +225,46 @@ app.post('/merge/scm', async (_req, res) => {
   };
   try {
     const result = await mergeScm({ onStep: send });
+    res.write(`data: ${JSON.stringify({ done: true, success: result.success, error: result.error })}\n\n`);
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    res.write(`data: ${JSON.stringify({ done: true, success: false, error: msg })}\n\n`);
+  }
+  res.end();
+});
+
+/** 按代号合并（配置来自 config/projects），SSE 流式输出；便于扩展新项目合并 */
+app.post('/merge/:code', async (req, res) => {
+  const code = (req.params?.code ?? '').trim();
+  if (!code) {
+    res.status(400).json({ success: false, error: '缺少项目代号' });
+    return;
+  }
+  const entry = getProjectByCode(code);
+  if (!entry) {
+    res.status(404).json({ success: false, error: `未找到项目代号: ${code}` });
+    return;
+  }
+  if (!entry.merge) {
+    res.status(400).json({ success: false, error: `项目 ${entry.codes[0]} 未配置 merge` });
+    return;
+  }
+  res.setHeader('Content-Type', 'text/event-stream');
+  res.setHeader('Cache-Control', 'no-cache');
+  res.setHeader('Connection', 'keep-alive');
+  res.setHeader('X-Accel-Buffering', 'no');
+  const socket = (res as unknown as { socket?: { setNoDelay?: (v: boolean) => void } }).socket;
+  if (socket?.setNoDelay) socket.setNoDelay(true);
+  res.flushHeaders?.();
+  const send = (msg: string) => {
+    res.write(`data: ${JSON.stringify({ step: msg })}\n\n`, 'utf8', () => {
+      if (typeof (res as unknown as { flush?: () => void }).flush === 'function') {
+        (res as unknown as { flush: () => void }).flush();
+      }
+    });
+  };
+  try {
+    const result = await mergeByCode(code, { onStep: send });
     res.write(`data: ${JSON.stringify({ done: true, success: result.success, error: result.error })}\n\n`);
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
