@@ -39,6 +39,9 @@ const DEPLOY_POLL_MAX = 200; // 3 秒一次，约 10 分钟
 const DEPLOY_CONSECUTIVE_FAIL_MAX = 4;
 const DEPLOY_POLL_MIN_BEFORE_TERMINAL = 4;
 
+/** 指令输入历史最多条数，支持 ↑↓ 切换 */
+const INPUT_HISTORY_MAX = 10;
+
 /** 启动部署状态轮询，用于下拉部署与 Agent 触发部署后统一展示进度；taskKey 用于 Logs 中带任务名如【nova】部署成功 */
 function startDeployStatusPolling(
   apiBase: string,
@@ -122,12 +125,15 @@ function startDeployStatusPolling(
 
 export function ChatPanel({ apiBase, addLog }: ChatPanelProps) {
   const [input, setInput] = useState('');
+  const [inputHistory, setInputHistory] = useState<string[]>([]);
   const [loading, setLoading] = useState(false);
   const [deploySelect, setDeploySelect] = useState('');
   const [mergeMenuOpen, setMergeMenuOpen] = useState(false);
   const [messages, setMessages] = useState<Array<{ role: 'user' | 'assistant'; content: string; toolResults?: unknown[] }>>([]);
   const deployPollRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const mergeMenuRef = useRef<HTMLDivElement>(null);
+  const historyIndexRef = useRef(-1);
+  const savedInputRef = useRef('');
 
   useEffect(() => () => {
     if (deployPollRef.current) clearInterval(deployPollRef.current);
@@ -228,6 +234,11 @@ export function ChatPanel({ apiBase, addLog }: ChatPanelProps) {
   const send = async (text: string) => {
     const msg = text.trim();
     if (!msg) return;
+    setInputHistory((prev) => {
+      const next = prev[prev.length - 1] === msg ? prev : [...prev, msg].slice(-INPUT_HISTORY_MAX);
+      return next;
+    });
+    historyIndexRef.current = -1;
     setMessages((prev) => [...prev, { role: 'user', content: msg }]);
     setInput('');
     setLoading(true);
@@ -408,14 +419,44 @@ export function ChatPanel({ apiBase, addLog }: ChatPanelProps) {
       >
         <textarea
           value={input}
-          onChange={(e) => setInput(e.target.value)}
+          onChange={(e) => {
+            setInput(e.target.value);
+            historyIndexRef.current = -1;
+          }}
           onKeyDown={(e) => {
+            if (e.key === 'ArrowUp') {
+              if (inputHistory.length > 0) {
+                e.preventDefault();
+                if (historyIndexRef.current === -1) {
+                  savedInputRef.current = input;
+                  historyIndexRef.current = inputHistory.length - 1;
+                  setInput(inputHistory[inputHistory.length - 1]);
+                } else if (historyIndexRef.current > 0) {
+                  historyIndexRef.current -= 1;
+                  setInput(inputHistory[historyIndexRef.current]);
+                }
+              }
+              return;
+            }
+            if (e.key === 'ArrowDown') {
+              if (historyIndexRef.current !== -1) {
+                e.preventDefault();
+                if (historyIndexRef.current < inputHistory.length - 1) {
+                  historyIndexRef.current += 1;
+                  setInput(inputHistory[historyIndexRef.current]);
+                } else {
+                  historyIndexRef.current = -1;
+                  setInput(savedInputRef.current);
+                }
+              }
+              return;
+            }
             if (e.key === 'Enter' && !e.shiftKey) {
               e.preventDefault();
               if (input.trim()) send(input);
             }
           }}
-          placeholder="输入指令...（Enter 发送，Shift+Enter 换行）"
+          placeholder="输入指令...（Enter 发送，Shift+Enter 换行，↑↓ 切换历史）"
           disabled={loading}
           rows={3}
           style={{
