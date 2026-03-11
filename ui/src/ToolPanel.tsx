@@ -1,11 +1,13 @@
 /* AI 生成 By Peng.Guo */
 const TOOLS = [
+  { name: 'run_workflow', desc: '执行工作流（如：开始工作、执行 start-work）' },
+  { name: 'run_workflow_step', desc: '执行工作流单步（如：启动 cpxy、启动 react18、启动 scm）' },
+  { name: 'deploy_jenkins', desc: '触发 Jenkins 部署（如：部署 nova、部署 base）' },
+  { name: 'merge_repo', desc: '合并代码到测试分支（如：合并 nova、合并 scm）' },
+  { name: 'open_in_ide', desc: '用 IDE 打开项目（如：ws打开base、cursor打开scm）' },
+  { name: 'close_ide_project', desc: '关闭 IDE 项目窗口（如：关闭ws的nova、关闭cursor的base）' },
+  { name: 'open_browser', desc: '打开浏览器 URL（如：打开 Jenkins）' },
   { name: 'run_shell', desc: '执行 shell 命令' },
-  { name: 'open_browser', desc: '打开浏览器 URL' },
-  { name: 'deploy_jenkins', desc: '触发 Jenkins 部署' },
-  { name: 'run_workflow', desc: '执行预定义工作流' },
-  { name: 'open_in_ide', desc: '用 IDE 打开项目（如 ws打开base、cursor打开scm）' },
-  { name: 'close_ide_project', desc: '关闭 IDE 中已打开的项目窗口（如 关闭ws的nova、关闭cursor的base）' },
 ];
 
 export function ToolPanel() {

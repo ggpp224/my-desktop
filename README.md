@@ -90,6 +90,20 @@ npm run pack:mac
 
 敏感信息请使用环境变量，不要硬编码。
 
+## 可用指令（自然语言）
+
+在 Chat 输入自然语言即可，完整说明见 **[docs/可用指令.md](docs/可用指令.md)**。
+
+| 类型 | 示例 |
+|------|------|
+| 工作流 | 开始工作、启动 cpxy、启动 react18、启动 scm |
+| 部署 | 部署 nova、部署 base、部署 cc-web、部署 scm |
+| 合并 | 合并 nova、合并 biz-solution、合并 scm |
+| IDE 打开/关闭 | ws打开base、cursor打开scm、关闭ws的nova、关闭cursor的base |
+| 浏览器 / Shell | 打开 Jenkins、执行 xxx 命令 |
+
+项目代号与 `config/projects` 一致，可扩展。
+
 ## 成功标准示例
 
 - 输入「开始工作」：可执行简化版（如打开 Jenkins、启动 docker 等 1～2 步），完整流程见工作流 `start-work`。

@@ -183,7 +183,7 @@ export function getAllProjects(): ProjectEntry[] {
   return [...PROJECT_ENTRIES];
 }
 
-/** 有 Jenkins 配置的项目（用于部署快捷等） */
+/** 有 Jenkins 配置的项目（用于部署快捷、API 预设） */
 export function getProjectsWithJenkins(): ProjectEntry[] {
   return PROJECT_ENTRIES.filter((e) => e.jenkins);
 }

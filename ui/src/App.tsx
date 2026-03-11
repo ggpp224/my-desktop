@@ -7,23 +7,26 @@ import { LogsPanel } from './LogsPanel';
 
 const DEFAULT_API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:3000';
 
-/** 帮助弹层：可用指令及作用描述（与 ChatPanel 内指令一致） */
-const HELP_COMMANDS: Array<{ command: string; description: string }> = [
-  { command: '开始工作', description: '执行完整开发环境启动流程（cpxy、react18、cc-web、biz-solution、uikit、shared、docker）' },
-  { command: '打开 Jenkins', description: '在浏览器中打开 Jenkins 地址' },
-  { command: '启动 cpxy', description: '单独在终端启动 cpxy' },
-  { command: '启动 react18', description: '单独在终端启动 react18 前端项目' },
-  { command: '启动 cc-web', description: '单独在终端启动 cc-web 主应用' },
-  { command: '启动 biz-solution', description: '单独在终端启动 biz-solution' },
-  { command: '启动 uikit', description: '单独在终端启动 uikit 组件库' },
-  { command: '启动 shared', description: '单独在终端启动 shared 共享库' },
-  { command: '启动 scm', description: '单独在终端启动 saas-cc-web-scm（不参与「开始工作」流程）' },
-  { command: '合并 nova', description: '执行 nova 仓库合并流程（目标分支等）' },
-  { command: '合并 biz-solution', description: '执行 biz-solution 仓库合并流程' },
-  { command: '合并 scm', description: '执行 scm 仓库合并流程' },
-  { command: '部署nova、部署cc-web、部署react18、部署biz-solution、部署biz-guide、部署scm', description: '触发 Jenkins 对应 Job 的构建部署，可下拉选择' },
-  { command: '其他自然语言', description: '由 AI Agent 理解并调用工具执行（如打开 URL、执行 shell 等）' },
+/** 帮助弹层：可用指令及说明（与 docs/可用指令.md 一致） */
+type HelpItem = { section?: string; command: string; description: string };
+const HELP_COMMANDS: HelpItem[] = [
+  { section: '工作流', command: '开始工作', description: '执行完整开发环境启动（cpxy、react18、cc-web、biz-solution、uikit、shared、docker）' },
+  { section: '工作流', command: '打开 Jenkins', description: '在浏览器中打开 Jenkins 地址' },
+  { section: '工作流', command: '启动 cpxy', description: '单独在终端启动 cpxy' },
+  { section: '工作流', command: '启动 react18 / 启动 cc-web / 启动 biz-solution / 启动 uikit / 启动 shared', description: '单独在终端启动对应项目（start-work 单步）' },
+  { section: '工作流', command: '启动 scm', description: '单独在终端启动 scm（可用 standalone 工作流）' },
+  { section: '部署', command: '部署 nova / 部署 cc-web / 部署 react18 / 部署 biz-solution / 部署 biz-guide / 部署 scm / 部署 base / 部署 base18', description: '触发 Jenkins 对应 Job 构建部署，可下拉选择或口语说代号' },
+  { section: '合并', command: '合并 nova / 合并 biz-solution / 合并 scm', description: '执行对应仓库合并到测试分支（SSE 流式输出）' },
+  { section: 'IDE 打开', command: 'ws打开base / cursor打开scm / 用 WebStorm 打开 nova', description: '用指定应用打开项目目录（ws=WebStorm，cursor=Cursor，code=VS Code）；项目代号与 config/projects 一致' },
+  { section: 'IDE 关闭', command: '关闭ws的nova / 关闭cursor的base / 关闭 WebStorm 的 scm', description: '关闭该 IDE 中已打开的项目窗口（WebStorm 走菜单关闭项目，Cursor 走 Cmd+W）' },
+  { section: '其他', command: '打开 https://… / 执行 xxx 命令', description: '由 AI Agent 理解并调用工具（如 open_browser、run_shell）' },
 ];
+
+/** 代号速查：便于查找指令（与 config/projects 一致） */
+const HELP_CODES: { 项目代号: string[]; IDE代号: string[] } = {
+  '项目代号': ['cpxy', 'react18', 'cc-web', 'cc-web2', 'biz-solution', 'biz-guide', 'uikit', 'shared', 'scm', 'scm18', 'nova', 'nova-next', 'base', 'base18', 'ai-import', 'uikit-compat', 'cc-node', 'app-service', 'biz-framework', 'front-entity', 'front-pub', 'evoui', 'chanjet-grid', 'nova-form', 'nova-grid', 'nova-server', 'nova-ui', 'chanjet-nova', 'h5-biz-common', 'cc-web-hkj'],
+  'IDE代号': ['ws / webstorm → WebStorm', 'cursor → Cursor', 'code / vscode → VS Code'],
+};
 
 declare global {
   interface Window {
@@ -153,14 +156,29 @@ export default function App() {
               }}
             >
               <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 10, color: '#e2e8f0' }}>可用指令及说明</div>
-              <ul style={{ margin: 0, paddingLeft: 20, listStyle: 'disc', fontSize: 12, color: '#94a3b8', lineHeight: 1.6 }}>
-                {HELP_COMMANDS.map((item, i) => (
-                  <li key={i} style={{ marginBottom: 8 }}>
-                    <span style={{ color: '#f1f5f9' }}>{item.command}</span>
-                    <span style={{ color: '#64748b', marginLeft: 6 }}>— {item.description}</span>
-                  </li>
-                ))}
+              <ul style={{ margin: 0, paddingLeft: 20, fontSize: 12, color: '#94a3b8', lineHeight: 1.6 }}>
+                {HELP_COMMANDS.flatMap((item, i) => {
+                  const showSection = item.section && (i === 0 || HELP_COMMANDS[i - 1].section !== item.section);
+                  return [
+                    ...(showSection ? [<li key={`${i}-sec`} style={{ listStyle: 'none', marginLeft: -20, marginTop: i === 0 ? 0 : 10, marginBottom: 2, fontWeight: 600, color: '#94a3b8' }}>{item.section}</li>] : []),
+                    <li key={i} style={{ marginBottom: 8, listStyle: 'disc' }}>
+                      <span style={{ color: '#f1f5f9' }}>{item.command}</span>
+                      <span style={{ color: '#64748b', marginLeft: 6 }}>— {item.description}</span>
+                    </li>,
+                  ];
+                })}
               </ul>
+              <div style={{ fontSize: 12, marginTop: 14, paddingTop: 10, borderTop: '1px solid #475569' }}>
+                <div style={{ fontWeight: 600, marginBottom: 6, color: '#e2e8f0' }}>代号速查（便于查找指令）</div>
+                <div style={{ marginBottom: 6 }}>
+                  <span style={{ color: '#94a3b8' }}>项目代号：</span>
+                  <span style={{ color: '#cbd5e1', wordBreak: 'break-all' }}>{HELP_CODES['项目代号'].join('、')}</span>
+                </div>
+                <div>
+                  <span style={{ color: '#94a3b8' }}>IDE 代号：</span>
+                  <span style={{ color: '#cbd5e1' }}>{HELP_CODES['IDE代号'].join('；')}</span>
+                </div>
+              </div>
             </div>
           )}
         </div>

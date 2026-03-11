@@ -1,7 +1,7 @@
 /* AI 生成 By Peng.Guo */
 /**
  * 使用指定 IDE/编辑器（如 WebStorm、Cursor）打开项目目录。
- * 项目代号与路径来自 config/projects，支持：ws打开base、cursor打开scm 等指令。
+ * 项目代号与路径来自 config/projects，支持：ws打开base、cursor打开scm，项目代号与 config/projects 一致。
  */
 import { exec } from 'child_process';
 import { platform } from 'os';

@@ -1,7 +1,7 @@
 /* AI 生成 By Peng.Guo */
 /**
  * 关闭指定 IDE 中已打开的某项目窗口。
- * 支持：关闭ws的nova、关闭cursor的base 等，项目代号与 config/projects 一致。
+ * 支持：关闭ws的nova、关闭cursor的base，项目代号与 config/projects 一致。
  */
 import { execFile } from 'child_process';
 import { platform } from 'os';

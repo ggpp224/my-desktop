@@ -4,7 +4,7 @@ export const toolsSchema = [
     type: 'function' as const,
     function: {
       name: 'run_shell',
-      description: '在本地执行 shell 命令，例如启动 docker、启动项目等',
+      description: '在本地执行 shell 命令，例如启动 docker、启动前端/后端项目',
       parameters: {
         type: 'object',
         required: ['command'],
@@ -40,7 +40,7 @@ export const toolsSchema = [
     type: 'function' as const,
     function: {
       name: 'run_workflow',
-      description: '执行预定义工作流。用户说「开始工作」时传 name=start-work，会依次启动 cpxy、react18、cc-web 等并启动 docker',
+      description: '执行预定义工作流。用户说「开始工作」时传 name=start-work，会依次启动 cpxy、react18、cc-web、biz-solution、uikit、shared 并启动 docker',
       parameters: {
         type: 'object',
         required: ['name'],
@@ -52,7 +52,7 @@ export const toolsSchema = [
     type: 'function' as const,
     function: {
       name: 'run_workflow_step',
-      description: '执行工作流中的单步。当用户说「启动 cpxy」「启动 react18」「启动 scm」等时使用。workflow：start-work 或 standalone；taskKey：cpxy、react18、cc-web、biz-solution、uikit、shared（start-work）或 scm（standalone）',
+      description: '执行工作流中的单步。当用户说「启动 cpxy」「启动 react18」「启动 cc-web」「启动 biz-solution」「启动 uikit」「启动 shared」「启动 scm」时使用。workflow：start-work 或 standalone；taskKey：cpxy、react18、cc-web、biz-solution、uikit、shared（start-work）或 scm（standalone）',
       parameters: {
         type: 'object',
         required: ['workflow', 'taskKey'],
@@ -79,13 +79,13 @@ export const toolsSchema = [
     type: 'function' as const,
     function: {
       name: 'open_in_ide',
-      description: '用指定 IDE/编辑器打开项目目录。用户说「ws打开base」「cursor打开base」「用 WebStorm 打开 scm」等时使用。app：ws 或 webstorm（WebStorm）、cursor（Cursor）、vscode 或 code（VS Code）；code：项目代号，与 config/projects 一致，如 base、nova、scm、cc-web、react18、biz-solution 等',
+      description: '用指定 IDE/编辑器打开项目目录。用户说「ws打开base」「cursor打开base」「用 WebStorm 打开 scm」时使用。app：ws 或 webstorm（WebStorm）、cursor（Cursor）、vscode 或 code（VS Code）；code：项目代号，与 config/projects 一致',
       parameters: {
         type: 'object',
         required: ['app', 'code'],
         properties: {
           app: { type: 'string', description: '应用：ws / webstorm（WebStorm）、cursor（Cursor）、vscode / code（VS Code）' },
-          code: { type: 'string', description: '项目代号：base、nova、scm、cc-web、react18、biz-solution、biz-guide、base18、cc-web2、uikit、shared 等' },
+          code: { type: 'string', description: '项目代号：base、base18、nova、scm、scm18、cc-web、cc-web2、react18、biz-solution、biz-guide、uikit、shared、ai-import、uikit-compat、cc-node、app-service、biz-framework、front-entity、front-pub、evoui、chanjet-grid、nova-form、nova-grid、nova-server、nova-ui、chanjet-nova、h5-biz-common、cc-web-hkj' },
         },
       },
     },
@@ -94,13 +94,13 @@ export const toolsSchema = [
     type: 'function' as const,
     function: {
       name: 'close_ide_project',
-      description: '关闭指定 IDE 中已打开的某项目窗口。用户说「关闭ws的nova」「关闭cursor的base」「关闭 WebStorm 的 scm」等时使用。app：ws/webstorm、cursor、vscode/code；code：项目代号，与 config/projects 一致',
+      description: '关闭指定 IDE 中已打开的某项目窗口。用户说「关闭ws的nova」「关闭cursor的base」「关闭 WebStorm 的 scm」时使用。app：ws/webstorm、cursor、vscode/code；code：项目代号，与 config/projects 一致',
       parameters: {
         type: 'object',
         required: ['app', 'code'],
         properties: {
           app: { type: 'string', description: '应用：ws / webstorm、cursor、vscode / code' },
-          code: { type: 'string', description: '项目代号：base、nova、scm、cc-web、react18、biz-solution 等' },
+          code: { type: 'string', description: '项目代号：base、base18、nova、scm、scm18、cc-web、cc-web2、react18、biz-solution、biz-guide、uikit、shared、ai-import、uikit-compat、cc-node、app-service、biz-framework、front-entity、front-pub、evoui、chanjet-grid、nova-form、nova-grid、nova-server、nova-ui、chanjet-nova、h5-biz-common、cc-web-hkj' },
         },
       },
     },
