@@ -34,13 +34,13 @@ const PROJECT_ENTRIES: ProjectEntry[] = [
   {
     codes: ['biz-guide'],
     path: '/Users/guopeng/disk/cc-web/micro-apps/biz-solution-dev-guide',
-    jenkins: { jobName: 'BUILD-to-HSY_PRETEST_biz-solution-dev-guide', defaultBranch: 'test-260127' },
+    jenkins: { jobName: 'BUILD-to-HSY_PRETEST__biz-solution-dev-guide', defaultBranch: 'test-260127' },
     merge: { targetBranch: 'test-260127', runRelease: false },
   },
   {
     codes: ['biz-solution'],
     path: '/Users/guopeng/disk/cc-web/micro-apps/biz-solution',
-    jenkins: { jobName: 'BUILD-to-HSY_PRETEST_biz-solution', defaultBranch: 'test-260127' },
+    jenkins: { jobName: 'BUILD-to-HSY_PRETEST__biz-solution', defaultBranch: 'test-260127' },
     merge: { targetBranch: 'test-260127', runRelease: false },
   },
   {
@@ -50,12 +50,12 @@ const PROJECT_ENTRIES: ProjectEntry[] = [
   {
     codes: ['react18'],
     path: '/Users/guopeng/disk/cc-web/micro-apps/react18-antd5-mobx6',
-    jenkins: { jobName: 'BUILD-to-HSY_PRETEST_react18-antd5-mobx6', defaultBranch: 'test-260127' },
+    jenkins: { jobName: 'BUILD-to-HSY_PRETEST__react18-antd5-mobx6', defaultBranch: 'test-260127' },
   },
   {
     codes: ['base'],
     path: '/Users/guopeng/disk/cc-web/micro-apps/saas-cc-web-base',
-    jenkins: { jobName: 'BUILD-to-HSY_PRETEST_saas-cc-web-base', defaultBranch: 'test-260127' },
+    jenkins: { jobName: 'BUILD-to-HSY_PRETEST__saas-cc-web-base', defaultBranch: 'test-260127' },
   },
   {
     codes: ['base18'],
@@ -79,7 +79,7 @@ const PROJECT_ENTRIES: ProjectEntry[] = [
   {
     codes: ['cc-web'],
     path: '/Users/guopeng/disk/cc-web/micro-apps/saas-cc-web',
-    jenkins: { jobName: 'BUILD-to-HSY_PRETEST_saas-cc-web', defaultBranch: 'test-260127' },
+    jenkins: { jobName: 'BUILD-to-HSY_PRETEST__saas-cc-web', defaultBranch: 'test-260127' },
   },
   {
     codes: ['cc-web2'],
