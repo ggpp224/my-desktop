@@ -10,10 +10,16 @@ const OLLAMA_OPTIONS = {
   num_predict: 512,
 };
 
+/** Ollama 单次 chat 返回的 token 统计（可能因缓存等未返回） */
+export type OllamaTokenUsage = {
+  prompt_eval_count?: number;
+  eval_count?: number;
+};
+
 export async function chatWithTools(
   messages: ChatMessage[],
   tools: Array<{ type: 'function'; function: { name: string; description: string; parameters: object } }>
-): Promise<{ message: ChatMessage; done: boolean }> {
+): Promise<{ message: ChatMessage; done: boolean; tokenUsage?: OllamaTokenUsage }> {
   const res = await fetch(`${config.ollama.baseUrl}/api/chat`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -26,8 +32,17 @@ export async function chatWithTools(
     }),
   });
   if (!res.ok) throw new Error(`Ollama chat failed: ${res.status}`);
-  const data = (await res.json()) as { message: ChatMessage; done?: boolean };
-  return { message: data.message, done: data.done !== false };
+  const data = (await res.json()) as {
+    message: ChatMessage;
+    done?: boolean;
+    prompt_eval_count?: number;
+    eval_count?: number;
+  };
+  const tokenUsage: OllamaTokenUsage | undefined =
+    data.prompt_eval_count != null || data.eval_count != null
+      ? { prompt_eval_count: data.prompt_eval_count, eval_count: data.eval_count }
+      : undefined;
+  return { message: data.message, done: data.done !== false, tokenUsage };
 }
 
 export async function healthCheck(): Promise<boolean> {

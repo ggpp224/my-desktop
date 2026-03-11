@@ -3,7 +3,7 @@ import { chatWithTools, parseToolCalls, type ChatMessage, type ToolCall } from '
 import { routeAndExecute } from './tool-router.js';
 import { toolsSchema } from './tools-schema.js';
 
-/** 各阶段耗时（毫秒），用于在 Logs 中展示 */
+/** 各阶段耗时（毫秒）与 token 统计，用于在 Logs 中展示 */
 export type AgentTiming = {
   /** 首次模型推理（解析 tool_calls）耗时 ms */
   firstLLMMs?: number;
@@ -11,6 +11,8 @@ export type AgentTiming = {
   tools?: { name: string; ms: number }[];
   /** 二次模型推理（生成最终回复）耗时 ms */
   secondLLMMs?: number;
+  /** 本次指令消耗的 token：输入/输出（来自 Ollama prompt_eval_count / eval_count） */
+  tokenUsage?: { promptTokens?: number; completionTokens?: number };
 };
 
 export type AgentResult = {
@@ -44,8 +46,14 @@ export async function runAgent(userMessage: string): Promise<AgentResult> {
 
   try {
     const t0 = Date.now();
-    const { message } = await chatWithTools(messages, tools);
+    const { message, tokenUsage: rawTokens } = await chatWithTools(messages, tools);
     timing.firstLLMMs = Date.now() - t0;
+    if (rawTokens?.prompt_eval_count != null || rawTokens?.eval_count != null) {
+      timing.tokenUsage = {
+        promptTokens: rawTokens.prompt_eval_count,
+        completionTokens: rawTokens.eval_count,
+      };
+    }
 
     const calls = parseToolCalls(message);
 

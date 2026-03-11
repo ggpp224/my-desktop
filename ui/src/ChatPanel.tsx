@@ -2,7 +2,7 @@
 import { useState, useRef, useEffect } from 'react';
 import type { Dispatch, MutableRefObject, SetStateAction } from 'react';
 
-type AgentTiming = { firstLLMMs?: number; tools?: { name: string; ms: number }[]; secondLLMMs?: number };
+type AgentTiming = { firstLLMMs?: number; tools?: { name: string; ms: number }[]; secondLLMMs?: number; tokenUsage?: { promptTokens?: number; completionTokens?: number } };
 type AgentResult = { success: boolean; text?: string; toolResults?: unknown[]; error?: string; timing?: AgentTiming };
 
 interface ChatPanelProps {
@@ -208,6 +208,12 @@ export function ChatPanel({ apiBase, addLog }: ChatPanelProps) {
       if (Array.isArray(data.timing.tools))
         data.timing.tools.forEach((t) => addLog(`  [耗时] 工具 ${t.name} 执行: ${t.ms} ms`));
       if (data.timing.secondLLMMs != null) addLog(`  [耗时] 模型推理（生成回复）: ${data.timing.secondLLMMs} ms`);
+      const tu = data.timing.tokenUsage;
+      if (tu && (tu.promptTokens != null || tu.completionTokens != null)) {
+        const p = tu.promptTokens ?? 0;
+        const c = tu.completionTokens ?? 0;
+        addLog(`  [Token] 本次指令：输入 ${p}，输出 ${c}，合计 ${p + c}`);
+      }
     }
     const deployResult = data.toolResults?.find(
       (t): t is { tool: string; result?: { queueUrl?: string; jobName?: string; message?: string; jobKey?: string } } =>
