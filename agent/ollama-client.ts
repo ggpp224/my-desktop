@@ -4,6 +4,12 @@ import { config } from '../config/default.js';
 export type ToolCall = { name: string; arguments: Record<string, unknown> };
 export type ChatMessage = { role: string; content?: string; tool_calls?: Array<{ function: { name: string; arguments: string | Record<string, unknown> } }> };
 
+/** Ollama 推理参数：限制上下文与生成长度以加快速度 */
+const OLLAMA_OPTIONS = {
+  num_ctx: 4096,
+  num_predict: 512,
+};
+
 export async function chatWithTools(
   messages: ChatMessage[],
   tools: Array<{ type: 'function'; function: { name: string; description: string; parameters: object } }>
@@ -16,6 +22,7 @@ export async function chatWithTools(
       messages,
       tools,
       stream: false,
+      options: OLLAMA_OPTIONS,
     }),
   });
   if (!res.ok) throw new Error(`Ollama chat failed: ${res.status}`);
