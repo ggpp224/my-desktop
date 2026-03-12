@@ -1,0 +1,62 @@
+---
+description: 项目环境常量定义：.env 中所有变量及用途，用于 config/projects、config/default、换机配置与 AI 上下文。
+globs: "config/**/*.ts,.env.example,.env"
+alwaysApply: false
+---
+
+# 环境常量（.env）
+<!-- AI 生成 By Peng.Guo -->
+
+所有可配置的路径、Jenkins 任务名、分支、固定网址均通过 `.env` 提供，复制 `.env.example` 为 `.env` 后按本机修改。换电脑或换环境时只需改 `.env`，无需改代码。
+
+## 一、固定网址与目录（config/default.ts）
+
+| 变量 | 含义 | 示例/默认 |
+|------|------|-----------|
+| `OLLAMA_BASE` | Ollama 服务地址 | `http://localhost:11434` |
+| `OLLAMA_MODEL` | 默认模型名 | `qwen2.5:3b` |
+| `PORT` | 本机 API 服务端口 | `3000` |
+| `SHELL_CWD` | Shell 工具允许的工作目录 | 空则用 `process.cwd()` |
+| `JENKINS_BASE_URL` | Jenkins 根地址 | `https://jenkins.rd.chanjet.com/` |
+| `JENKINS_USERNAME` | Jenkins Basic 认证用户名 | - |
+| `JENKINS_TOKEN` | Jenkins API Token（Basic 密码） | - |
+
+## 二、Jenkins 默认分支（config/projects.ts → 部署时 BRANCH_NAME）
+
+| 变量 | 用途 |
+|------|------|
+| `JENKINS_DEFAULT_BRANCH_PRETEST` | 预发/测试线项目部署默认分支（如 test-260127） |
+| `JENKINS_DEFAULT_BRANCH_NOVA` | Nova 项目部署默认分支（如 test） |
+
+## 三、合并目标分支（config/projects.ts → merge 接口）
+
+| 变量 | 用途 |
+|------|------|
+| `MERGE_TARGET_BRANCH_PRETEST` | 预发线项目合并目标分支 |
+| `MERGE_TARGET_BRANCH_NOVA` | Nova 项目合并目标分支 |
+
+## 四、Jenkins 任务名（config/projects.ts，与 Jenkins /job/ 后一致）
+
+| 变量 | 对应项目代号 |
+|------|--------------|
+| `JENKINS_JOB_BIZ_GUIDE` | biz-guide |
+| `JENKINS_JOB_BIZ_SOLUTION` | biz-solution |
+| `JENKINS_JOB_REACT18` | react18 |
+| `JENKINS_JOB_BASE` | base |
+| `JENKINS_JOB_BASE18` | base18 |
+| `JENKINS_JOB_SCM` | scm |
+| `JENKINS_JOB_CC_WEB` | cc-web |
+| `JENKINS_JOB_NOVA` | nova / nova-next |
+
+## 五、项目路径（config/projects.ts）
+
+变量名规则：`PROJECT_PATH_<代号>`，代号中的 `-` 写成 `_`（如 biz-guide → `PROJECT_PATH_BIZ_GUIDE`）。
+
+- 每个项目一条，与 `config/projects.ts` 中 `ProjectEntry.codes` 对应。
+- 路径可分散在不同盘/不同目录，无统一前缀要求。
+- 完整列表见 `.env.example` 中 “项目路径” 段。
+
+## 使用约定
+
+- 修改或新增项目时：在 `config/projects.ts` 增加/调整条目，并在 `.env.example` 与本文档中同步变量名与说明。
+- 代码中仅通过 `process.env.XXX` 或 `config/default.ts` 的 `config` 读取，不写死路径/网址/任务名。
