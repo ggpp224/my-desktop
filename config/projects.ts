@@ -2,6 +2,7 @@
 /**
  * 统一项目配置：代号、本地路径、Jenkins 任务、默认分支。
  * 便于扩展与维护，Jenkins 与项目一处维护。
+ * 路径、Jenkins 任务名、默认分支、合并目标分支均来自 .env 常量，见 .cursor/rules/env-constants.mdc。
  */
 
 export interface ProjectJenkins {
@@ -29,131 +30,131 @@ export interface ProjectEntry {
   merge?: ProjectMerge;
 }
 
-/** 项目列表：代号 -> 本地路径 + 可选 Jenkins/merge */
+/** 项目列表：路径与 Jenkins/merge 均来自 .env 常量 */
 const PROJECT_ENTRIES: ProjectEntry[] = [
   {
     codes: ['biz-guide'],
-    path: '/Users/guopeng/disk/cc-web/micro-apps/biz-solution-dev-guide',
-    jenkins: { jobName: 'BUILD-to-HSY_PRETEST__biz-solution-dev-guide', defaultBranch: 'test-260127' },
-    merge: { targetBranch: 'test-260127', runRelease: false },
+    path: process.env.PROJECT_PATH_BIZ_GUIDE!,
+    jenkins: { jobName: process.env.JENKINS_JOB_BIZ_GUIDE!, defaultBranch: process.env.JENKINS_DEFAULT_BRANCH_PRETEST! },
+    merge: { targetBranch: process.env.MERGE_TARGET_BRANCH_PRETEST!, runRelease: false },
   },
   {
     codes: ['biz-solution'],
-    path: '/Users/guopeng/disk/cc-web/micro-apps/biz-solution',
-    jenkins: { jobName: 'BUILD-to-HSY_PRETEST__biz-solution', defaultBranch: 'test-260127' },
-    merge: { targetBranch: 'test-260127', runRelease: false },
+    path: process.env.PROJECT_PATH_BIZ_SOLUTION!,
+    jenkins: { jobName: process.env.JENKINS_JOB_BIZ_SOLUTION!, defaultBranch: process.env.JENKINS_DEFAULT_BRANCH_PRETEST! },
+    merge: { targetBranch: process.env.MERGE_TARGET_BRANCH_PRETEST!, runRelease: false },
   },
   {
     codes: ['h5-biz-common'],
-    path: '/Users/guopeng/disk/cc-web/micro-apps/cc-h5-biz-common',
+    path: process.env.PROJECT_PATH_H5_BIZ_COMMON!,
   },
   {
     codes: ['react18'],
-    path: '/Users/guopeng/disk/cc-web/micro-apps/react18-antd5-mobx6',
-    jenkins: { jobName: 'BUILD-to-HSY_PRETEST__react18-antd5-mobx6', defaultBranch: 'test-260127' },
+    path: process.env.PROJECT_PATH_REACT18!,
+    jenkins: { jobName: process.env.JENKINS_JOB_REACT18!, defaultBranch: process.env.JENKINS_DEFAULT_BRANCH_PRETEST! },
   },
   {
     codes: ['base'],
-    path: '/Users/guopeng/disk/cc-web/micro-apps/saas-cc-web-base',
-    jenkins: { jobName: 'BUILD-to-HSY_PRETEST__saas-cc-web-base', defaultBranch: 'test-260127' },
+    path: process.env.PROJECT_PATH_BASE!,
+    jenkins: { jobName: process.env.JENKINS_JOB_BASE!, defaultBranch: process.env.JENKINS_DEFAULT_BRANCH_PRETEST! },
   },
   {
     codes: ['base18'],
-    path: '/Users/guopeng/disk/cc-web/micro-apps/saas-cc-web-base18',
-    jenkins: { jobName: 'BUILD-to-HSY_PRETEST__saas-cc-web-base18', defaultBranch: 'test-260127' },
+    path: process.env.PROJECT_PATH_BASE18!,
+    jenkins: { jobName: process.env.JENKINS_JOB_BASE18!, defaultBranch: process.env.JENKINS_DEFAULT_BRANCH_PRETEST! },
   },
   {
     codes: ['cc-web-hkj'],
-    path: '/Users/guopeng/disk/cc-web/micro-apps/saas-cc-web-hkj',
+    path: process.env.PROJECT_PATH_CC_WEB_HKJ!,
   },
   {
     codes: ['scm'],
-    path: '/Users/guopeng/disk/cc-web/micro-apps/saas-cc-web-scm',
-    jenkins: { jobName: 'BUILD-to-HSY_PRETEST__saas-cc-web-scm', defaultBranch: 'test-260127' },
-    merge: { targetBranch: 'test-260127', runRelease: false },
+    path: process.env.PROJECT_PATH_SCM!,
+    jenkins: { jobName: process.env.JENKINS_JOB_SCM!, defaultBranch: process.env.JENKINS_DEFAULT_BRANCH_PRETEST! },
+    merge: { targetBranch: process.env.MERGE_TARGET_BRANCH_PRETEST!, runRelease: false },
   },
   {
     codes: ['scm18'],
-    path: '/Users/guopeng/disk/cc-web/micro-apps/saas-cc-web-scm18',
+    path: process.env.PROJECT_PATH_SCM18!,
   },
   {
     codes: ['cc-web'],
-    path: '/Users/guopeng/disk/cc-web/micro-apps/saas-cc-web',
-    jenkins: { jobName: 'BUILD-to-HSY_PRETEST__saas-cc-web', defaultBranch: 'test-260127' },
+    path: process.env.PROJECT_PATH_CC_WEB!,
+    jenkins: { jobName: process.env.JENKINS_JOB_CC_WEB!, defaultBranch: process.env.JENKINS_DEFAULT_BRANCH_PRETEST! },
   },
   {
     codes: ['cc-web2'],
-    path: '/Users/guopeng/disk/cc-web/saas-cc-web-2',
+    path: process.env.PROJECT_PATH_CC_WEB2!,
   },
   {
     codes: ['uikit'],
-    path: '/Users/guopeng/disk/cc-web/packages/nova-next/packages/uikit',
+    path: process.env.PROJECT_PATH_UIKIT!,
   },
   {
     codes: ['shared'],
-    path: '/Users/guopeng/disk/cc-web/packages/nova-next/packages/shared',
+    path: process.env.PROJECT_PATH_SHARED!,
   },
   {
     codes: ['ai-import'],
-    path: '/Users/guopeng/disk/cc-web/packages/nova-next/packages/intelligent-import',
+    path: process.env.PROJECT_PATH_AI_IMPORT!,
   },
   {
     codes: ['uikit-compat'],
-    path: '/Users/guopeng/disk/cc-web/packages/nova-next/packages/uikit-compat',
+    path: process.env.PROJECT_PATH_UIKIT_COMPAT!,
   },
   {
     codes: ['cc-node'],
-    path: '/Users/guopeng/disk/cc-web/saas-cc-node',
+    path: process.env.PROJECT_PATH_CC_NODE!,
   },
   {
     codes: ['app-service'],
-    path: '/Users/guopeng/disk/cc-web/packages/cc-front-biz-app-service',
+    path: process.env.PROJECT_PATH_APP_SERVICE!,
   },
   {
     codes: ['biz-framework'],
-    path: '/Users/guopeng/disk/cc-web/packages/cc-front-biz-framework',
+    path: process.env.PROJECT_PATH_BIZ_FRAMEWORK!,
   },
   {
     codes: ['front-entity'],
-    path: '/Users/guopeng/disk/cc-web/packages/cc-front-entity',
+    path: process.env.PROJECT_PATH_FRONT_ENTITY!,
   },
   {
     codes: ['front-pub'],
-    path: '/Users/guopeng/disk/cc-web/packages/cc-front-pub-declaration',
+    path: process.env.PROJECT_PATH_FRONT_PUB!,
   },
   {
     codes: ['evoui'],
-    path: '/Users/guopeng/disk/cc-web/packages/chanjet-evoui',
+    path: process.env.PROJECT_PATH_EVOUI!,
   },
   {
     codes: ['chanjet-grid'],
-    path: '/Users/guopeng/disk/cc-web/packages/chanjet-grid',
+    path: process.env.PROJECT_PATH_CHANJET_GRID!,
   },
   {
     codes: ['nova-form'],
-    path: '/Users/guopeng/disk/cc-web/packages/chanjet-nova-form',
+    path: process.env.PROJECT_PATH_NOVA_FORM!,
   },
   {
     codes: ['nova-grid'],
-    path: '/Users/guopeng/disk/cc-web/packages/chanjet-nova-grid',
+    path: process.env.PROJECT_PATH_NOVA_GRID!,
   },
   {
     codes: ['nova-server'],
-    path: '/Users/guopeng/disk/cc-web/packages/chanjet-nova-server',
+    path: process.env.PROJECT_PATH_NOVA_SERVER!,
   },
   {
     codes: ['nova-ui'],
-    path: '/Users/guopeng/disk/cc-web/packages/chanjet-nova-ui',
+    path: process.env.PROJECT_PATH_NOVA_UI!,
   },
   {
     codes: ['chanjet-nova'],
-    path: '/Users/guopeng/disk/cc-web/packages/chanjet-nova',
+    path: process.env.PROJECT_PATH_CHANJET_NOVA!,
   },
   {
     codes: ['nova', 'nova-next'],
-    path: '/Users/guopeng/disk/cc-web/packages/nova-next',
-    jenkins: { jobName: 'BUILD-to-CNPM__nova_nova-next', defaultBranch: 'test' },
-    merge: { targetBranch: 'test', runRelease: true },
+    path: process.env.PROJECT_PATH_NOVA!,
+    jenkins: { jobName: process.env.JENKINS_JOB_NOVA!, defaultBranch: process.env.JENKINS_DEFAULT_BRANCH_NOVA! },
+    merge: { targetBranch: process.env.MERGE_TARGET_BRANCH_NOVA!, runRelease: true },
   },
 ];
 
