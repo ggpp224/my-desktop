@@ -1,4 +1,11 @@
 /* AI 生成 By Peng.Guo */
+/** 集测环境（好业财）固定 URL */
+const JICE_ENV_URL =
+  'https://inte-cloud.chanjet.com/cc/uhwr78vnst8x/3axr8fvxct/index.html?autoLogin=true&accountNumber=15911200000#/home?pageId=home&pageParams=%7B%22activeFromTab%22%3Atrue%2C%22traceRoute%22%3Afalse%7D&tabId=home&_k=58boge';
+/** 测试环境（好业财）固定 URL */
+const TEST_ENV_URL =
+  'https://test-cloud.chanjet.com/cc/ue255vjnqnwa/urp6o0wpbf/index.html?autoLogin=true&accountNumber=15911200000#/home?pageId=home&pageParams=%7B%22activeFromTab%22%3Atrue%2C%22jumpPageOptions%22%3A%7B%7D%2C%22traceRoute%22%3Afalse%7D&tabId=home&_k=2zf335';
+
 import { config } from '../config/default.js';
 import { getJenkinsPreset } from '../config/jenkins-presets.js';
 import { getProjectByCode } from '../config/projects.js';
@@ -18,6 +25,10 @@ export async function routeAndExecute(call: ToolCall): Promise<unknown> {
       return shellRun((args?.command as string) ?? '', { requireConfirmation: false });
     case 'open_browser':
       return browserOpen((args?.url as string) ?? '');
+    case 'open_jice_env':
+      return browserOpen(JICE_ENV_URL);
+    case 'open_test_env':
+      return browserOpen(TEST_ENV_URL);
     case 'open_jenkins_job': {
       const jobKey = (args?.job as string) ?? '';
       const base = config.jenkins.baseUrl?.replace(/\/$/, '') ?? '';

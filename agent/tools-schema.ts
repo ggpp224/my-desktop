@@ -27,6 +27,28 @@ export const toolsSchema = [
   {
     type: 'function' as const,
     function: {
+      name: 'open_jice_env',
+      description: '打开集测环境（好业财）。用户说「打开集测环境」时调用，无参数。',
+      parameters: {
+        type: 'object',
+        properties: {},
+      },
+    },
+  },
+  {
+    type: 'function' as const,
+    function: {
+      name: 'open_test_env',
+      description: '打开测试环境（好业财）。用户说「打开测试环境」时调用，无参数。',
+      parameters: {
+        type: 'object',
+        properties: {},
+      },
+    },
+  },
+  {
+    type: 'function' as const,
+    function: {
       name: 'open_jenkins_job',
       description: '打开某项目对应的 Jenkins 任务页面。用户说「打开jenkins nova」「打开 Jenkins 的 cc-web」时使用；job=预定义 key（nova、cc-web、react18、base、base18、biz-solution、biz-guide、scm）',
       parameters: {
