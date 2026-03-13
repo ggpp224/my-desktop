@@ -5,6 +5,8 @@ const JICE_ENV_URL =
 /** 测试环境（好业财）固定 URL */
 const TEST_ENV_URL =
   'https://test-cloud.chanjet.com/cc/ue255vjnqnwa/urp6o0wpbf/index.html?autoLogin=true&accountNumber=15911200000#/home?pageId=home&pageParams=%7B%22activeFromTab%22%3Atrue%2C%22jumpPageOptions%22%3A%7B%7D%2C%22traceRoute%22%3Afalse%7D&tabId=home&_k=2zf335';
+/** json 配置中心（前端配置管理）固定 URL */
+const JSON_CONFIG_CENTER_URL = 'https://inte-feconfig.chanjet.com.cn/#/project/projectList';
 
 import { config } from '../config/default.js';
 import { getJenkinsPreset } from '../config/jenkins-presets.js';
@@ -29,6 +31,8 @@ export async function routeAndExecute(call: ToolCall): Promise<unknown> {
       return browserOpen(JICE_ENV_URL);
     case 'open_test_env':
       return browserOpen(TEST_ENV_URL);
+    case 'open_json_config_center':
+      return browserOpen(JSON_CONFIG_CENTER_URL);
     case 'open_jenkins_job': {
       const jobKey = (args?.job as string) ?? '';
       const base = config.jenkins.baseUrl?.replace(/\/$/, '') ?? '';

@@ -49,6 +49,17 @@ export const toolsSchema = [
   {
     type: 'function' as const,
     function: {
+      name: 'open_json_config_center',
+      description: '打开 json 配置中心（前端配置管理）。用户说「打开json配置中心」时调用，无参数。',
+      parameters: {
+        type: 'object',
+        properties: {},
+      },
+    },
+  },
+  {
+    type: 'function' as const,
+    function: {
       name: 'open_jenkins_job',
       description: '打开某项目对应的 Jenkins 任务页面。用户说「打开jenkins nova」「打开 Jenkins 的 cc-web」时使用；job=预定义 key（nova、cc-web、react18、base、base18、biz-solution、biz-guide、scm）',
       parameters: {
