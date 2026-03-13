@@ -74,9 +74,10 @@ app.get('/projects', (_req, res) => {
   res.json(list);
 });
 
-/** 快捷触发 Jenkins 部署：body.job 为预定义 key（如 nova、base）或完整 job 名称；预定义可带固定构建参数 */
+/** 快捷触发 Jenkins 部署：body.job 为预定义 key（如 nova、base）或完整 job 名称；body.branch 可选，指定则覆盖 BRANCH_NAME */
 app.post('/jenkins/deploy', async (req, res) => {
   const jobKey = (req.body?.job ?? '').trim();
+  const branch = (req.body?.branch ?? '').trim();
   if (!jobKey) {
     res.status(400).json({ success: false, error: '缺少 job' });
     return;
@@ -87,12 +88,15 @@ app.post('/jenkins/deploy', async (req, res) => {
     if (entry?.jenkins) {
       preset = {
         name: entry.jenkins.jobName,
-        parameters: { BRANCH_NAME: entry.jenkins.defaultBranch },
+        parameters: { BRANCH_NAME: branch || entry.jenkins.defaultBranch },
       };
     }
   }
   const jobName = preset ? preset.name : jobKey;
-  const parameters = preset?.parameters;
+  let parameters = preset?.parameters;
+  if (preset && branch) {
+    parameters = { ...preset.parameters, BRANCH_NAME: branch };
+  }
   try {
     const result = await jenkinsDeploy(jobName, parameters);
     res.json({ ...result, jobName });

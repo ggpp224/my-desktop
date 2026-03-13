@@ -12,10 +12,11 @@ type HelpItem = { section?: string; command: string; description: string };
 const HELP_COMMANDS: HelpItem[] = [
   { section: '工作流', command: '开始工作', description: '执行完整开发环境启动（cpxy、react18、cc-web、biz-solution、uikit、shared、docker）' },
   { section: '工作流', command: '打开 Jenkins', description: '在浏览器中打开 Jenkins 地址' },
+  { section: '工作流', command: '打开jenkins nova / 打开 Jenkins 的 cc-web', description: '打开该项目对应的 Jenkins 任务页面（代号与部署一致）' },
   { section: '工作流', command: '启动 cpxy', description: '单独在终端启动 cpxy' },
   { section: '工作流', command: '启动 react18 / 启动 cc-web / 启动 biz-solution / 启动 uikit / 启动 shared', description: '单独在终端启动对应项目（start-work 单步）' },
   { section: '工作流', command: '启动 scm', description: '单独在终端启动 scm（可用 standalone 工作流）' },
-  { section: '部署', command: '部署 nova / 部署 cc-web / 部署 react18 / 部署 biz-solution / 部署 biz-guide / 部署 scm / 部署 base / 部署 base18', description: '触发 Jenkins 对应 Job 构建部署，可下拉选择或口语说代号' },
+  { section: '部署', command: '部署 nova / 部署 cc-web / 部署 react18 / 部署 base / 部署 base18 等', description: '触发 Jenkins 对应 Job 构建部署；可说「部署 nova 分支是 sprint-260326」指定分支' },
   { section: '合并', command: '合并 nova / 合并 biz-solution / 合并 scm', description: '执行对应仓库合并到测试分支（SSE 流式输出）' },
   { section: 'IDE 打开', command: 'ws打开base / cursor打开scm / 用 WebStorm 打开 nova', description: '用指定应用打开项目目录（ws=WebStorm，cursor=Cursor，code=VS Code）；项目代号与 config/projects 一致' },
   { section: 'IDE 关闭', command: '关闭ws的nova / 关闭cursor的base / 关闭 WebStorm 的 scm', description: '关闭该 IDE 中已打开的项目窗口（WebStorm 走菜单关闭项目，Cursor 走 Cmd+W）' },

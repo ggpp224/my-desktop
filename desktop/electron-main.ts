@@ -1,6 +1,6 @@
 /* AI 生成 By Peng.Guo */
 import 'dotenv/config';
-import { app, BrowserWindow } from 'electron';
+import { app, BrowserWindow, Menu } from 'electron';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import { startServer } from '../server/api.js';
@@ -30,12 +30,19 @@ function createWindow(apiPort: number): void {
     console.error('Window load failed:', code, desc);
     mainWindow?.show();
   });
+  // 右键菜单：检查 -> 打开 DevTools
+  mainWindow.webContents.on('context-menu', (_event, _params) => {
+    const ctxMenu = Menu.buildFromTemplate([
+      { label: '检查', click: () => mainWindow?.webContents.openDevTools() },
+    ]);
+    ctxMenu.popup({ window: mainWindow! });
+  });
   if (isDev) {
     mainWindow.loadURL('http://localhost:5173').catch((err) => {
       console.error('loadURL failed:', err);
       mainWindow?.show();
     });
-    mainWindow.webContents.openDevTools();
+    // 默认不自动打开 DevTools，需要时可用快捷键或菜单手动打开
   } else {
     const indexHtml = path.join(app.getAppPath(), 'ui', 'dist', 'index.html');
     mainWindow.loadFile(indexHtml).catch((err) => {

@@ -1,4 +1,5 @@
 /* AI 生成 By Peng.Guo */
+import { config } from '../config/default.js';
 import { getJenkinsPreset } from '../config/jenkins-presets.js';
 import { getProjectByCode } from '../config/projects.js';
 import { run as shellRun } from '../tools/shell-tool.js';
@@ -17,20 +18,31 @@ export async function routeAndExecute(call: ToolCall): Promise<unknown> {
       return shellRun((args?.command as string) ?? '', { requireConfirmation: false });
     case 'open_browser':
       return browserOpen((args?.url as string) ?? '');
+    case 'open_jenkins_job': {
+      const jobKey = (args?.job as string) ?? '';
+      const base = config.jenkins.baseUrl?.replace(/\/$/, '') ?? '';
+      const preset = getJenkinsPreset(jobKey);
+      const jobName = preset?.name;
+      const url = jobName && base ? `${base}/job/${encodeURIComponent(jobName)}/` : base;
+      return browserOpen(url || 'about:blank');
+    }
     case 'deploy_jenkins': {
       const job = (args?.job as string) ?? '';
+      const branch = (args?.branch as string)?.trim();
       let preset = getJenkinsPreset(job);
       if (!preset) {
         const entry = getProjectByCode(job);
         if (entry?.jenkins) {
           preset = {
             name: entry.jenkins.jobName,
-            parameters: { BRANCH_NAME: entry.jenkins.defaultBranch },
+            parameters: { BRANCH_NAME: branch || entry.jenkins.defaultBranch },
           };
         }
       }
       if (preset) {
-        const result = await jenkinsDeploy(preset.name, preset.parameters);
+        const parameters = { ...preset.parameters };
+        if (branch) parameters.BRANCH_NAME = branch;
+        const result = await jenkinsDeploy(preset.name, parameters);
         return { ...result, jobKey: job };
       }
       return jenkinsDeploy(job);

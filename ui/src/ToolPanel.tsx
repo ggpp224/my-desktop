@@ -7,6 +7,7 @@ const TOOLS = [
   { name: 'open_in_ide', desc: '用 IDE 打开项目（如：ws打开base、cursor打开scm）' },
   { name: 'close_ide_project', desc: '关闭 IDE 项目窗口（如：关闭ws的nova、关闭cursor的base）' },
   { name: 'open_browser', desc: '打开浏览器 URL（如：打开 Jenkins）' },
+  { name: 'open_jenkins_job', desc: '打开某项目 Jenkins 任务页（如：打开jenkins nova、打开 Jenkins 的 cc-web）' },
   { name: 'run_shell', desc: '执行 shell 命令' },
 ];
 
