@@ -1,5 +1,6 @@
 /* AI 生成 By Peng.Guo */
 import { useState } from 'react';
+import { appendToolResultsToLogs } from './log-tools';
 
 interface WorkflowPanelProps {
   apiBase: string;
@@ -7,12 +8,16 @@ interface WorkflowPanelProps {
 }
 
 export function WorkflowPanel({ apiBase, addLog }: WorkflowPanelProps) {
-  const [workflows] = useState<string[]>(['start-work']);
+  const [workflows] = useState<Array<{ name: string; label: string }>>([
+    { name: 'start-work', label: '开始工作' },
+    { name: 'upgrade-react18-nova', label: '升级集测 react18 的 nova 版本' },
+    { name: 'upgrade-cc-web-nova', label: '升级集测 cc-web 的 nova 版本' },
+  ]);
   const [running, setRunning] = useState(false);
 
-  const runWorkflow = async (name: string) => {
+  const runWorkflow = async (name: string, label: string) => {
     setRunning(true);
-    addLog(`执行工作流: ${name}`);
+    addLog(`执行工作流: ${label}（${name}）`);
     try {
       const res = await fetch(`${apiBase}/agent/chat`, {
         method: 'POST',
@@ -20,7 +25,8 @@ export function WorkflowPanel({ apiBase, addLog }: WorkflowPanelProps) {
         body: JSON.stringify({ message: `执行工作流 ${name}` }),
       });
       const data = await res.json();
-      addLog(data.success ? `工作流 ${name} 完成` : `失败: ${data.error}`);
+      appendToolResultsToLogs(data.toolResults, addLog);
+      addLog(data.success ? `工作流 ${label} 完成` : `失败: ${data.error}`);
     } catch (e) {
       addLog(`请求失败: ${e}`);
     } finally {
@@ -32,11 +38,11 @@ export function WorkflowPanel({ apiBase, addLog }: WorkflowPanelProps) {
     <section style={{ padding: 16, borderBottom: '1px solid #333' }}>
       <h3 style={{ margin: '0 0 12px', fontSize: 14 }}>Workflow</h3>
       <ul style={{ listStyle: 'none', padding: 0, margin: 0 }}>
-        {workflows.map((name) => (
+        {workflows.map(({ name, label }) => (
           <li key={name} style={{ marginBottom: 8 }}>
             <button
               type="button"
-              onClick={() => runWorkflow(name)}
+              onClick={() => runWorkflow(name, label)}
               disabled={running}
               style={{
                 width: '100%',
@@ -49,7 +55,7 @@ export function WorkflowPanel({ apiBase, addLog }: WorkflowPanelProps) {
                 textAlign: 'left',
               }}
             >
-              {name}
+              {label}
             </button>
           </li>
         ))}

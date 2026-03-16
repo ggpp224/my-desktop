@@ -96,7 +96,7 @@ npm run pack:mac
 
 | 类型 | 示例 |
 |------|------|
-| 工作流 | 开始工作、启动 cpxy、启动 react18、启动 scm |
+| 工作流 | 开始工作、启动 cpxy、启动 react18、启动 scm、升级集测react18的nova版本、升级集测cc-web的nova版本 |
 | 部署 | 部署 nova、部署 base、部署 cc-web、部署 scm |
 | 合并 | 合并 nova、合并 biz-solution、合并 scm |
 | IDE 打开/关闭 | ws打开base、cursor打开scm、关闭ws的nova、关闭cursor的base |

@@ -1,6 +1,7 @@
 /* AI 生成 By Peng.Guo */
 import { useState, useRef, useEffect } from 'react';
 import type { Dispatch, MutableRefObject, SetStateAction } from 'react';
+import { appendToolResultsToLogs } from './log-tools';
 
 type AgentTiming = { firstLLMMs?: number; tools?: { name: string; ms: number }[]; secondLLMMs?: number; tokenUsage?: { promptTokens?: number; completionTokens?: number } };
 type AgentResult = { success: boolean; text?: string; toolResults?: unknown[]; error?: string; timing?: AgentTiming };
@@ -12,6 +13,8 @@ interface ChatPanelProps {
 
 const QUICK_ACTIONS: Array<{ label: string; message: string }> = [
   { label: '开始工作', message: '开始工作' },
+  { label: '升级 react18 nova', message: '升级集测react18的nova版本' },
+  { label: '升级 cc-web nova', message: '升级集测cc-web的nova版本' },
   { label: '打开 Jenkins', message: '打开 Jenkins' },
 ];
 
@@ -251,6 +254,7 @@ export function ChatPanel({ apiBase, addLog }: ChatPanelProps) {
         (t as { tool: string }).tool === 'merge_repo' && (t as { result?: unknown }).result != null
     );
     const mergeSteps = (mergeResult?.result?.steps as string[] | undefined);
+    appendToolResultsToLogs(data.toolResults, addLog);
     if (Array.isArray(mergeSteps) && mergeSteps.length > 0) mergeSteps.forEach((step) => addLog(step));
     if (clearLoading) setLoading(false);
   };
@@ -422,7 +426,7 @@ export function ChatPanel({ apiBase, addLog }: ChatPanelProps) {
       </div>
       <div style={{ flex: 1, overflow: 'auto', marginBottom: 12, background: '#0d0d1a', borderRadius: 8, padding: 12 }}>
         {messages.length === 0 && (
-          <p style={{ color: '#888' }}>[Chat] 输入指令或点击上方快捷按钮，例如：开始工作、启动 cpxy、启动 react18、启动 scm、打开 Jenkins、部署order-service</p>
+          <p style={{ color: '#888' }}>[Chat] 输入指令或点击上方快捷按钮，例如：开始工作、升级集测react18的nova版本、升级集测cc-web的nova版本、启动 react18、打开 Jenkins、部署order-service</p>
         )}
         {messages.map((m, i) => (
           <div key={i} style={{ marginBottom: 12 }}>

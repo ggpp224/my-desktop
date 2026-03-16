@@ -11,6 +11,8 @@ const DEFAULT_API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:3000'
 type HelpItem = { section?: string; command: string; description: string };
 const HELP_COMMANDS: HelpItem[] = [
   { section: '工作流', command: '开始工作', description: '执行完整开发环境启动（cpxy、react18、cc-web、biz-solution、uikit、shared、docker）' },
+  { section: '工作流', command: '升级集测react18的nova版本', description: '执行 react18 的 nova 升级流程：自动切 sprint、改 package.json、提交并 push，再切回原分支' },
+  { section: '工作流', command: '升级集测cc-web的nova版本', description: '执行 cc-web2 的 nova 升级流程：自动切 sprint、改 package.json、提交并 push，再切回原分支' },
   { section: '工作流', command: '打开 Jenkins', description: '在浏览器中打开 Jenkins 地址' },
   { section: '工作流', command: '打开jenkins nova / 打开 Jenkins 的 cc-web', description: '打开该项目对应的 Jenkins 任务页面（代号与部署一致）' },
   { section: '工作流', command: '启动 cpxy', description: '单独在终端启动 cpxy' },

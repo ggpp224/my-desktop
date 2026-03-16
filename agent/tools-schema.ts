@@ -88,11 +88,11 @@ export const toolsSchema = [
     type: 'function' as const,
     function: {
       name: 'run_workflow',
-      description: '执行工作流。「开始工作」→ name=start-work',
+      description: '执行工作流。「开始工作」→ name=start-work；「升级集测react18的nova版本」→ name=upgrade-react18-nova；「升级集测cc-web的nova版本」→ name=upgrade-cc-web-nova',
       parameters: {
         type: 'object',
         required: ['name'],
-        properties: { name: { type: 'string', description: 'start-work 或 standalone' } },
+        properties: { name: { type: 'string', description: 'start-work、standalone、upgrade-react18-nova 或 upgrade-cc-web-nova' } },
       },
     },
   },
