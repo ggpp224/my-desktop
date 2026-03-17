@@ -337,29 +337,6 @@ export function ChatPanel({ apiBase, addLog }: ChatPanelProps) {
 
   return (
     <section style={{ flex: 1, display: 'flex', flexDirection: 'column', minHeight: 0, padding: 16 }}>
-      <div style={{ marginBottom: 8, display: 'flex', justifyContent: 'flex-end' }}>
-        <button
-          type="button"
-          onClick={() => setMessages([])}
-          title="清空对话输出"
-          style={{
-            width: 28,
-            height: 28,
-            padding: 0,
-            border: '1px solid #333',
-            borderRadius: 6,
-            background: '#16213e',
-            color: '#94a3b8',
-            cursor: 'pointer',
-            fontSize: 14,
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-          }}
-        >
-          ⊗
-        </button>
-      </div>
       <div style={{ marginBottom: 12, display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
         {QUICK_ACTIONS.map(({ label, message }) => (
           <button
@@ -465,6 +442,28 @@ export function ChatPanel({ apiBase, addLog }: ChatPanelProps) {
             </div>
           )}
         </div>
+        <button
+          type="button"
+          onClick={() => setMessages([])}
+          title="清屏"
+          style={{
+            marginLeft: 'auto',
+            width: 28,
+            height: 28,
+            padding: 0,
+            border: '1px solid #333',
+            borderRadius: 6,
+            background: '#16213e',
+            color: '#94a3b8',
+            cursor: 'pointer',
+            fontSize: 14,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+          }}
+        >
+          ⊗
+        </button>
       </div>
       <div style={{ flex: 1, overflow: 'auto', marginBottom: 12, background: '#0d0d1a', borderRadius: 8, padding: 12 }}>
         {messages.length === 0 && (
