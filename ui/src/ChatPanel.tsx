@@ -13,8 +13,6 @@ interface ChatPanelProps {
 
 const QUICK_ACTIONS: Array<{ label: string; message: string }> = [
   { label: '开始工作', message: '开始工作' },
-  { label: '升级 react18 nova', message: '升级集测react18的nova版本' },
-  { label: '升级 cc-web nova', message: '升级集测cc-web的nova版本' },
   { label: '打开 Jenkins', message: '打开 Jenkins' },
 ];
 
@@ -36,6 +34,38 @@ const DEPLOY_OPTIONS = [
   { value: 'biz-solution', label: '部署biz-solution' },
   { value: 'biz-guide', label: '部署biz-guide' },
   { value: 'scm', label: '部署scm' },
+];
+
+/** 指令输入框 Tab 补全词条：来源于支持的指令（与 可用指令.md 一致） */
+const COMMAND_HINTS: string[] = [
+  ...QUICK_ACTIONS.map((a) => a.message),
+  '升级集测react18的nova版本',
+  '升级集测cc-web的nova版本',
+  ...MERGE_TASKS.map((t) => t.label),
+  ...DEPLOY_OPTIONS.filter((o) => o.value).map((o) => o.label),
+  '执行工作流 start-work',
+  '执行工作流 standalone',
+  '执行工作流 upgrade-react18-nova',
+  '执行工作流 upgrade-cc-web-nova',
+  '启动 cpxy',
+  '启动 react18',
+  '启动 base18',
+  '启动 cc-web',
+  '启动 biz-solution',
+  '启动 uikit',
+  '启动 shared',
+  '启动 scm',
+  '打开集测环境',
+  '打开测试环境',
+  '打开json配置中心',
+  '打开 Jenkins 的 nova',
+  '打开 Jenkins 的 cc-web',
+  'ws打开base',
+  'cursor打开base',
+  '用 WebStorm 打开 base',
+  '用 Cursor 打开 scm',
+  '关闭ws的nova',
+  '关闭cursor的scm',
 ];
 
 type DeployStatusResult = { status: string; message?: string; buildUrl?: string; buildNumber?: number; buildName?: string; progressPercent?: number };
@@ -137,8 +167,12 @@ export function ChatPanel({ apiBase, addLog }: ChatPanelProps) {
   const [mergeMenuOpen, setMergeMenuOpen] = useState(false);
   const [messages, setMessages] = useState<Array<{ role: 'user' | 'assistant'; content: string; toolResults?: unknown[] }>>([]);
   const [currentModel, setCurrentModel] = useState<string>('');
+  const [completionList, setCompletionList] = useState<string[]>([]);
+  const [completionIndex, setCompletionIndex] = useState(0);
+  const [showCompletion, setShowCompletion] = useState(false);
   const deployPollRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const mergeMenuRef = useRef<HTMLDivElement>(null);
+  const inputWrapRef = useRef<HTMLDivElement>(null);
   const historyIndexRef = useRef(-1);
   const savedInputRef = useRef('');
 
@@ -161,6 +195,14 @@ export function ChatPanel({ apiBase, addLog }: ChatPanelProps) {
     if (mergeMenuOpen) document.addEventListener('click', onOutside);
     return () => document.removeEventListener('click', onOutside);
   }, [mergeMenuOpen]);
+
+  useEffect(() => {
+    const onOutside = (e: MouseEvent) => {
+      if (showCompletion && inputWrapRef.current && !inputWrapRef.current.contains(e.target as Node)) setShowCompletion(false);
+    };
+    if (showCompletion) document.addEventListener('click', onOutside);
+    return () => document.removeEventListener('click', onOutside);
+  }, [showCompletion]);
 
   const executeMerge = async (path: string, doneLabel: string) => {
     if (!apiBase) return;
@@ -445,60 +487,141 @@ export function ChatPanel({ apiBase, addLog }: ChatPanelProps) {
         onSubmit={(e) => { e.preventDefault(); send(input); }}
         style={{ display: 'flex', gap: 8, alignItems: 'flex-end' }}
       >
-        <textarea
-          value={input}
-          onChange={(e) => {
-            setInput(e.target.value);
-            historyIndexRef.current = -1;
-          }}
-          onKeyDown={(e) => {
-            if (e.key === 'ArrowUp') {
-              if (inputHistory.length > 0) {
-                e.preventDefault();
-                if (historyIndexRef.current === -1) {
-                  savedInputRef.current = input;
-                  historyIndexRef.current = inputHistory.length - 1;
-                  setInput(inputHistory[inputHistory.length - 1]);
-                } else if (historyIndexRef.current > 0) {
-                  historyIndexRef.current -= 1;
-                  setInput(inputHistory[historyIndexRef.current]);
+        <div ref={inputWrapRef} style={{ flex: 1, position: 'relative' }}>
+          <textarea
+            value={input}
+            onChange={(e) => {
+              const v = e.target.value;
+              setInput(v);
+              historyIndexRef.current = -1;
+              const trim = v.trim();
+              if (trim.length > 0) {
+                const list = COMMAND_HINTS.filter((h) => h.startsWith(trim));
+                const dedup = Array.from(new Set(list));
+                setCompletionList(dedup.slice(0, 12));
+                setCompletionIndex(0);
+                setShowCompletion(dedup.length > 0);
+              } else {
+                setCompletionList([]);
+                setShowCompletion(false);
+              }
+            }}
+            onKeyDown={(e) => {
+              if (showCompletion && completionList.length > 0) {
+                if (e.key === 'Tab' || (e.key === 'Enter' && !e.shiftKey)) {
+                  e.preventDefault();
+                  setInput(completionList[completionIndex]);
+                  setShowCompletion(false);
+                  return;
+                }
+                if (e.key === 'ArrowDown') {
+                  e.preventDefault();
+                  setCompletionIndex((i) => (i + 1) % completionList.length);
+                  return;
+                }
+                if (e.key === 'ArrowUp') {
+                  e.preventDefault();
+                  setCompletionIndex((i) => (i - 1 + completionList.length) % completionList.length);
+                  return;
+                }
+                if (e.key === 'Escape') {
+                  e.preventDefault();
+                  setShowCompletion(false);
+                  return;
                 }
               }
-              return;
-            }
-            if (e.key === 'ArrowDown') {
-              if (historyIndexRef.current !== -1) {
-                e.preventDefault();
-                if (historyIndexRef.current < inputHistory.length - 1) {
-                  historyIndexRef.current += 1;
-                  setInput(inputHistory[historyIndexRef.current]);
-                } else {
-                  historyIndexRef.current = -1;
-                  setInput(savedInputRef.current);
+              if (e.key === 'ArrowUp') {
+                if (inputHistory.length > 0) {
+                  e.preventDefault();
+                  if (historyIndexRef.current === -1) {
+                    savedInputRef.current = input;
+                    historyIndexRef.current = inputHistory.length - 1;
+                    setInput(inputHistory[inputHistory.length - 1]);
+                  } else if (historyIndexRef.current > 0) {
+                    historyIndexRef.current -= 1;
+                    setInput(inputHistory[historyIndexRef.current]);
+                  }
                 }
+                return;
               }
-              return;
-            }
-            if (e.key === 'Enter' && !e.shiftKey) {
-              e.preventDefault();
-              if (input.trim()) send(input);
-            }
-          }}
-          placeholder="输入指令...（Enter 发送，Shift+Enter 换行，↑↓ 切换历史）"
-          disabled={loading}
-          rows={3}
-          style={{
-            flex: 1,
-            minHeight: 60,
-            padding: 10,
-            background: '#16213e',
-            border: '1px solid #333',
-            borderRadius: 6,
-            color: '#eaeaea',
-            resize: 'vertical',
-            font: 'inherit',
-          }}
-        />
+              if (e.key === 'ArrowDown') {
+                if (historyIndexRef.current !== -1) {
+                  e.preventDefault();
+                  if (historyIndexRef.current < inputHistory.length - 1) {
+                    historyIndexRef.current += 1;
+                    setInput(inputHistory[historyIndexRef.current]);
+                  } else {
+                    historyIndexRef.current = -1;
+                    setInput(savedInputRef.current);
+                  }
+                }
+                return;
+              }
+              if (e.key === 'Enter' && !e.shiftKey) {
+                e.preventDefault();
+                if (input.trim()) send(input);
+              }
+            }}
+            placeholder="输入指令...（Enter 发送，Shift+Enter 换行，↑↓ 切换历史，Tab 补全）"
+            disabled={loading}
+            rows={3}
+            style={{
+              width: '100%',
+              minHeight: 60,
+              padding: 10,
+              background: '#16213e',
+              border: '1px solid #333',
+              borderRadius: 6,
+              color: '#eaeaea',
+              resize: 'vertical',
+              font: 'inherit',
+              boxSizing: 'border-box',
+            }}
+          />
+          {showCompletion && completionList.length > 0 && (
+            <ul
+              style={{
+                position: 'absolute',
+                left: 0,
+                right: 0,
+                bottom: '100%',
+                margin: 0,
+                marginBottom: 4,
+                padding: 4,
+                listStyle: 'none',
+                background: '#1a1a2e',
+                border: '1px solid #333',
+                borderRadius: 6,
+                boxShadow: '0 -4px 12px rgba(0,0,0,0.3)',
+                zIndex: 20,
+                maxHeight: 240,
+                overflow: 'auto',
+              }}
+            >
+              {completionList.map((item, i) => (
+                <li
+                  key={item}
+                  onMouseDown={(e) => {
+                    e.preventDefault();
+                    setInput(item);
+                    setCompletionIndex(i);
+                    setShowCompletion(false);
+                  }}
+                  style={{
+                    padding: '8px 10px',
+                    cursor: 'pointer',
+                    borderRadius: 4,
+                    background: i === completionIndex ? '#0f3460' : 'transparent',
+                    color: '#eaeaea',
+                    fontSize: 13,
+                  }}
+                >
+                  {item}
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
         <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 6 }}>
           {currentModel && (
             <span style={{ fontSize: 12, color: '#64748b' }} title="当前使用的本地模型">
