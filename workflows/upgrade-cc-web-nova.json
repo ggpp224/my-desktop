@@ -3,47 +3,47 @@
     {
       "tool": "shell",
       "cwdCode": "cc-web2",
-      "cmd": "set -eu; mkdir -p /tmp/ai-dev-control-center; ORIG_BRANCH=$(git rev-parse --abbrev-ref HEAD); printf '%s' \"$ORIG_BRANCH\" > /tmp/ai-dev-control-center/cc-web-nova.orig-branch; echo \"[1/9] 已进入 cc-web2 目录: $(pwd)\"; echo \"[1/9] 当前分支: $ORIG_BRANCH\"; git fetch"
+      "cmd": "set -eu; STATE=.ai-dev-nova-upgrade; mkdir -p \"$STATE\"; ORIG_BRANCH=$(git rev-parse --abbrev-ref HEAD); printf '%s' \"$ORIG_BRANCH\" > \"$STATE/orig-branch\"; echo \"[1/9] 已进入 cc-web2 目录: $(pwd)\"; echo \"[1/9] 当前分支: $ORIG_BRANCH\"; git fetch"
     },
     {
       "tool": "shell",
       "cwdCode": "cc-web2",
-      "cmd": "set -eu; SPRINT_NUM=$(git branch -r | sed -nE 's#^[[:space:]]*origin/sprint-([0-9]+)$#\\1#p' | sort -n | awk 'END{print}'); if [ -z \"$SPRINT_NUM\" ]; then echo \"未找到远程 sprint 分支\" >&2; exit 1; fi; SPRINT_BRANCH=\"sprint-$SPRINT_NUM\"; printf '%s' \"$SPRINT_NUM\" > /tmp/ai-dev-control-center/cc-web-nova.sprint-num; printf '%s' \"$SPRINT_BRANCH\" > /tmp/ai-dev-control-center/cc-web-nova.sprint-branch; echo \"[2/9] 目标 sprint 分支: $SPRINT_BRANCH\"; if git show-ref --verify --quiet \"refs/heads/$SPRINT_BRANCH\"; then git checkout \"$SPRINT_BRANCH\"; else git checkout -b \"$SPRINT_BRANCH\" \"origin/$SPRINT_BRANCH\"; fi; echo \"[2/9] 已切换到 $SPRINT_BRANCH\""
+      "cmd": "set -eu; STATE=.ai-dev-nova-upgrade; SPRINT_NUM=$(git branch -r | sed -nE 's#^[[:space:]]*origin/sprint-([0-9]+)$#\\1#p' | sort -n | awk 'END{print}'); if [ -z \"$SPRINT_NUM\" ]; then echo \"未找到远程 sprint 分支\" >&2; exit 1; fi; SPRINT_BRANCH=\"sprint-$SPRINT_NUM\"; printf '%s' \"$SPRINT_NUM\" > \"$STATE/sprint-num\"; printf '%s' \"$SPRINT_BRANCH\" > \"$STATE/sprint-branch\"; echo \"[2/9] 目标 sprint 分支: $SPRINT_BRANCH\"; if git show-ref --verify --quiet \"refs/heads/$SPRINT_BRANCH\"; then git checkout \"$SPRINT_BRANCH\"; else git checkout -b \"$SPRINT_BRANCH\" \"origin/$SPRINT_BRANCH\"; fi; echo \"[2/9] 已切换到 $SPRINT_BRANCH\""
     },
     {
       "tool": "shell",
       "cwdCode": "cc-web2",
-      "cmd": "set -eu; IFS= read -r SPRINT_BRANCH < /tmp/ai-dev-control-center/cc-web-nova.sprint-branch; echo \"[3/9] 拉取 $SPRINT_BRANCH 最新代码\"; git pull --ff-only origin \"$SPRINT_BRANCH\""
+      "cmd": "set -eu; STATE=.ai-dev-nova-upgrade; SPRINT_BRANCH=$(cat \"$STATE/sprint-branch\"); echo \"[3/9] 拉取 $SPRINT_BRANCH 最新代码\"; set +e; PULL_OUT=$(git pull --ff-only origin \"$SPRINT_BRANCH\" 2>&1); PULL_CODE=$?; set -e; echo \"$PULL_OUT\"; if [ $PULL_CODE -ne 0 ]; then echo \"[3/9] git pull 失败 exit=$PULL_CODE\" >&2; exit 1; fi; echo \"[3/9] 拉取完成\""
     },
     {
       "tool": "shell",
       "cwdCode": "cc-web2",
-      "cmd": "set -eu; IFS= read -r SPRINT_NUM < /tmp/ai-dev-control-center/cc-web-nova.sprint-num; VERSION=$(npm view @chanjet/nova-uikit versions --json | SPRINT_NUM=\"$SPRINT_NUM\" node -e 'let raw=\"\"; process.stdin.on(\"data\", (chunk) => raw += chunk); process.stdin.on(\"end\", () => { const parsed = JSON.parse(raw); const versions = Array.isArray(parsed) ? parsed : [parsed]; const sprint = process.env.SPRINT_NUM; const matched = versions.filter((v) => new RegExp(`^1\\\\.${sprint}\\\\.\\\\d+$`).test(v)).sort((a, b) => Number(a.split(\".\")[2]) - Number(b.split(\".\")[2])); if (!matched.length) { console.error(`未找到 1.${sprint}.y 格式的 @chanjet/nova-uikit 版本`); process.exit(1); } process.stdout.write(matched[matched.length - 1]); });'); printf '%s' \"$VERSION\" > /tmp/ai-dev-control-center/cc-web-nova.version; echo \"[4/9] 命中的 nova 版本: $VERSION\""
+      "cmd": "set -eu; STATE=.ai-dev-nova-upgrade; SPRINT_NUM=$(cat \"$STATE/sprint-num\"); VERSION=$(npm view @chanjet/nova-uikit versions --json 2>/dev/null | SPRINT_NUM=\"$SPRINT_NUM\" node -e 'let raw=\"\"; process.stdin.on(\"data\", (chunk) => raw += chunk); process.stdin.on(\"end\", () => { try { const parsed = JSON.parse(raw); const versions = Array.isArray(parsed) ? parsed : [parsed]; const sprint = process.env.SPRINT_NUM; const matched = versions.filter((v) => new RegExp(\"^1\\\\.\" + sprint + \"\\\\.\\\\d+$\").test(v)).sort((a, b) => Number(a.split(\".\")[2]) - Number(b.split(\".\")[2])); if (!matched.length) { console.error(\"未找到 1.\" + sprint + \".y 格式的 @chanjet/nova-uikit 版本\"); process.exit(1); } process.stdout.write(matched[matched.length - 1]); } catch (e) { console.error(e.message); process.exit(1); } });'); printf '%s' \"$VERSION\" > \"$STATE/version\"; echo \"[4/9] 命中的 nova 版本: $VERSION\""
     },
     {
       "tool": "shell",
       "cwdCode": "cc-web2",
-      "cmd": "set -eu; IFS= read -r VERSION < /tmp/ai-dev-control-center/cc-web-nova.version; VERSION=\"$VERSION\" node -e 'const fs = require(\"fs\"); const pkgPath = \"package.json\"; const pkg = JSON.parse(fs.readFileSync(pkgPath, \"utf8\")); const sections = [\"dependencies\", \"devDependencies\", \"peerDependencies\", \"optionalDependencies\", \"resolutions\"]; const targets = [\"@chanjet/nova-cross-shared\", \"@chanjet/nova-shared\", \"@chanjet/nova-uikit-compat\"]; const updated = []; const missing = []; for (const name of targets) { let found = false; for (const section of sections) { if (pkg[section] && Object.prototype.hasOwnProperty.call(pkg[section], name)) { pkg[section][name] = process.env.VERSION; found = true; updated.push(`${section}:${name}`); } } if (!found) missing.push(name); } if (missing.length) { console.error(`package.json 缺少依赖: ${missing.join(\", \")}`); process.exit(1); } fs.writeFileSync(pkgPath, `${JSON.stringify(pkg, null, 2)}\\n`); console.log(`已更新依赖: ${updated.join(\", \")}`);'; echo \"[5/9] package.json 已更新为 $VERSION\""
+      "cmd": "set -eu; STATE=.ai-dev-nova-upgrade; VERSION=$(cat \"$STATE/version\"); VERSION=\"$VERSION\" node -e 'const fs = require(\"fs\"); const pkgPath = \"package.json\"; const pkg = JSON.parse(fs.readFileSync(pkgPath, \"utf8\")); const sections = [\"dependencies\", \"devDependencies\", \"peerDependencies\", \"optionalDependencies\", \"resolutions\"]; const targets = [\"@chanjet/nova-cross-shared\", \"@chanjet/nova-shared\", \"@chanjet/nova-uikit-compat\"]; const updated = []; const missing = []; for (const name of targets) { let found = false; for (const section of sections) { if (pkg[section] && Object.prototype.hasOwnProperty.call(pkg[section], name)) { pkg[section][name] = process.env.VERSION; found = true; updated.push(section + \":\" + name); } } if (!found) missing.push(name); } if (missing.length) { console.error(\"package.json 缺少依赖: \" + missing.join(\", \")); process.exit(1); } fs.writeFileSync(pkgPath, JSON.stringify(pkg, null, 2) + \"\\n\"); console.log(\"已更新依赖: \" + updated.join(\", \"));'; echo \"[5/9] package.json 已更新为 $VERSION\""
     },
     {
       "tool": "shell",
       "cwdCode": "cc-web2",
-      "cmd": "set -eu; IFS= read -r VERSION < /tmp/ai-dev-control-center/cc-web-nova.version; echo \"[6/9] 当前变更:\"; git status --short package.json; git add package.json; if git diff --cached --quiet; then echo \"package.json 无需更新，未生成提交\" >&2; exit 1; fi; git commit -m \"修改nova版本号为$VERSION\"; echo \"[6/9] 提交完成: 修改nova版本号为$VERSION\""
+      "cmd": "set -eu; STATE=.ai-dev-nova-upgrade; VERSION=$(cat \"$STATE/version\"); echo \"[6/9] 当前变更:\"; git status --short package.json; git add package.json; if git diff --cached --quiet; then echo \"package.json 无需更新，未生成提交\" >&2; exit 1; fi; git commit -m \"ZJYF-121254:修改nova版本号为$VERSION\"; echo \"[6/9] 提交完成: ZJYF-121254:修改nova版本号为$VERSION\""
     },
     {
       "tool": "shell",
       "cwdCode": "cc-web2",
-      "cmd": "set -eu; IFS= read -r SPRINT_BRANCH < /tmp/ai-dev-control-center/cc-web-nova.sprint-branch; echo \"[7/9] 推送分支: $SPRINT_BRANCH\"; git push -u origin \"$SPRINT_BRANCH\""
+      "cmd": "set -eu; STATE=.ai-dev-nova-upgrade; SPRINT_BRANCH=$(cat \"$STATE/sprint-branch\"); echo \"[7/9] 推送分支: $SPRINT_BRANCH\"; git push -u origin \"$SPRINT_BRANCH\""
     },
     {
       "tool": "shell",
       "cwdCode": "cc-web2",
-      "cmd": "set -eu; IFS= read -r ORIG_BRANCH < /tmp/ai-dev-control-center/cc-web-nova.orig-branch; echo \"[8/9] 切回原分支: $ORIG_BRANCH\"; git checkout \"$ORIG_BRANCH\""
+      "cmd": "set -eu; STATE=.ai-dev-nova-upgrade; ORIG_BRANCH=$(cat \"$STATE/orig-branch\"); echo \"[8/9] 切回原分支: $ORIG_BRANCH\"; git checkout \"$ORIG_BRANCH\""
     },
     {
       "tool": "shell",
       "cwdCode": "cc-web2",
-      "cmd": "set -eu; IFS= read -r VERSION < /tmp/ai-dev-control-center/cc-web-nova.version; IFS= read -r SPRINT_BRANCH < /tmp/ai-dev-control-center/cc-web-nova.sprint-branch; IFS= read -r ORIG_BRANCH < /tmp/ai-dev-control-center/cc-web-nova.orig-branch; echo \"[9/9] 全部步骤执行成功\"; echo \"[9/9] nova 版本: $VERSION\"; echo \"[9/9] sprint 分支: $SPRINT_BRANCH\"; echo \"[9/9] 已切回原分支: $ORIG_BRANCH\"; rm -f /tmp/ai-dev-control-center/cc-web-nova.orig-branch /tmp/ai-dev-control-center/cc-web-nova.sprint-num /tmp/ai-dev-control-center/cc-web-nova.sprint-branch /tmp/ai-dev-control-center/cc-web-nova.version"
+      "cmd": "set -eu; STATE=.ai-dev-nova-upgrade; VERSION=$(cat \"$STATE/version\"); SPRINT_BRANCH=$(cat \"$STATE/sprint-branch\"); ORIG_BRANCH=$(cat \"$STATE/orig-branch\"); echo \"[9/9] 全部步骤执行成功\"; echo \"[9/9] nova 版本: $VERSION\"; echo \"[9/9] sprint 分支: $SPRINT_BRANCH\"; echo \"[9/9] 已切回原分支: $ORIG_BRANCH\"; rm -rf \"$STATE\""
     }
   ]
 }
