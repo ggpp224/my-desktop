@@ -161,6 +161,10 @@ export async function deploy(
   jobName: string,
   parameters?: Record<string, string>
 ): Promise<DeployResult> {
+  const normalizedJob = (jobName ?? '').trim();
+  if (!normalizedJob) {
+    return { success: false, message: 'Jenkins jobName 为空：请检查 config/projects.ts 对应项目的 jenkins.jobName 或 .env 中的 JENKINS_JOB_* 配置' };
+  }
   const base = config.jenkins.baseUrl?.replace(/\/$/, '');
   if (!base) {
     return { success: false, message: 'Jenkins 未配置：请设置 JENKINS_BASE_URL' };
@@ -173,10 +177,10 @@ export async function deploy(
   let url: string;
   let body: string | undefined;
   if (parameters && Object.keys(parameters).length > 0) {
-    url = `${base}/job/${encodeURIComponent(jobName)}/buildWithParameters?${new URLSearchParams(parameters).toString()}`;
+    url = `${base}/job/${encodeURIComponent(normalizedJob)}/buildWithParameters?${new URLSearchParams(parameters).toString()}`;
     body = undefined;
   } else {
-    url = `${base}/job/${encodeURIComponent(jobName)}/build`;
+    url = `${base}/job/${encodeURIComponent(normalizedJob)}/build`;
     headers['Content-Type'] = 'application/x-www-form-urlencoded';
     body = new URLSearchParams({ json: JSON.stringify({ parameter: [] }) }).toString();
   }
@@ -195,6 +199,6 @@ export async function deploy(
   const queueUrl = location
     ? (location.startsWith('http') ? location : new URL(location, base + '/').href)
     : undefined;
-  const message = queueUrl ? '已触发，构建中…' : `已触发 Jenkins Job: ${jobName}`;
+  const message = queueUrl ? '已触发，构建中…' : `已触发 Jenkins Job: ${normalizedJob}`;
   return { success: true, message, queueUrl };
 }

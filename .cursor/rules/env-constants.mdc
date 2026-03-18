@@ -46,6 +46,7 @@ alwaysApply: false
 | `JENKINS_JOB_BASE18` | base18 |
 | `JENKINS_JOB_SCM` | scm |
 | `JENKINS_JOB_CC_WEB` | cc-web |
+| `JENKINS_JOB_CC_NODE` | cc-node |
 | `JENKINS_JOB_NOVA` | nova / nova-next |
 
 ## 五、项目路径（config/projects.ts）
