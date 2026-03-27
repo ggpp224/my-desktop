@@ -4,15 +4,16 @@
  */
 import { getProjectsWithJenkins } from './projects.js';
 
-export type JenkinsPreset = { name: string; parameters?: Record<string, string> };
+export type JenkinsPreset = { name: string; branchParam: string; parameters?: Record<string, string> };
 
 /** 预定义 Jenkins Job：key 为代号（任一代号均可），value 为完整 Job 名与构建参数 */
 export function getJenkinsPresets(): Record<string, JenkinsPreset> {
   const presets: Record<string, JenkinsPreset> = {};
   for (const entry of getProjectsWithJenkins()) {
     if (!entry.jenkins) continue;
-    const { jobName, defaultBranch } = entry.jenkins;
-    const value: JenkinsPreset = { name: jobName, parameters: { BRANCH_NAME: defaultBranch } };
+    const { jobName, defaultBranch, branchParam } = entry.jenkins;
+    const actualBranchParam = (branchParam || 'BRANCH_NAME').trim() || 'BRANCH_NAME';
+    const value: JenkinsPreset = { name: jobName, branchParam: actualBranchParam, parameters: { [actualBranchParam]: defaultBranch } };
     for (const code of entry.codes) {
       const key = code.trim();
       if (key && !presets[key]) presets[key] = value;

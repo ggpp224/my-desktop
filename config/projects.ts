@@ -10,6 +10,8 @@ export interface ProjectJenkins {
   jobName: string;
   /** 部署的默认分支（后续也可指定分支） */
   defaultBranch: string;
+  /** Jenkins 分支参数名，默认 BRANCH_NAME；部分任务使用 BRANCH */
+  branchParam?: string;
 }
 
 export interface ProjectMerge {
@@ -107,7 +109,8 @@ const PROJECT_ENTRIES: ProjectEntry[] = [
     path: process.env.PROJECT_PATH_CC_NODE!,
     jenkins: {
       jobName: process.env.JENKINS_JOB_CC_NODE || 'BUILD-to-HSY_PRETEST__saas-cc-node',
-      defaultBranch: process.env.JENKINS_DEFAULT_BRANCH_PRETEST || 'test-260127',
+      defaultBranch: 'test-260127',
+      branchParam: 'BRANCH',
     },
   },
   {

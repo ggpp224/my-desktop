@@ -36,38 +36,6 @@ const DEPLOY_OPTIONS = [
   { value: 'scm', label: '部署scm' },
 ];
 
-/** 指令输入框 Tab 补全词条：来源于支持的指令（与 可用指令.md 一致） */
-const COMMAND_HINTS: string[] = [
-  ...QUICK_ACTIONS.map((a) => a.message),
-  '升级集测react18的nova版本',
-  '升级集测cc-web的nova版本',
-  ...MERGE_TASKS.map((t) => t.label),
-  ...DEPLOY_OPTIONS.filter((o) => o.value).map((o) => o.label),
-  '执行工作流 start-work',
-  '执行工作流 standalone',
-  '执行工作流 upgrade-react18-nova',
-  '执行工作流 upgrade-cc-web-nova',
-  '启动 cpxy',
-  '启动 react18',
-  '启动 base18',
-  '启动 cc-web',
-  '启动 biz-solution',
-  '启动 uikit',
-  '启动 shared',
-  '启动 scm',
-  '打开集测环境',
-  '打开测试环境',
-  '打开json配置中心',
-  '打开 Jenkins 的 nova',
-  '打开 Jenkins 的 cc-web',
-  'ws打开base',
-  'cursor打开base',
-  '用 WebStorm 打开 base',
-  '用 Cursor 打开 scm',
-  '关闭ws的nova',
-  '关闭cursor的scm',
-];
-
 type DeployStatusResult = { status: string; message?: string; buildUrl?: string; buildNumber?: number; buildName?: string; progressPercent?: number };
 
 const DEPLOY_POLL_INTERVAL_MS = 10000;
@@ -77,6 +45,68 @@ const DEPLOY_POLL_MIN_BEFORE_TERMINAL = 4;
 
 /** 指令输入历史最多条数，支持 ↑↓ 切换 */
 const INPUT_HISTORY_MAX = 10;
+
+type ProjectInfo = {
+  codes: string[];
+  jenkins?: { jobName: string; defaultBranch: string };
+  merge?: { targetBranch: string; runRelease: boolean };
+};
+
+function buildCommandHints(projects: ProjectInfo[], inputHistory: string[]): string[] {
+  const workflowHints = [
+    '执行工作流 start-work',
+    '执行工作流 standalone',
+    '执行工作流 upgrade-react18-nova',
+    '执行工作流 upgrade-cc-web-nova',
+  ];
+  const fixedHints = [
+    ...QUICK_ACTIONS.map((a) => a.message),
+    '升级集测react18的nova版本',
+    '升级集测cc-web的nova版本',
+    ...MERGE_TASKS.map((t) => t.label),
+    ...DEPLOY_OPTIONS.filter((o) => o.value).map((o) => o.label),
+    '打开集测环境',
+    '打开测试环境',
+    '打开json配置中心',
+    '打开 Jenkins',
+  ];
+  const allCodes = Array.from(new Set(projects.flatMap((p) => p.codes)));
+  const jenkinsCodes = Array.from(new Set(projects.filter((p) => p.jenkins).flatMap((p) => p.codes)));
+  const mergeCodes = Array.from(new Set(projects.filter((p) => p.merge).flatMap((p) => p.codes)));
+  const startHints = allCodes.map((code) => `启动 ${code}`);
+  const deployHints = jenkinsCodes.flatMap((code) => [`部署 ${code}`, `部署 ${code} 分支是 test`]);
+  const jenkinsOpenHints = jenkinsCodes.flatMap((code) => [`打开 Jenkins 的 ${code}`, `打开jenkins ${code}`]);
+  const openIdeHints = allCodes.flatMap((code) => [
+    `ws打开${code}`,
+    `cursor打开${code}`,
+    `code打开${code}`,
+    `用 WebStorm 打开 ${code}`,
+    `用 Cursor 打开 ${code}`,
+    `用 VS Code 打开 ${code}`,
+  ]);
+  const closeIdeHints = allCodes.flatMap((code) => [
+    `关闭ws的${code}`,
+    `关闭cursor的${code}`,
+    `关闭code的${code}`,
+    `关闭 WebStorm 的 ${code}`,
+    `关闭 Cursor 的 ${code}`,
+    `关闭 VS Code 的 ${code}`,
+  ]);
+  const mergeHints = mergeCodes.map((code) => `合并 ${code}`);
+  return Array.from(
+    new Set([
+      ...fixedHints,
+      ...workflowHints,
+      ...startHints,
+      ...deployHints,
+      ...jenkinsOpenHints,
+      ...openIdeHints,
+      ...closeIdeHints,
+      ...mergeHints,
+      ...inputHistory,
+    ])
+  );
+}
 
 /** 启动部署状态轮询，用于下拉部署与 Agent 触发部署后统一展示进度；taskKey 用于 Logs 中带任务名如【nova】部署成功 */
 function startDeployStatusPolling(
@@ -170,6 +200,7 @@ export function ChatPanel({ apiBase, addLog }: ChatPanelProps) {
   const [completionList, setCompletionList] = useState<string[]>([]);
   const [completionIndex, setCompletionIndex] = useState(0);
   const [showCompletion, setShowCompletion] = useState(false);
+  const [projects, setProjects] = useState<ProjectInfo[]>([]);
   const deployPollRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const mergeMenuRef = useRef<HTMLDivElement>(null);
   const inputWrapRef = useRef<HTMLDivElement>(null);
@@ -187,6 +218,38 @@ export function ChatPanel({ apiBase, addLog }: ChatPanelProps) {
       .then((data: { model?: string } | null) => data?.model != null && setCurrentModel(data.model))
       .catch(() => {});
   }, [apiBase]);
+
+  useEffect(() => {
+    if (!apiBase) return;
+    fetch(`${apiBase}/projects`)
+      .then((r) => (r.ok ? r.json() : []))
+      .then((data: ProjectInfo[]) => setProjects(Array.isArray(data) ? data : []))
+      .catch(() => {});
+  }, [apiBase]);
+
+  useEffect(() => {
+    if (!apiBase) return;
+    fetch(`${apiBase}/agent/history`)
+      .then((r) => (r.ok ? r.json() : null))
+      .then((data: { items?: string[] } | null) => {
+        if (!data || !Array.isArray(data.items)) return;
+        const next = data.items
+          .map((item) => item.trim())
+          .filter(Boolean)
+          .slice(-INPUT_HISTORY_MAX);
+        setInputHistory(next);
+      })
+      .catch(() => {});
+  }, [apiBase]);
+
+  const persistInputHistory = (history: string[]) => {
+    if (!apiBase) return;
+    fetch(`${apiBase}/agent/history`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ items: history }),
+    }).catch(() => {});
+  };
 
   useEffect(() => {
     const onOutside = (e: MouseEvent) => {
@@ -306,6 +369,7 @@ export function ChatPanel({ apiBase, addLog }: ChatPanelProps) {
     if (!msg) return;
     setInputHistory((prev) => {
       const next = prev[prev.length - 1] === msg ? prev : [...prev, msg].slice(-INPUT_HISTORY_MAX);
+      if (next !== prev) persistInputHistory(next);
       return next;
     });
     historyIndexRef.current = -1;
@@ -495,7 +559,8 @@ export function ChatPanel({ apiBase, addLog }: ChatPanelProps) {
               historyIndexRef.current = -1;
               const trim = v.trim();
               if (trim.length > 0) {
-                const list = COMMAND_HINTS.filter((h) => h.startsWith(trim));
+                const dynamicHints = buildCommandHints(projects, inputHistory);
+                const list = dynamicHints.filter((h) => h.startsWith(trim));
                 const dedup = Array.from(new Set(list));
                 setCompletionList(dedup.slice(0, 12));
                 setCompletionIndex(0);

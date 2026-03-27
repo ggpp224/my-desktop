@@ -61,7 +61,7 @@ export const toolsSchema = [
     type: 'function' as const,
     function: {
       name: 'open_jenkins_job',
-      description: '打开某项目对应的 Jenkins 任务页面。用户说「打开jenkins nova」「打开 Jenkins 的 cc-web」时使用；job=预定义 key（nova、cc-web、react18、base、base18、biz-solution、biz-guide、scm）',
+      description: '打开某项目对应的 Jenkins 任务页面。用户说「打开jenkins nova」「打开 Jenkins 的 cc-web/cc-node」时使用；job=预定义 key（nova、cc-web、cc-node、react18、base、base18、biz-solution、biz-guide、scm）',
       parameters: {
         type: 'object',
         required: ['job'],
@@ -73,7 +73,7 @@ export const toolsSchema = [
     type: 'function' as const,
     function: {
       name: 'deploy_jenkins',
-      description: '部署/构建某项目。用户说「部署nova」「部署nova 分支是sprint-260326」时：job=预定义 key（nova、cc-web、react18 等）或完整 Job 名；可选 branch=指定分支（如 sprint-260326），不传则用该项目默认分支',
+      description: '部署/构建某项目。用户说「部署nova/cc-node」「部署nova 分支是sprint-260326」时：job=预定义 key（nova、cc-web、cc-node、react18 等）或完整 Job 名；可选 branch=指定分支（如 sprint-260326），不传则用该项目默认分支',
       parameters: {
         type: 'object',
         required: ['job'],

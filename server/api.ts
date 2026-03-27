@@ -11,10 +11,44 @@ import { open as openBrowser } from '../tools/browser-tool.js';
 import { getAllProjects, getProjectByCode } from '../config/projects.js';
 import { mergeByCode, mergeNova, mergeBizSolution, mergeScm } from '../tools/merge-tool.js';
 import { runWorkflowStep } from '../tools/workflow-tool.js';
+import { promises as fs } from 'fs';
+import path from 'path';
 
 const app = express();
 app.use(cors());
 app.use(express.json());
+
+const COMMAND_HISTORY_MAX = 30;
+const COMMAND_HISTORY_FILE = path.resolve(process.cwd(), 'runtime', 'command-history.json');
+
+type CommandHistoryStore = { items: string[] };
+
+async function readCommandHistory(): Promise<string[]> {
+  try {
+    const raw = await fs.readFile(COMMAND_HISTORY_FILE, 'utf-8');
+    const parsed = JSON.parse(raw) as CommandHistoryStore;
+    if (!Array.isArray(parsed.items)) return [];
+    return parsed.items
+      .map((item) => (typeof item === 'string' ? item.trim() : ''))
+      .filter(Boolean)
+      .slice(-COMMAND_HISTORY_MAX);
+  } catch {
+    return [];
+  }
+}
+
+async function writeCommandHistory(items: string[]): Promise<void> {
+  const normalized = items
+    .map((item) => item.trim())
+    .filter(Boolean)
+    .slice(-COMMAND_HISTORY_MAX);
+  await fs.mkdir(path.dirname(COMMAND_HISTORY_FILE), { recursive: true });
+  await fs.writeFile(
+    COMMAND_HISTORY_FILE,
+    JSON.stringify({ items: normalized }, null, 2),
+    'utf-8'
+  );
+}
 
 app.get('/', (_req, res) => res.status(200).json({ ok: true, service: 'ai-dev-control-center' }));
 
@@ -26,6 +60,32 @@ app.get('/health', async (_req, res) => {
 /** 返回当前使用的本地模型名，供前端展示 */
 app.get('/agent/model', (_req, res) => {
   res.json({ model: config.ollama.model });
+});
+
+/** 最近指令历史：从本地文件读取，避免重启丢失 */
+app.get('/agent/history', async (_req, res) => {
+  const items = await readCommandHistory();
+  res.json({ items });
+});
+
+/** 最近指令历史：写入本地文件，供下次启动恢复 */
+app.post('/agent/history', async (req, res) => {
+  const items = Array.isArray(req.body?.items) ? req.body.items : null;
+  if (!items) {
+    res.status(400).json({ success: false, error: '缺少 items' });
+    return;
+  }
+  const normalized = items
+    .map((item: unknown) => (typeof item === 'string' ? item.trim() : ''))
+    .filter(Boolean)
+    .slice(-COMMAND_HISTORY_MAX);
+  try {
+    await writeCommandHistory(normalized);
+    res.json({ success: true, items: normalized });
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    res.status(500).json({ success: false, error: msg });
+  }
 });
 
 app.post('/agent/chat', async (req, res) => {
@@ -74,7 +134,7 @@ app.get('/projects', (_req, res) => {
   res.json(list);
 });
 
-/** 快捷触发 Jenkins 部署：body.job 为预定义 key（如 nova、base）或完整 job 名称；body.branch 可选，指定则覆盖 BRANCH_NAME */
+/** 快捷触发 Jenkins 部署：body.job 为预定义 key（如 nova、base）或完整 job 名称；body.branch 可选，指定则覆盖项目配置的分支参数（如 BRANCH_NAME/BRANCH） */
 app.post('/jenkins/deploy', async (req, res) => {
   const jobKey = (req.body?.job ?? '').trim();
   const branch = (req.body?.branch ?? '').trim();
@@ -86,16 +146,19 @@ app.post('/jenkins/deploy', async (req, res) => {
   if (!preset) {
     const entry = getProjectByCode(jobKey);
     if (entry?.jenkins) {
+      const branchParam = (entry.jenkins.branchParam || 'BRANCH_NAME').trim() || 'BRANCH_NAME';
       preset = {
         name: entry.jenkins.jobName,
-        parameters: { BRANCH_NAME: branch || entry.jenkins.defaultBranch },
+        branchParam,
+        parameters: { [branchParam]: branch || entry.jenkins.defaultBranch },
       };
     }
   }
   const jobName = preset ? preset.name : jobKey;
-  let parameters = preset?.parameters;
+  let parameters: Record<string, string> | undefined = preset?.parameters;
   if (preset && branch) {
-    parameters = { ...preset.parameters, BRANCH_NAME: branch };
+    const branchParam = preset.branchParam || 'BRANCH_NAME';
+    parameters = { ...(preset.parameters ?? {}), [branchParam]: branch };
   }
   try {
     const result = await jenkinsDeploy(jobName, parameters);

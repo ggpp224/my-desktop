@@ -48,15 +48,17 @@ export async function routeAndExecute(call: ToolCall): Promise<unknown> {
       if (!preset) {
         const entry = getProjectByCode(job);
         if (entry?.jenkins) {
+          const branchParam = (entry.jenkins.branchParam || 'BRANCH_NAME').trim() || 'BRANCH_NAME';
           preset = {
             name: entry.jenkins.jobName,
-            parameters: { BRANCH_NAME: branch || entry.jenkins.defaultBranch },
+            branchParam,
+            parameters: { [branchParam]: branch || entry.jenkins.defaultBranch },
           };
         }
       }
       if (preset) {
-        const parameters = { ...preset.parameters };
-        if (branch) parameters.BRANCH_NAME = branch;
+        const parameters: Record<string, string> = { ...(preset.parameters ?? {}) };
+        if (branch) parameters[preset.branchParam || 'BRANCH_NAME'] = branch;
         const result = await jenkinsDeploy(preset.name, parameters);
         return { ...result, jobKey: job };
       }
