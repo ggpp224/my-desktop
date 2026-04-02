@@ -1,7 +1,8 @@
 /* AI 生成 By Peng.Guo */
 import { useState, useRef, useEffect } from 'react';
-import type { Dispatch, MutableRefObject, SetStateAction } from 'react';
 import { appendToolResultsToLogs } from './log-tools';
+import { startDeployPolling } from './viewmodel/deploy/useDeployPolling';
+import type { DeployPollingTarget } from './domain/deploy/models';
 
 type AgentTiming = { firstLLMMs?: number; tools?: { name: string; ms: number }[]; secondLLMMs?: number; tokenUsage?: { promptTokens?: number; completionTokens?: number } };
 type AgentResult = { success: boolean; text?: string; toolResults?: unknown[]; error?: string; timing?: AgentTiming };
@@ -35,13 +36,6 @@ const DEPLOY_OPTIONS = [
   { value: 'biz-guide', label: '部署biz-guide' },
   { value: 'scm', label: '部署scm' },
 ];
-
-type DeployStatusResult = { status: string; message?: string; buildUrl?: string; buildNumber?: number; buildName?: string; progressPercent?: number };
-
-const DEPLOY_POLL_INTERVAL_MS = 10000;
-const DEPLOY_POLL_MAX = 200; // 3 秒一次，约 10 分钟
-const DEPLOY_CONSECUTIVE_FAIL_MAX = 4;
-const DEPLOY_POLL_MIN_BEFORE_TERMINAL = 4;
 
 /** 指令输入历史最多条数，支持 ↑↓ 切换 */
 const INPUT_HISTORY_MAX = 10;
@@ -108,87 +102,6 @@ function buildCommandHints(projects: ProjectInfo[], inputHistory: string[]): str
   );
 }
 
-/** 启动部署状态轮询，用于下拉部署与 Agent 触发部署后统一展示进度；taskKey 用于 Logs 中带任务名如【nova】部署成功 */
-function startDeployStatusPolling(
-  apiBase: string,
-  options: { queueUrl?: string; jobName?: string; label: string; taskKey?: string },
-  setMessages: Dispatch<SetStateAction<Array<{ role: 'user' | 'assistant'; content: string; toolResults?: unknown[] }>>>,
-  addLog: (line: string) => void,
-  pollRef: MutableRefObject<ReturnType<typeof setInterval> | null>
-): void {
-  const { queueUrl, jobName, label, taskKey } = options;
-  if (!queueUrl && !jobName) return;
-  const prefix = taskKey ? `【${taskKey}】` : '';
-  const statusUrl = queueUrl
-    ? `${apiBase}/jenkins/deploy/status?queueUrl=${encodeURIComponent(queueUrl)}`
-    : `${apiBase}/jenkins/deploy/status?jobName=${encodeURIComponent(jobName!)}`;
-  const formatDeployMsg = (s: DeployStatusResult) => {
-    const name = s.buildName ?? label;
-    const num = s.buildNumber != null ? ` #${s.buildNumber}` : '';
-    const progress = s.message ?? '';
-    return progress ? `${name}${num} ${progress}` : `${name}${num}`;
-  };
-  let pollCount = 0;
-  let consecutiveFail = 0;
-  pollRef.current = setInterval(async () => {
-    pollCount += 1;
-    if (pollCount > DEPLOY_POLL_MAX) {
-      if (pollRef.current) clearInterval(pollRef.current);
-      pollRef.current = null;
-      setMessages((prev) => [...prev, { role: 'assistant', content: `${prefix}部署状态查询超时，请到 Jenkins 查看。` }]);
-      addLog(`${prefix}部署状态查询超时，请到 Jenkins 查看。`);
-      return;
-    }
-    try {
-      const statusRes = await fetch(statusUrl);
-      const status: DeployStatusResult = await statusRes.json();
-      const isTerminal = status.status === 'success' || status.status === 'failure' || status.status === 'aborted';
-      const isFail = status.status === 'unknown' || !statusRes.ok;
-      if (isTerminal) {
-        if (pollCount < DEPLOY_POLL_MIN_BEFORE_TERMINAL) return;
-        if (pollRef.current) clearInterval(pollRef.current);
-        pollRef.current = null;
-        const msg = formatDeployMsg(status);
-        const logMsg = status.status === 'success' ? `${prefix}部署成功` : msg;
-        addLog(logMsg);
-        setMessages((prev) => [...prev, { role: 'assistant', content: msg }]);
-        return;
-      }
-      if (isFail) {
-        consecutiveFail += 1;
-        if (consecutiveFail >= DEPLOY_CONSECUTIVE_FAIL_MAX) {
-          if (pollRef.current) clearInterval(pollRef.current);
-          pollRef.current = null;
-          const errMsg = `${prefix}轮询失败：连续多次无法获取状态，请到 Jenkins 查看。`;
-          setMessages((prev) => [...prev, { role: 'assistant', content: errMsg }]);
-          addLog(errMsg);
-        }
-        return;
-      }
-      consecutiveFail = 0;
-      const progressMsg = formatDeployMsg(status);
-      setMessages((prev) => {
-        const next = [...prev];
-        const last = next[next.length - 1];
-        if (last?.role === 'assistant' && (last.content.includes('构建中') || last.content.includes('排队') || last.content.includes(label))) {
-          next[next.length - 1] = { ...last, content: progressMsg };
-          return next;
-        }
-        return [...prev, { role: 'assistant', content: progressMsg }];
-      });
-    } catch {
-      consecutiveFail += 1;
-      if (consecutiveFail >= DEPLOY_CONSECUTIVE_FAIL_MAX) {
-        if (pollRef.current) clearInterval(pollRef.current);
-        pollRef.current = null;
-        const errMsg = `${prefix}轮询失败：连续多次请求异常，请到 Jenkins 查看。`;
-        setMessages((prev) => [...prev, { role: 'assistant', content: errMsg }]);
-        addLog(errMsg);
-      }
-    }
-  }, DEPLOY_POLL_INTERVAL_MS);
-}
-
 export function ChatPanel({ apiBase, addLog }: ChatPanelProps) {
   const [input, setInput] = useState('');
   const [inputHistory, setInputHistory] = useState<string[]>([]);
@@ -201,14 +114,14 @@ export function ChatPanel({ apiBase, addLog }: ChatPanelProps) {
   const [completionIndex, setCompletionIndex] = useState(0);
   const [showCompletion, setShowCompletion] = useState(false);
   const [projects, setProjects] = useState<ProjectInfo[]>([]);
-  const deployPollRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const deployPollRef = useRef<{ stop: () => void } | null>(null);
   const mergeMenuRef = useRef<HTMLDivElement>(null);
   const inputWrapRef = useRef<HTMLDivElement>(null);
   const historyIndexRef = useRef(-1);
   const savedInputRef = useRef('');
 
   useEffect(() => () => {
-    if (deployPollRef.current) clearInterval(deployPollRef.current);
+    if (deployPollRef.current) deployPollRef.current.stop();
   }, []);
 
   useEffect(() => {
@@ -346,13 +259,22 @@ export function ChatPanel({ apiBase, addLog }: ChatPanelProps) {
       { role: 'assistant', content, toolResults: data.toolResults },
     ]);
     if (hasDeployPoll) {
-      startDeployStatusPolling(
-        apiBase,
-        { queueUrl: deployPayload.queueUrl, jobName: deployPayload.jobName, label: deployPayload.jobKey ? `部署${deployPayload.jobKey}` : '部署', taskKey: deployPayload.jobKey },
-        setMessages,
-        addLog,
-        deployPollRef
-      );
+      const target: DeployPollingTarget | null = deployPayload.queueUrl
+        ? { kind: 'queueUrl', value: deployPayload.queueUrl }
+        : deployPayload.jobName
+          ? { kind: 'jobName', value: deployPayload.jobName }
+          : null;
+      if (target) {
+        startDeployPolling({
+          apiBase,
+          target,
+          label: deployPayload.jobKey ? `部署${deployPayload.jobKey}` : '部署',
+          taskKey: deployPayload.jobKey,
+          setMessages,
+          addLog,
+          pollRef: deployPollRef,
+        });
+      }
     }
     const mergeResult = data.toolResults?.find(
       (t): t is { tool: string; result?: { steps?: string[] } } =>
