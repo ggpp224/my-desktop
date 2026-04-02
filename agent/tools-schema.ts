@@ -100,13 +100,13 @@ export const toolsSchema = [
     type: 'function' as const,
     function: {
       name: 'run_workflow_step',
-      description: '执行工作流单步。启动 cpxy/react18/base18/scm 等 → workflow=start-work 或 standalone，taskKey=对应 key',
+      description: '执行工作流单步。启动 cpxy/react18/scm 等 → workflow=start-work 或 standalone，taskKey=对应 key',
       parameters: {
         type: 'object',
         required: ['workflow', 'taskKey'],
         properties: {
           workflow: { type: 'string', description: 'start-work 或 standalone' },
-          taskKey: { type: 'string', description: 'cpxy/react18/base18/cc-web/biz-solution/uikit/shared/scm' },
+          taskKey: { type: 'string', description: 'cpxy/react18/cc-web/biz-solution/uikit/shared/scm（start-work 不含 base18）' },
         },
       },
     },
