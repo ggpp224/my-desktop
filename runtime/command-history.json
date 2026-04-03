@@ -1,14 +1,14 @@
 {
   "items": [
-    "开始工作",
-    "打开jenkins cc-node",
-    "打开测试环境",
-    "部署cc-node",
-    "部署nova",
-    "部署react18",
     "部署cc-web",
     "部署biz-solution",
     "打开jenkins react18",
-    "打开jenkins cc-web"
+    "打开jenkins cc-web",
+    "部署cc-web",
+    "部署nova",
+    "合并 nova",
+    "部署nova",
+    "打开 Jenkins  nova",
+    "部署nova"
   ]
 }

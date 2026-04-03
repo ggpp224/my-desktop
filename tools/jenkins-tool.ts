@@ -26,7 +26,16 @@ async function getCrumb(base: string): Promise<{ field: string; value: string } 
   }
 }
 
-export type DeployResult = { success: boolean; message: string; queueUrl?: string; jobName?: string };
+export type DeployResult = {
+  success: boolean;
+  message: string;
+  /** Jenkins 返回的队列项 URL，仅用于轮询 /queue/item/.../api/json */
+  queueUrl?: string;
+  /** 实际 Jenkins Job 名（与触发构建时一致） */
+  jobName?: string;
+  /** Job 主页面 URL（人类可读），用于聊天链接与打开浏览器；勿与 queueUrl 混用 */
+  jobUrl?: string;
+};
 
 export type DeployStatusResult = {
   status: 'pending' | 'building' | 'success' | 'failure' | 'aborted' | 'unknown';
@@ -199,6 +208,7 @@ export async function deploy(
   const queueUrl = location
     ? (location.startsWith('http') ? location : new URL(location, base + '/').href)
     : undefined;
+  const jobUrl = `${base}/job/${encodeURIComponent(normalizedJob)}/`;
   const message = queueUrl ? '已触发，构建中…' : `已触发 Jenkins Job: ${normalizedJob}`;
-  return { success: true, message, queueUrl };
+  return { success: true, message, queueUrl, jobName: normalizedJob, jobUrl };
 }

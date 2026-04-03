@@ -1,8 +1,10 @@
 /* AI 生成 By Peng.Guo */
 import { useState, useRef, useEffect } from 'react';
 import { appendToolResultsToLogs } from './log-tools';
-import { startDeployPolling } from './viewmodel/deploy/useDeployPolling';
+import { withJenkinsMarkdownLink } from './domain/deploy/jenkinsDeployDisplay';
 import type { DeployPollingTarget } from './domain/deploy/models';
+import { LinkifiedText } from './view/LinkifiedText';
+import { startDeployPolling } from './viewmodel/deploy/useDeployPolling';
 
 type AgentTiming = { firstLLMMs?: number; tools?: { name: string; ms: number }[]; secondLLMMs?: number; tokenUsage?: { promptTokens?: number; completionTokens?: number } };
 type AgentResult = { success: boolean; text?: string; toolResults?: unknown[]; error?: string; timing?: AgentTiming };
@@ -248,12 +250,24 @@ export function ChatPanel({ apiBase, addLog }: ChatPanelProps) {
       }
     }
     const deployResult = data.toolResults?.find(
-      (t): t is { tool: string; result?: { queueUrl?: string; jobName?: string; message?: string; jobKey?: string } } =>
+      (t): t is {
+        tool: string;
+        result?: { queueUrl?: string; jobUrl?: string; jobName?: string; message?: string; jobKey?: string };
+      } =>
         (t as { tool: string }).tool === 'deploy_jenkins' && (t as { result?: unknown }).result != null
-    ) as { tool: string; result?: { queueUrl?: string; jobName?: string; message?: string; jobKey?: string } } | undefined;
+    ) as
+      | { tool: string; result?: { queueUrl?: string; jobUrl?: string; jobName?: string; message?: string; jobKey?: string } }
+      | undefined;
     const deployPayload = deployResult?.result;
     const hasDeployPoll = deployPayload && (deployPayload.queueUrl || deployPayload.jobName);
-    const content = hasDeployPoll ? (deployPayload.message ?? '已触发，构建中…') : (data.success ? (data.text ?? '') : (data.error ?? '请求失败'));
+    const content = hasDeployPoll
+      ? withJenkinsMarkdownLink(
+          deployPayload.message ?? '已触发，构建中…',
+          deployPayload.jobUrl ?? deployPayload.queueUrl
+        )
+      : data.success
+        ? (data.text ?? '')
+        : (data.error ?? '请求失败');
     setMessages((prev) => [
       ...prev,
       { role: 'assistant', content, toolResults: data.toolResults },
@@ -270,6 +284,7 @@ export function ChatPanel({ apiBase, addLog }: ChatPanelProps) {
           target,
           label: deployPayload.jobKey ? `部署${deployPayload.jobKey}` : '部署',
           taskKey: deployPayload.jobKey,
+          jobPageUrl: deployPayload.jobUrl,
           setMessages,
           addLog,
           pollRef: deployPollRef,
@@ -458,7 +473,7 @@ export function ChatPanel({ apiBase, addLog }: ChatPanelProps) {
         {messages.map((m, i) => (
           <div key={i} style={{ marginBottom: 12 }}>
             <strong style={{ color: m.role === 'user' ? '#7f9cf5' : '#68d391' }}>{m.role === 'user' ? 'You' : 'AI'}:</strong>{' '}
-            <span style={{ whiteSpace: 'pre-wrap' }}>{m.content}</span>
+            <LinkifiedText text={m.content} />
             {m.toolResults && m.toolResults.length > 0 && (
               <pre style={{ marginTop: 8, fontSize: 12, background: '#1a1a2e', padding: 8, borderRadius: 4, overflow: 'auto' }}>
                 {JSON.stringify(m.toolResults, null, 2)}
