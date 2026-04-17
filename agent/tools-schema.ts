@@ -177,6 +177,20 @@ export const toolsSchema = [
   {
     type: 'function' as const,
     function: {
+      name: 'write_weekly_report',
+      description:
+        '编写本周周报：先查询“本周已完成任务”的 Jira 列表（含编号+标题），再调用大模型按指定模板归纳输出 Markdown 周报；用户说「写周报」时调用',
+      parameters: {
+        type: 'object',
+        properties: {
+          maxResults: { type: 'number', description: '可选，Jira 查询数量上限，默认 100，最大 100' },
+        },
+      },
+    },
+  },
+  {
+    type: 'function' as const,
+    function: {
       name: 'open_terminal',
       description: '打开内嵌终端工作区（我的工作），仅新建一个终端，不执行开始工作流',
       parameters: {

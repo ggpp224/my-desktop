@@ -20,6 +20,7 @@ type JiraBugItem = {
   url?: string;
 };
 type JiraBugPayload = { total?: number; issues?: JiraBugItem[] };
+type WeeklyReportPayload = { total?: number; jiraTitles?: string[]; report?: string };
 type CursorUsageToolResult = {
   success?: boolean;
   fetchedAt?: string;
@@ -57,7 +58,6 @@ const QUICK_ACTIONS: Array<{ label: string; message: string }> = [
   { label: '打开终端', message: '打开终端' },
   { label: '我的bug', message: '我的bug' },
   { label: '线上bug', message: '线上bug' },
-  { label: '本周已完成任务', message: '本周已完成任务' },
   { label: 'cursor用量', message: 'cursor用量' },
   { label: 'cursor今日用量', message: 'cursor今日用量' },
 ];
@@ -111,6 +111,7 @@ function buildCommandHints(projects: ProjectInfo[], inputHistory: string[]): str
     '我的bug',
     '线上bug',
     '本周已完成任务',
+    '写周报',
     'cursor用量',
     '同步cursor登录态',
     'cursor今日用量',
@@ -166,6 +167,17 @@ function extractMyBugsResult(toolResults?: unknown[]): JiraBugPayload | null {
   const payload = row.result as JiraBugPayload;
   if (!Array.isArray(payload.issues)) return null;
   return payload;
+}
+
+function extractWeeklyReportResult(toolResults?: unknown[]): WeeklyReportPayload | null {
+  if (!Array.isArray(toolResults)) return null;
+  const row = toolResults.find(
+    (item) =>
+      (item as ToolResultItem | undefined)?.tool === 'write_weekly_report' &&
+      (item as ToolResultItem | undefined)?.result
+  ) as ToolResultItem | undefined;
+  if (!row || typeof row.result !== 'object' || row.result == null) return null;
+  return row.result as WeeklyReportPayload;
 }
 
 function extractCursorUsageResult(toolResults?: unknown[]): CursorUsageToolResult | null {
@@ -464,7 +476,43 @@ function renderCursorTodayUsage(toolResults?: unknown[]) {
   );
 }
 
-function renderToolResults(toolResults?: unknown[]) {
+function renderToolResults(toolResults: unknown[] | undefined, onTip: (message: string) => void) {
+  const weeklyReport = extractWeeklyReportResult(toolResults);
+  if (weeklyReport?.report) {
+    const titleCount = Array.isArray(weeklyReport.jiraTitles) ? weeklyReport.jiraTitles.length : weeklyReport.total ?? 0;
+    const reportHeader = `已基于 ${titleCount} 条 Jira 任务生成周报`;
+    return (
+      <div style={{ marginTop: 8, background: '#1a1a2e', borderRadius: 6, border: '1px solid #2a2a3d', padding: 10 }}>
+        <div style={{ fontSize: 12, color: '#94a3b8', marginBottom: 8, display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8 }}>
+          <span>{reportHeader}</span>
+          <button
+            type="button"
+            onClick={async () => {
+              try {
+                const textToCopy = `${reportHeader}\n\n${weeklyReport.report ?? ''}`.trim();
+                await navigator.clipboard.writeText(textToCopy);
+                onTip('周报已复制到剪贴板');
+              } catch {
+                onTip('复制失败，请手动复制');
+              }
+            }}
+            style={{
+              padding: '4px 10px',
+              borderRadius: 4,
+              border: '1px solid #475569',
+              background: '#0f3460',
+              color: '#e2e8f0',
+              cursor: 'pointer',
+              fontSize: 12,
+            }}
+          >
+            复制周报
+          </button>
+        </div>
+        <div style={{ whiteSpace: 'pre-wrap', color: '#e2e8f0', fontSize: 13, lineHeight: 1.7 }}>{weeklyReport.report}</div>
+      </div>
+    );
+  }
   const myBugs = extractMyBugsResult(toolResults);
   if (myBugs) {
     const issues = myBugs.issues ?? [];
@@ -540,6 +588,7 @@ export function ChatPanel({ apiBase, addLog, onStartWorkEmbedded }: ChatPanelPro
   const [completionList, setCompletionList] = useState<string[]>([]);
   const [completionIndex, setCompletionIndex] = useState(0);
   const [showCompletion, setShowCompletion] = useState(false);
+  const [tipMessage, setTipMessage] = useState('');
   const [projects, setProjects] = useState<ProjectInfo[]>([]);
   const deployPollRef = useRef<{ stop: () => void } | null>(null);
   const inputWrapRef = useRef<HTMLDivElement>(null);
@@ -604,6 +653,12 @@ export function ChatPanel({ apiBase, addLog, onStartWorkEmbedded }: ChatPanelPro
     if (!el) return;
     el.scrollTop = el.scrollHeight;
   }, [messages, loading]);
+
+  useEffect(() => {
+    if (!tipMessage) return;
+    const timer = setTimeout(() => setTipMessage(''), 2000);
+    return () => clearTimeout(timer);
+  }, [tipMessage]);
 
   const executeMerge = async (path: string, doneLabel: string) => {
     if (!apiBase) return;
@@ -823,10 +878,30 @@ export function ChatPanel({ apiBase, addLog, onStartWorkEmbedded }: ChatPanelPro
           <div key={i} style={{ marginBottom: 12 }}>
             <strong style={{ color: m.role === 'user' ? '#7f9cf5' : '#68d391' }}>{m.role === 'user' ? 'You' : 'AI'}:</strong>{' '}
             <LinkifiedText text={m.content} />
-            {renderToolResults(m.toolResults)}
+            {renderToolResults(m.toolResults, setTipMessage)}
           </div>
         ))}
         {loading && <p style={{ color: '#888' }}>处理中…</p>}
+        {tipMessage && (
+          <div
+            style={{
+              position: 'sticky',
+              bottom: 8,
+              marginLeft: 'auto',
+              width: 'fit-content',
+              maxWidth: '80%',
+              background: '#0f172a',
+              border: '1px solid #334155',
+              color: '#e2e8f0',
+              borderRadius: 6,
+              padding: '6px 10px',
+              fontSize: 12,
+              boxShadow: '0 4px 12px rgba(0,0,0,0.25)',
+            }}
+          >
+            {tipMessage}
+          </div>
+        )}
       </div>
       <form
         onSubmit={(e) => { e.preventDefault(); send(input); }}

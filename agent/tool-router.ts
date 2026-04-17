@@ -23,6 +23,7 @@ import { searchMyBugs, searchOnlineBugs, searchWeeklyDoneTasks } from '../tools/
 import { getCursorTodayUsage, getCursorUsage } from '../tools/cursor-usage-tool.js';
 import { syncCursorCookieFromChrome } from '../tools/cursor-cookie-sync-tool.js';
 import { openWeeklyReportPage } from '../tools/wiki-tool.js';
+import { writeWeeklyReport } from '../tools/weekly-report-tool.js';
 import type { ToolCall } from './ollama-client.js';
 
 async function withCursorAutoSync<T extends object>(executor: () => Promise<T>): Promise<T> {
@@ -119,6 +120,10 @@ export async function routeAndExecute(call: ToolCall): Promise<unknown> {
       return syncCursorCookieFromChrome();
     case 'open_weekly_report':
       return openWeeklyReportPage();
+    case 'write_weekly_report': {
+      const maxResults = Number(args?.maxResults ?? 100);
+      return writeWeeklyReport(maxResults);
+    }
     case 'run_workflow_step': {
       const workflow = (args?.workflow as string) ?? 'start-work';
       const taskKey = (args?.taskKey as string) ?? '';
