@@ -6,6 +6,11 @@ import { ToolPanel } from './ToolPanel';
 import { LogsPanel } from './LogsPanel';
 
 const DEFAULT_API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:3000';
+type HeaderTab = { key: string; label: string };
+const HEADER_TABS: HeaderTab[] = [
+  { key: 'workspace', label: 'AI Dev Control Center' },
+  { key: 'settings', label: '配置中心' },
+];
 
 /** 帮助弹层：可用指令及说明（与 docs/可用指令.md 一致） */
 type HelpItem = { section?: string; command: string; description: string };
@@ -44,6 +49,7 @@ export default function App() {
   const [logs, setLogs] = useState<string[]>([]);
   const [ollamaOk, setOllamaOk] = useState<boolean | null>(null);
   const [helpOpen, setHelpOpen] = useState(false);
+  const [activeHeaderTab, setActiveHeaderTab] = useState<string>(HEADER_TABS[0].key);
   const [leftCollapsed, setLeftCollapsed] = useState(true);
   const [rightWidth, setRightWidth] = useState(400);
   const [resizing, setResizing] = useState(false);
@@ -115,7 +121,30 @@ export default function App() {
     <div style={{ display: 'flex', flexDirection: 'column', height: '100vh' }}>
       <header style={{ padding: '12px 16px', borderBottom: '1px solid #333', background: '#16213e', display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 16 }}>
         <div style={{ flex: 1, minWidth: 0 }}>
-          <h1 style={{ margin: 0, fontSize: '1.25rem' }}>AI Dev Control Center</h1>
+          <nav aria-label="头部功能页签" style={{ display: 'flex', gap: 6 }}>
+            {HEADER_TABS.map((tab) => {
+              const isActive = activeHeaderTab === tab.key;
+              return (
+                <button
+                  key={tab.key}
+                  type="button"
+                  onClick={() => setActiveHeaderTab(tab.key)}
+                  style={{
+                    padding: '8px 16px',
+                    borderRadius: 6,
+                    border: `1px solid ${isActive ? '#4f83ff' : '#334155'}`,
+                    background: isActive ? '#1d4ed8' : '#0f172a',
+                    color: '#e2e8f0',
+                    fontSize: 14,
+                    fontWeight: 600,
+                    cursor: 'pointer',
+                  }}
+                >
+                  {tab.label}
+                </button>
+              );
+            })}
+          </nav>
           {ollamaOk === false && (
             <p style={{ margin: '8px 0 0', fontSize: 12, color: '#f59e0b' }}>
               请先安装并启动 Ollama，并拉取模型（如 ollama pull qwen2.5）。<a href="https://ollama.com" target="_blank" rel="noreferrer" style={{ color: '#93c5fd' }}>文档</a>
