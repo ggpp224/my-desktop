@@ -8,6 +8,7 @@ const TOOLS = [
   { name: 'close_ide_project', desc: '关闭 IDE 项目窗口（如：关闭ws的nova、关闭cursor的base）' },
   { name: 'open_browser', desc: '打开浏览器 URL（如：打开 Jenkins）' },
   { name: 'open_jenkins_job', desc: '打开某项目 Jenkins 任务页（如：打开jenkins nova、打开 Jenkins 的 cc-web）' },
+  { name: 'search_weekly_done_tasks', desc: '查询 Jira 本周已完成任务（如：本周已完成任务）' },
   { name: 'run_shell', desc: '执行 shell 命令' },
 ];
 

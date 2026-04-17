@@ -28,6 +28,7 @@ const HELP_COMMANDS: HelpItem[] = [
   { section: '合并', command: '合并 nova / 合并 biz-solution / 合并 scm', description: '执行对应仓库合并到测试分支（SSE 流式输出）' },
   { section: 'Jira', command: '我的bug / 查询我的bug', description: '按固定 JQL 查询 Jira Bug 列表，展示关键字、摘要、状态、解决结果、修复版本、经办人' },
   { section: 'Jira', command: '线上bug / 查询线上bug', description: '按固定 JQL 查询 Jira 线上缺陷列表，展示关键字、摘要、状态、解决结果、修复版本、经办人' },
+  { section: 'Jira', command: '本周已完成任务 / 查询本周已完成任务', description: '按固定 JQL 查询本周已完成任务（待测试环境验证/已解决/Fixed/Closed），按 updated 倒序返回' },
   { section: 'Cursor', command: 'cursor用量 / 查询cursor用量', description: '调用 Cursor Dashboard 聚合用量 API 获取账号用量数据' },
   { section: 'Cursor', command: 'cursor今日用量 / 查询cursor今日用量', description: '调用 Cursor Dashboard 今日筛选用量 API 获取当天用量数据' },
   { section: 'Cursor', command: '同步cursor登录态', description: '自动读取本机 Chrome 中 cursor.com 登录 Cookie，并注入当前服务内存' },

@@ -93,7 +93,7 @@ export const toolsSchema = [
       parameters: {
         type: 'object',
         properties: {
-          maxResults: { type: 'number', description: '可选，返回数量上限，默认 20，最大 50' },
+          maxResults: { type: 'number', description: '可选，返回数量上限，默认 100，最大 100' },
         },
       },
     },
@@ -107,7 +107,21 @@ export const toolsSchema = [
       parameters: {
         type: 'object',
         properties: {
-          maxResults: { type: 'number', description: '可选，返回数量上限，默认 20，最大 50' },
+          maxResults: { type: 'number', description: '可选，返回数量上限，默认 100，最大 100' },
+        },
+      },
+    },
+  },
+  {
+    type: 'function' as const,
+    function: {
+      name: 'search_weekly_done_tasks',
+      description:
+        '查询 Jira 中“本周已完成任务”固定条件列表（Jira 8.8，非 token 鉴权）。用户说「本周已完成任务」「查询本周已完成任务」时调用，可选 maxResults',
+      parameters: {
+        type: 'object',
+        properties: {
+          maxResults: { type: 'number', description: '可选，返回数量上限，默认 100，最大 100' },
         },
       },
     },

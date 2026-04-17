@@ -10,6 +10,8 @@ const MY_BUG_JQL_IN_PROGRESS =
   'filter = bus AND (assignee in (liuweiaq, guopengb, wangjuan3, zhangjinz, liyzb, wangmingg) AND status not in (Closed, 遗留, Resolved, 关闭, 待测试环境验证, 待集测环境验证, 待验证) OR 开发人员 in (liuweiaq, guopengb, wangjuan3, zhangjinz, liyzb, wangmingg)) AND 开发人员 = guopengb AND status = "In Progress" ORDER BY updated';
 const ONLINE_BUG_JQL =
   'issuetype in (线上需求, 线上缺陷, 线上BUG, 线上环境, 线上其他, 线上效率, "业务运维 - 线上问题", "业务运维 - 线上故障报告", 支持网-需求, 支持网-缺陷, 安全漏洞缺陷, 运维问题, 运维任务) AND assignee in (liuweiaq, guopengb, wangjuan3, zhangjinz, liyzb, wangmingg) AND status not in (Closed, 关闭) AND issuetype = 线上缺陷 AND assignee = guopengb ORDER BY updated DESC';
+const WEEKLY_DONE_TASKS_JQL =
+  '(status changed to (待测试环境验证) by (liuweiaq, guopengb, wangjuan3, zhangjinz, liyzb, wangmingg) during (startOfWeek(), endOfWeek()) OR resolution changed to 已解决 by (liuweiaq, guopengb, wangjuan3, zhangjinz, liyzb, wangmingg) during (startOfWeek(), endOfWeek()) OR resolution changed to Fixed by (liuweiaq, guopengb, wangjuan3, zhangjinz, liyzb, wangmingg) during (startOfWeek(), endOfWeek()) OR status changed to Closed by currentUser() during (startOfWeek(), endOfWeek())) AND 开发人员 = guopengb ORDER BY updated DESC';
 
 interface JiraSearchResponse {
   issues?: Array<{
@@ -73,7 +75,7 @@ async function searchByJql(jql: string, maxResults: number): Promise<MyBugResult
   const params = new URLSearchParams({
     jql,
     startAt: '0',
-    maxResults: String(Math.max(1, Math.min(50, Math.floor(maxResults)))),
+    maxResults: String(Math.max(1, Math.min(100, Math.floor(maxResults)))),
     fields: 'summary,status,resolution,fixVersions,assignee,updated',
   });
   const url = `${baseUrl}/rest/api/2/search?${params.toString()}`;
@@ -139,7 +141,7 @@ function mergeIssuesAndSort(issuesList: MyBugItem[][]): MyBugItem[] {
 }
 
 async function searchByMultipleJql(jqlList: string[], maxResults: number): Promise<MyBugResult> {
-  const limit = Math.max(1, Math.min(50, Math.floor(maxResults)));
+  const limit = Math.max(1, Math.min(100, Math.floor(maxResults)));
   const results = await Promise.all(jqlList.map((jql) => searchByJql(jql, limit)));
   const issues = mergeIssuesAndSort(results.map((item) => item.issues));
   return {
@@ -151,10 +153,14 @@ async function searchByMultipleJql(jqlList: string[], maxResults: number): Promi
   };
 }
 
-export async function searchMyBugs(maxResults = 20): Promise<MyBugResult> {
+export async function searchMyBugs(maxResults = 100): Promise<MyBugResult> {
   return searchByMultipleJql([MY_BUG_JQL, MY_BUG_JQL_EXTRA, MY_BUG_JQL_IN_PROGRESS], maxResults);
 }
 
-export async function searchOnlineBugs(maxResults = 20): Promise<MyBugResult> {
+export async function searchOnlineBugs(maxResults = 100): Promise<MyBugResult> {
   return searchByMultipleJql([ONLINE_BUG_JQL], maxResults);
+}
+
+export async function searchWeeklyDoneTasks(maxResults = 100): Promise<MyBugResult> {
+  return searchByMultipleJql([WEEKLY_DONE_TASKS_JQL], maxResults);
 }
