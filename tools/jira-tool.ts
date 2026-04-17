@@ -6,6 +6,8 @@ const MY_BUG_JQL =
   'filter = bus AND (assignee in (liuweiaq, guopengb, wangjuan3, zhangjinz, liyzb, wangmingg) AND status not in (Closed, 遗留, Resolved, 关闭, 待测试环境验证, 待集测环境验证, 待验证) OR 开发人员 in (liuweiaq, guopengb, wangjuan3, zhangjinz, liyzb, wangmingg)) AND 开发人员 = guopengb AND status = Open ORDER BY updated DESC';
 const MY_BUG_JQL_EXTRA =
   'filter = bus AND assignee in (liuweiaq, guopengb, wangjuan3, zhangjinz, liyzb, wangmingg) AND status not in (Closed, 遗留, Resolved, 关闭, 待测试环境验证, 待集测环境验证, 待验证) AND 开发人员 not in (liuweiaq, guopengb, wangjuan3, zhangjinz, liyzb, wangmingg) AND assignee = guopengb AND status = Open ORDER BY updated DESC';
+const MY_BUG_JQL_IN_PROGRESS =
+  'filter = bus AND (assignee in (liuweiaq, guopengb, wangjuan3, zhangjinz, liyzb, wangmingg) AND status not in (Closed, 遗留, Resolved, 关闭, 待测试环境验证, 待集测环境验证, 待验证) OR 开发人员 in (liuweiaq, guopengb, wangjuan3, zhangjinz, liyzb, wangmingg)) AND 开发人员 = guopengb AND status = "In Progress" ORDER BY updated';
 const ONLINE_BUG_JQL =
   'issuetype in (线上需求, 线上缺陷, 线上BUG, 线上环境, 线上其他, 线上效率, "业务运维 - 线上问题", "业务运维 - 线上故障报告", 支持网-需求, 支持网-缺陷, 安全漏洞缺陷, 运维问题, 运维任务) AND assignee in (liuweiaq, guopengb, wangjuan3, zhangjinz, liyzb, wangmingg) AND status not in (Closed, 关闭) AND issuetype = 线上缺陷 AND assignee = guopengb ORDER BY updated DESC';
 
@@ -150,7 +152,7 @@ async function searchByMultipleJql(jqlList: string[], maxResults: number): Promi
 }
 
 export async function searchMyBugs(maxResults = 20): Promise<MyBugResult> {
-  return searchByMultipleJql([MY_BUG_JQL, MY_BUG_JQL_EXTRA], maxResults);
+  return searchByMultipleJql([MY_BUG_JQL, MY_BUG_JQL_EXTRA, MY_BUG_JQL_IN_PROGRESS], maxResults);
 }
 
 export async function searchOnlineBugs(maxResults = 20): Promise<MyBugResult> {

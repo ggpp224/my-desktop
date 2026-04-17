@@ -55,6 +55,7 @@ interface ChatPanelProps {
 const QUICK_ACTIONS: Array<{ label: string; message: string }> = [
   { label: '开始工作', message: '开始工作' },
   { label: '打开终端', message: '打开终端' },
+  { label: '我的bug', message: '我的bug' },
   { label: '线上bug', message: '线上bug' },
   { label: 'cursor用量', message: 'cursor用量' },
   { label: 'cursor今日用量', message: 'cursor今日用量' },
