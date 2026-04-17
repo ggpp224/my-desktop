@@ -30,7 +30,6 @@ interface ChatPanelProps {
 const QUICK_ACTIONS: Array<{ label: string; message: string }> = [
   { label: '开始工作', message: '开始工作' },
   { label: '打开终端', message: '打开终端' },
-  { label: '打开 Jenkins', message: '打开 Jenkins' },
 ];
 
 /** 合并菜单项：走 SSE 流式接口，每步实时写入 Logs */
@@ -197,8 +196,6 @@ export function ChatPanel({ apiBase, addLog, onStartWorkEmbedded }: ChatPanelPro
   const [input, setInput] = useState('');
   const [inputHistory, setInputHistory] = useState<string[]>([]);
   const [loading, setLoading] = useState(false);
-  const [deploySelect, setDeploySelect] = useState('');
-  const [mergeMenuOpen, setMergeMenuOpen] = useState(false);
   const [messages, setMessages] = useState<Array<{ role: 'user' | 'assistant'; content: string; toolResults?: unknown[] }>>([]);
   const [currentModel, setCurrentModel] = useState<string>('');
   const [completionList, setCompletionList] = useState<string[]>([]);
@@ -206,7 +203,6 @@ export function ChatPanel({ apiBase, addLog, onStartWorkEmbedded }: ChatPanelPro
   const [showCompletion, setShowCompletion] = useState(false);
   const [projects, setProjects] = useState<ProjectInfo[]>([]);
   const deployPollRef = useRef<{ stop: () => void } | null>(null);
-  const mergeMenuRef = useRef<HTMLDivElement>(null);
   const inputWrapRef = useRef<HTMLDivElement>(null);
   const historyIndexRef = useRef(-1);
   const savedInputRef = useRef('');
@@ -254,14 +250,6 @@ export function ChatPanel({ apiBase, addLog, onStartWorkEmbedded }: ChatPanelPro
       body: JSON.stringify({ items: history }),
     }).catch(() => {});
   };
-
-  useEffect(() => {
-    const onOutside = (e: MouseEvent) => {
-      if (mergeMenuRef.current && !mergeMenuRef.current.contains(e.target as Node)) setMergeMenuOpen(false);
-    };
-    if (mergeMenuOpen) document.addEventListener('click', onOutside);
-    return () => document.removeEventListener('click', onOutside);
-  }, [mergeMenuOpen]);
 
   useEffect(() => {
     const onOutside = (e: MouseEvent) => {
@@ -458,92 +446,6 @@ export function ChatPanel({ apiBase, addLog, onStartWorkEmbedded }: ChatPanelPro
             {label}
           </button>
         ))}
-        <select
-          value={deploySelect}
-          onChange={(e) => {
-            const v = e.target.value;
-            setDeploySelect('');
-            if (v) {
-              const label = DEPLOY_OPTIONS.find((o) => o.value === v)?.label ?? v;
-              send(label);
-            }
-          }}
-          disabled={loading}
-          style={{
-            padding: '8px 14px',
-            background: '#16213e',
-            color: '#eaeaea',
-            border: '1px solid #333',
-            borderRadius: 6,
-            cursor: loading ? 'not-allowed' : 'pointer',
-          }}
-        >
-          {DEPLOY_OPTIONS.map((o) => (
-            <option key={o.value || 'placeholder'} value={o.value}>
-              {o.label}
-            </option>
-          ))}
-        </select>
-        <div ref={mergeMenuRef} style={{ position: 'relative' }}>
-          <button
-            type="button"
-            onClick={() => setMergeMenuOpen((o) => !o)}
-            disabled={loading}
-            style={{
-              padding: '8px 14px',
-              background: mergeMenuOpen ? '#0f3460' : '#16213e',
-              color: '#eaeaea',
-              border: '1px solid #333',
-              borderRadius: 6,
-              cursor: loading ? 'not-allowed' : 'pointer',
-            }}
-          >
-            合并代码 ▾
-          </button>
-          {mergeMenuOpen && (
-            <div
-              style={{
-                position: 'absolute',
-                top: '100%',
-                left: 0,
-                marginTop: 4,
-                minWidth: 160,
-                background: '#16213e',
-                border: '1px solid #333',
-                borderRadius: 6,
-                boxShadow: '0 4px 12px rgba(0,0,0,0.3)',
-                zIndex: 10,
-              }}
-            >
-              {MERGE_TASKS.map((task) => (
-                <button
-                  key={task.key}
-                  type="button"
-                  onClick={() => {
-                    setMergeMenuOpen(false);
-                    setMessages((prev) => [...prev, { role: 'user', content: task.label }]);
-                    addLog(`发送: ${task.label}`);
-                    executeMerge(task.path, task.label);
-                  }}
-                  disabled={loading}
-                  style={{
-                    display: 'block',
-                    width: '100%',
-                    padding: '8px 12px',
-                    background: 'transparent',
-                    color: '#eaeaea',
-                    border: 'none',
-                    borderRadius: 4,
-                    cursor: loading ? 'not-allowed' : 'pointer',
-                    textAlign: 'left',
-                  }}
-                >
-                  {task.label}
-                </button>
-              ))}
-            </div>
-          )}
-        </div>
         <button
           type="button"
           onClick={() => setMessages([])}

@@ -4,6 +4,8 @@ import { config } from '../config/default.js';
 
 const MY_BUG_JQL =
   'filter = bus AND (assignee in (liuweiaq, guopengb, wangjuan3, zhangjinz, liyzb, wangmingg) AND status not in (Closed, 遗留, Resolved, 关闭, 待测试环境验证, 待集测环境验证, 待验证) OR 开发人员 in (liuweiaq, guopengb, wangjuan3, zhangjinz, liyzb, wangmingg)) AND 开发人员 = guopengb AND status = Open ORDER BY updated DESC';
+const MY_BUG_JQL_EXTRA =
+  'filter = bus AND assignee in (liuweiaq, guopengb, wangjuan3, zhangjinz, liyzb, wangmingg) AND status not in (Closed, 遗留, Resolved, 关闭, 待测试环境验证, 待集测环境验证, 待验证) AND 开发人员 not in (liuweiaq, guopengb, wangjuan3, zhangjinz, liyzb, wangmingg) AND assignee = guopengb AND status = Open ORDER BY updated DESC';
 
 interface JiraSearchResponse {
   issues?: Array<{
@@ -31,6 +33,7 @@ export interface MyBugItem {
   resolution: string;
   fixVersion: string;
   assignee: string;
+  updated: string;
   url: string;
 }
 
@@ -92,6 +95,7 @@ async function searchByJql(jql: string, maxResults: number): Promise<MyBugResult
         resolution: (item.fields?.resolution?.name ?? '未解决').trim(),
         fixVersion: (item.fields?.fixVersions?.map((v) => (v.name ?? '').trim()).filter(Boolean).join(', ') ?? '无').trim() || '无',
         assignee: (item.fields?.assignee?.displayName ?? item.fields?.assignee?.name ?? '未分配').trim(),
+        updated: (item.fields?.updated ?? '').trim(),
         url: key ? buildIssueUrl(baseUrl, key) : (item.self ?? '').trim(),
       };
     }) ?? [];
@@ -105,5 +109,39 @@ async function searchByJql(jql: string, maxResults: number): Promise<MyBugResult
 }
 
 export async function searchMyBugs(maxResults = 20): Promise<MyBugResult> {
-  return searchByJql(MY_BUG_JQL, maxResults);
+  const [primary, extra] = await Promise.all([
+    searchByJql(MY_BUG_JQL, maxResults),
+    searchByJql(MY_BUG_JQL_EXTRA, maxResults),
+  ]);
+  const dedup = new Map<string, MyBugItem>();
+  for (const issue of [...primary.issues, ...extra.issues]) {
+    const key = issue.key.trim();
+    if (!key) continue;
+    const existed = dedup.get(key);
+    if (!existed) {
+      dedup.set(key, issue);
+      continue;
+    }
+    const nextTime = Date.parse(issue.updated || '');
+    const oldTime = Date.parse(existed.updated || '');
+    if (Number.isFinite(nextTime) && (!Number.isFinite(oldTime) || nextTime > oldTime)) {
+      dedup.set(key, issue);
+    }
+  }
+  const issues = [...dedup.values()].sort((a, b) => {
+    const left = Date.parse(a.updated || '');
+    const right = Date.parse(b.updated || '');
+    if (Number.isFinite(left) && Number.isFinite(right)) return right - left;
+    if (Number.isFinite(right)) return 1;
+    if (Number.isFinite(left)) return -1;
+    return b.key.localeCompare(a.key);
+  });
+  const limit = Math.max(1, Math.min(50, Math.floor(maxResults)));
+  return {
+    success: true,
+    jql: `${MY_BUG_JQL}\n---\n${MY_BUG_JQL_EXTRA}`,
+    total: issues.length,
+    maxResults: limit,
+    issues: issues.slice(0, limit),
+  };
 }
