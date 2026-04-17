@@ -9,6 +9,17 @@ import type { WorkTerminal } from './MyWorkPanel';
 
 type AgentTiming = { firstLLMMs?: number; tools?: { name: string; ms: number }[]; secondLLMMs?: number; tokenUsage?: { promptTokens?: number; completionTokens?: number } };
 type AgentResult = { success: boolean; text?: string; toolResults?: unknown[]; error?: string; timing?: AgentTiming };
+type ToolResultItem = { tool?: string; result?: unknown; error?: string };
+type JiraBugItem = {
+  key?: string;
+  summary?: string;
+  status?: string;
+  resolution?: string;
+  fixVersion?: string;
+  assignee?: string;
+  url?: string;
+};
+type JiraBugPayload = { total?: number; issues?: JiraBugItem[] };
 
 interface ChatPanelProps {
   apiBase: string;
@@ -68,6 +79,7 @@ function buildCommandHints(projects: ProjectInfo[], inputHistory: string[]): str
     '打开测试环境',
     '打开json配置中心',
     '打开 Jenkins',
+    '我的bug',
   ];
   const allCodes = Array.from(new Set(projects.flatMap((p) => p.codes)));
   const jenkinsCodes = Array.from(new Set(projects.filter((p) => p.jenkins).flatMap((p) => p.codes)));
@@ -105,6 +117,80 @@ function buildCommandHints(projects: ProjectInfo[], inputHistory: string[]): str
       ...inputHistory,
     ])
   );
+}
+
+function extractMyBugsResult(toolResults?: unknown[]): JiraBugPayload | null {
+  if (!Array.isArray(toolResults)) return null;
+  const row = toolResults.find(
+    (item) => (item as ToolResultItem | undefined)?.tool === 'search_my_bugs' && (item as ToolResultItem | undefined)?.result
+  ) as ToolResultItem | undefined;
+  if (!row || typeof row.result !== 'object' || row.result == null) return null;
+  const payload = row.result as JiraBugPayload;
+  if (!Array.isArray(payload.issues)) return null;
+  return payload;
+}
+
+function renderToolResults(toolResults?: unknown[]) {
+  const myBugs = extractMyBugsResult(toolResults);
+  if (myBugs) {
+    const issues = myBugs.issues ?? [];
+    return (
+      <div style={{ marginTop: 8, background: '#1a1a2e', borderRadius: 6, border: '1px solid #2a2a3d', overflow: 'hidden' }}>
+        <div style={{ padding: '8px 10px', fontSize: 12, color: '#94a3b8', borderBottom: '1px solid #2a2a3d' }}>
+          共 {myBugs.total ?? issues.length} 条，当前展示 {issues.length} 条
+        </div>
+        <div style={{ overflowX: 'auto' }}>
+          <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12, color: '#e2e8f0', tableLayout: 'fixed' }}>
+            <thead>
+              <tr style={{ background: '#111827' }}>
+                <th style={{ width: '14%', textAlign: 'left', padding: '8px 10px', borderBottom: '1px solid #2a2a3d' }}>关键字</th>
+                <th style={{ width: '38%', textAlign: 'left', padding: '8px 10px', borderBottom: '1px solid #2a2a3d' }}>摘要</th>
+                <th style={{ width: '10%', textAlign: 'left', padding: '8px 10px', borderBottom: '1px solid #2a2a3d' }}>状态</th>
+                <th style={{ width: '10%', textAlign: 'left', padding: '8px 10px', borderBottom: '1px solid #2a2a3d' }}>解决结果</th>
+                <th style={{ width: '14%', textAlign: 'left', padding: '8px 10px', borderBottom: '1px solid #2a2a3d' }}>修复版本</th>
+                <th style={{ width: '14%', textAlign: 'left', padding: '8px 10px', borderBottom: '1px solid #2a2a3d' }}>经办人</th>
+              </tr>
+            </thead>
+            <tbody>
+              {issues.map((issue, idx) => (
+                <tr key={`${issue.key ?? 'issue'}-${idx}`} style={{ background: idx % 2 === 0 ? '#0f172a' : '#111827' }}>
+                  <td style={{ padding: '8px 10px', borderBottom: '1px solid #2a2a3d', whiteSpace: 'nowrap' }}>
+                    {issue.url ? (
+                      <a href={issue.url} target="_blank" rel="noreferrer" style={{ color: '#93c5fd', textDecoration: 'none' }}>
+                        {issue.key || '--'}
+                      </a>
+                    ) : (
+                      issue.key || '--'
+                    )}
+                  </td>
+                  <td style={{ padding: '8px 10px', borderBottom: '1px solid #2a2a3d', wordBreak: 'break-word' }}>{issue.summary || '--'}</td>
+                  <td style={{ padding: '8px 10px', borderBottom: '1px solid #2a2a3d', wordBreak: 'break-word' }}>{issue.status || '--'}</td>
+                  <td style={{ padding: '8px 10px', borderBottom: '1px solid #2a2a3d', wordBreak: 'break-word' }}>{issue.resolution || '--'}</td>
+                  <td style={{ padding: '8px 10px', borderBottom: '1px solid #2a2a3d', wordBreak: 'break-word' }}>{issue.fixVersion || '--'}</td>
+                  <td style={{ padding: '8px 10px', borderBottom: '1px solid #2a2a3d', wordBreak: 'break-word' }}>{issue.assignee || '--'}</td>
+                </tr>
+              ))}
+              {issues.length === 0 && (
+                <tr>
+                  <td colSpan={6} style={{ padding: '10px', color: '#94a3b8' }}>
+                    暂无数据
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    );
+  }
+  if (toolResults && toolResults.length > 0) {
+    return (
+      <pre style={{ marginTop: 8, fontSize: 12, background: '#1a1a2e', padding: 8, borderRadius: 4, overflow: 'auto' }}>
+        {JSON.stringify(toolResults, null, 2)}
+      </pre>
+    );
+  }
+  return null;
 }
 
 export function ChatPanel({ apiBase, addLog, onStartWorkEmbedded }: ChatPanelProps) {
@@ -489,11 +575,7 @@ export function ChatPanel({ apiBase, addLog, onStartWorkEmbedded }: ChatPanelPro
           <div key={i} style={{ marginBottom: 12 }}>
             <strong style={{ color: m.role === 'user' ? '#7f9cf5' : '#68d391' }}>{m.role === 'user' ? 'You' : 'AI'}:</strong>{' '}
             <LinkifiedText text={m.content} />
-            {m.toolResults && m.toolResults.length > 0 && (
-              <pre style={{ marginTop: 8, fontSize: 12, background: '#1a1a2e', padding: 8, borderRadius: 4, overflow: 'auto' }}>
-                {JSON.stringify(m.toolResults, null, 2)}
-              </pre>
-            )}
+            {renderToolResults(m.toolResults)}
           </div>
         ))}
         {loading && <p style={{ color: '#888' }}>处理中…</p>}

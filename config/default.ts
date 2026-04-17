@@ -18,6 +18,12 @@ export const config = {
       nova: process.env.JENKINS_JOB_NOVA || 'BUILD-to-CNPM__nova_nova-next',
     },
   },
+  jira: {
+    baseUrl: process.env.JIRA_BASE_URL || '',
+    /** Jira 8.8 场景使用账号密码 Basic 认证（非 token） */
+    username: process.env.JIRA_USERNAME || '',
+    password: process.env.JIRA_PASSWORD || '',
+  },
   shell: {
     allowedCwd: process.env.SHELL_CWD || process.cwd(),
   },

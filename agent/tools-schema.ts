@@ -87,6 +87,20 @@ export const toolsSchema = [
   {
     type: 'function' as const,
     function: {
+      name: 'search_my_bugs',
+      description:
+        '查询 Jira 中“我的bug”固定条件列表（Jira 8.8，非 token 鉴权）。用户说「我的bug」「查询我的bug」时调用，可选 maxResults',
+      parameters: {
+        type: 'object',
+        properties: {
+          maxResults: { type: 'number', description: '可选，返回数量上限，默认 20，最大 50' },
+        },
+      },
+    },
+  },
+  {
+    type: 'function' as const,
+    function: {
       name: 'open_terminal',
       description: '打开内嵌终端工作区（我的工作），仅新建一个终端，不执行开始工作流',
       parameters: {

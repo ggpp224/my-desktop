@@ -19,6 +19,7 @@ import { openEmbeddedTerminalWorkspace, startEmbeddedWorkflow } from '../tools/w
 import { mergeNova, mergeBizSolution, mergeScm } from '../tools/merge-tool.js';
 import { openInIde } from '../tools/open-ide-tool.js';
 import { closeIdeProject } from '../tools/close-ide-tool.js';
+import { searchMyBugs } from '../tools/jira-tool.js';
 import type { ToolCall } from './ollama-client.js';
 
 export async function routeAndExecute(call: ToolCall): Promise<unknown> {
@@ -76,6 +77,10 @@ export async function routeAndExecute(call: ToolCall): Promise<unknown> {
     case 'open_terminal': {
       const embedded = openEmbeddedTerminalWorkspace();
       return { success: true, embedded: true, ...embedded };
+    }
+    case 'search_my_bugs': {
+      const maxResults = Number(args?.maxResults ?? 20);
+      return searchMyBugs(maxResults);
     }
     case 'run_workflow_step': {
       const workflow = (args?.workflow as string) ?? 'start-work';
