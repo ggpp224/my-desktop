@@ -36,6 +36,13 @@ export const config = {
     /** Cursor Dashboard API Cookie（可选） */
     cookie: process.env.CURSOR_COOKIE || '',
   },
+  wiki: {
+    baseUrl: process.env.WIKI_BASE_URL || 'https://wiki2.rd.chanjet.com',
+    weeklySpaceName: process.env.WIKI_WEEKLY_SPACE_NAME || '低代码单据前端空间',
+    weeklyRootPageId: process.env.WIKI_WEEKLY_ROOT_PAGE_ID || '405143687',
+    token: process.env.WIKI_TOKEN || '',
+    authScheme: process.env.WIKI_AUTH_SCHEME || 'Bearer',
+  },
   shell: {
     allowedCwd: process.env.SHELL_CWD || process.cwd(),
   },

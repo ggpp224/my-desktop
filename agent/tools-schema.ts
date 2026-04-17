@@ -151,6 +151,18 @@ export const toolsSchema = [
   {
     type: 'function' as const,
     function: {
+      name: 'open_weekly_report',
+      description:
+        '打开 wiki 周报页面。用户说「周报」时调用：自动按“低代码单据前端空间”下最近季度与最近日期区间定位并打开页面',
+      parameters: {
+        type: 'object',
+        properties: {},
+      },
+    },
+  },
+  {
+    type: 'function' as const,
+    function: {
       name: 'open_terminal',
       description: '打开内嵌终端工作区（我的工作），仅新建一个终端，不执行开始工作流',
       parameters: {
