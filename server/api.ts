@@ -11,7 +11,7 @@ import { open as openBrowser } from '../tools/browser-tool.js';
 import { getAllProjects, getProjectByCode } from '../config/projects.js';
 import { mergeByCode, mergeNova, mergeBizSolution, mergeScm } from '../tools/merge-tool.js';
 import { runWorkflowStep } from '../tools/workflow-tool.js';
-import { addManualTerminalToSession, getEmbeddedWorkflowSession, removeTerminalFromSession, startEmbeddedWorkflow } from '../tools/workflow-embedded-service.js';
+import { addManualTerminalToSession, closeEmbeddedWorkflowSession, getEmbeddedWorkflowSession, removeTerminalFromSession, startEmbeddedWorkflow } from '../tools/workflow-embedded-service.js';
 import { closeTerminalSession, getTerminalSessionOutput, resizeTerminalSession, writeTerminalSessionInput } from '../tools/terminal-session-service.js';
 import { promises as fs } from 'fs';
 import path from 'path';
@@ -268,6 +268,21 @@ app.get('/workflow/sessions/:sessionId', (req, res) => {
     createdAt: session.createdAt,
     terminals: session.terminals,
   });
+});
+
+/** 关闭整个内嵌工作会话（会优雅关闭会话下所有终端） */
+app.delete('/workflow/sessions/:sessionId', (req, res) => {
+  const sessionId = (req.params?.sessionId ?? '').trim();
+  if (!sessionId) {
+    res.status(400).json({ success: false, error: '缺少 sessionId' });
+    return;
+  }
+  const ok = closeEmbeddedWorkflowSession(sessionId);
+  if (!ok) {
+    res.status(404).json({ success: false, error: `会话不存在: ${sessionId}` });
+    return;
+  }
+  res.json({ success: true });
 });
 
 /** 在已有工作会话中新增手动终端 */

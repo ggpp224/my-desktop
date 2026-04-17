@@ -186,6 +186,19 @@ export function addManualTerminalToSession(sessionId: string): EmbeddedTerminalS
   return terminal;
 }
 
+export function openEmbeddedTerminalWorkspace(): { sessionId: string; terminals: EmbeddedTerminalSnapshot[] } {
+  const sessionId = randomUUID();
+  const session: EmbeddedSession = {
+    id: sessionId,
+    workflowName: 'open-terminal',
+    terminals: [],
+    createdAt: Date.now(),
+  };
+  sessions.set(sessionId, session);
+  const terminal = addManualTerminalToSession(sessionId);
+  return { sessionId, terminals: terminal ? [terminal] : [] };
+}
+
 export function removeTerminalFromSession(sessionId: string, terminalId: string): boolean {
   const session = sessions.get(sessionId);
   if (!session) return false;
@@ -196,5 +209,17 @@ export function removeTerminalFromSession(sessionId: string, terminalId: string)
     closeTerminalSession(terminal.terminalSessionId);
   }
   session.terminals.splice(index, 1);
+  return true;
+}
+
+export function closeEmbeddedWorkflowSession(sessionId: string): boolean {
+  const session = sessions.get(sessionId);
+  if (!session) return false;
+  session.terminals.forEach((terminal) => {
+    if (terminal.terminalSessionId) {
+      closeTerminalSession(terminal.terminalSessionId);
+    }
+  });
+  sessions.delete(sessionId);
   return true;
 }

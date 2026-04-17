@@ -87,6 +87,17 @@ export const toolsSchema = [
   {
     type: 'function' as const,
     function: {
+      name: 'open_terminal',
+      description: '打开内嵌终端工作区（我的工作），仅新建一个终端，不执行开始工作流',
+      parameters: {
+        type: 'object',
+        properties: {},
+      },
+    },
+  },
+  {
+    type: 'function' as const,
+    function: {
       name: 'run_workflow',
       description: '执行工作流。「开始工作」→ name=start-work；「升级集测react18的nova版本」→ name=upgrade-react18-nova；「升级集测cc-web的nova版本」→ name=upgrade-cc-web-nova',
       parameters: {

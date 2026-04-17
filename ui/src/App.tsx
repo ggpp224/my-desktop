@@ -51,6 +51,7 @@ export default function App() {
   const [helpOpen, setHelpOpen] = useState(false);
   const [activeHeaderTab, setActiveHeaderTab] = useState<string>(HEADER_TABS[0].key);
   const [headerTabs, setHeaderTabs] = useState<HeaderTab[]>(HEADER_TABS);
+  const [hoveredHeaderTab, setHoveredHeaderTab] = useState<string | null>(null);
   const [myWorkSessionId, setMyWorkSessionId] = useState('');
   const [myWorkTerminals, setMyWorkTerminals] = useState<WorkTerminal[]>([]);
   const [leftCollapsed, setLeftCollapsed] = useState(true);
@@ -125,9 +126,24 @@ export default function App() {
     setMyWorkTerminals(payload.terminals);
     setHeaderTabs((prev) => {
       if (prev.some((tab) => tab.key === 'my-work')) return prev;
-      return [...prev, { key: 'my-work', label: '我的工作' }];
+      return [...prev, { key: 'my-work', label: '终端' }];
     });
     setActiveHeaderTab('my-work');
+  };
+
+  const closeHeaderTab = async (tabKey: string) => {
+    if (tabKey === 'workspace') return;
+    if (tabKey === 'my-work' && myWorkSessionId) {
+      try {
+        await fetch(`${apiBase}/workflow/sessions/${encodeURIComponent(myWorkSessionId)}`, { method: 'DELETE' });
+      } catch {
+        // ignore close errors to keep UI responsive
+      }
+      setMyWorkSessionId('');
+      setMyWorkTerminals([]);
+    }
+    setHeaderTabs((prev) => prev.filter((tab) => tab.key !== tabKey));
+    setActiveHeaderTab((prev) => (prev === tabKey ? 'workspace' : prev));
   };
 
   return (
@@ -137,24 +153,71 @@ export default function App() {
           <nav aria-label="头部功能页签" style={{ display: 'flex', gap: 6 }}>
             {headerTabs.map((tab) => {
               const isActive = activeHeaderTab === tab.key;
+              const closable = tab.key !== 'workspace';
               return (
-                <button
+                <div
                   key={tab.key}
-                  type="button"
-                  onClick={() => setActiveHeaderTab(tab.key)}
+                  onMouseEnter={() => setHoveredHeaderTab(tab.key)}
+                  onMouseLeave={() => setHoveredHeaderTab((prev) => (prev === tab.key ? null : prev))}
                   style={{
-                    padding: '8px 16px',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    position: 'relative',
+                    padding: '8px 14px',
                     borderRadius: 6,
                     border: `1px solid ${isActive ? '#4f83ff' : '#334155'}`,
                     background: isActive ? '#1d4ed8' : '#0f172a',
                     color: '#e2e8f0',
                     fontSize: 14,
                     fontWeight: 600,
-                    cursor: 'pointer',
                   }}
                 >
-                  {tab.label}
-                </button>
+                  <button
+                    type="button"
+                    onClick={() => setActiveHeaderTab(tab.key)}
+                    style={{
+                      border: 'none',
+                      background: 'transparent',
+                      color: 'inherit',
+                      cursor: 'pointer',
+                      padding: 0,
+                      font: 'inherit',
+                      fontWeight: 600,
+                      minWidth: 72,
+                      textAlign: 'center',
+                    }}
+                  >
+                    {tab.label}
+                  </button>
+                  {closable && (
+                    <button
+                      type="button"
+                      onClick={() => void closeHeaderTab(tab.key)}
+                      title={`关闭 ${tab.label}`}
+                      style={{
+                        position: 'absolute',
+                        right: 8,
+                        top: '50%',
+                        transform: 'translateY(-50%)',
+                        border: 'none',
+                        background: 'transparent',
+                        color: '#cbd5e1',
+                        cursor: hoveredHeaderTab === tab.key ? 'pointer' : 'default',
+                        width: 16,
+                        height: 16,
+                        lineHeight: '16px',
+                        textAlign: 'center',
+                        padding: 0,
+                        opacity: hoveredHeaderTab === tab.key ? 1 : 0,
+                        pointerEvents: hoveredHeaderTab === tab.key ? 'auto' : 'none',
+                        transition: 'opacity 0.12s ease',
+                      }}
+                    >
+                      ×
+                    </button>
+                  )}
+                </div>
               );
             })}
           </nav>

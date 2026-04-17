@@ -1,14 +1,14 @@
 {
   "items": [
-    "部署nova",
-    "部署react18",
-    "部署cc-web",
-    "打开 Jenkins nova",
     "升级集测react18的nova版本",
     "升级集测cc-web的nova版本",
     "打开集测环境",
     "升级集测react18的nova版本",
     "升级集测cc-web的nova版本",
-    "开始工作"
+    "开始工作",
+    "打开终端",
+    "开始工作",
+    "打开终端",
+    "打开测试环境"
   ]
 }

@@ -15,7 +15,7 @@ import { run as shellRun } from '../tools/shell-tool.js';
 import { open as browserOpen } from '../tools/browser-tool.js';
 import { deploy as jenkinsDeploy } from '../tools/jenkins-tool.js';
 import { runWorkflow, runWorkflowStep } from '../tools/workflow-tool.js';
-import { startEmbeddedWorkflow } from '../tools/workflow-embedded-service.js';
+import { openEmbeddedTerminalWorkspace, startEmbeddedWorkflow } from '../tools/workflow-embedded-service.js';
 import { mergeNova, mergeBizSolution, mergeScm } from '../tools/merge-tool.js';
 import { openInIde } from '../tools/open-ide-tool.js';
 import { closeIdeProject } from '../tools/close-ide-tool.js';
@@ -72,6 +72,10 @@ export async function routeAndExecute(call: ToolCall): Promise<unknown> {
         return { success: true, embedded: true, ...embedded };
       }
       return runWorkflow(workflowName);
+    }
+    case 'open_terminal': {
+      const embedded = openEmbeddedTerminalWorkspace();
+      return { success: true, embedded: true, ...embedded };
     }
     case 'run_workflow_step': {
       const workflow = (args?.workflow as string) ?? 'start-work';

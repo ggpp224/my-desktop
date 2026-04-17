@@ -18,6 +18,7 @@ interface ChatPanelProps {
 
 const QUICK_ACTIONS: Array<{ label: string; message: string }> = [
   { label: '开始工作', message: '开始工作' },
+  { label: '打开终端', message: '打开终端' },
   { label: '打开 Jenkins', message: '打开 Jenkins' },
 ];
 
@@ -299,14 +300,15 @@ export function ChatPanel({ apiBase, addLog, onStartWorkEmbedded }: ChatPanelPro
     );
     const embeddedStartWork = data.toolResults?.find(
       (t): t is { tool: string; result?: { embedded?: boolean; sessionId?: string; terminals?: WorkTerminal[] } } =>
-        (t as { tool?: string }).tool === 'run_workflow' && (t as { result?: { embedded?: boolean } }).result?.embedded === true
+        ((t as { tool?: string }).tool === 'run_workflow' || (t as { tool?: string }).tool === 'open_terminal') &&
+        (t as { result?: { embedded?: boolean } }).result?.embedded === true
     );
     if (embeddedStartWork?.result?.sessionId) {
       onStartWorkEmbedded({
         sessionId: embeddedStartWork.result.sessionId,
         terminals: embeddedStartWork.result.terminals ?? [],
       });
-      addLog('开始工作已切换到内嵌终端（我的工作）');
+      addLog('已切换到内嵌终端（我的工作）');
     }
     const mergeSteps = (mergeResult?.result?.steps as string[] | undefined);
     appendToolResultsToLogs(data.toolResults, addLog);
