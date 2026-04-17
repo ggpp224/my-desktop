@@ -24,6 +24,18 @@ export const config = {
     username: process.env.JIRA_USERNAME || '',
     password: process.env.JIRA_PASSWORD || '',
   },
+  cursor: {
+    usageApiUrl:
+      process.env.CURSOR_USAGE_API_URL ||
+      'https://cursor.com/api/dashboard/get-aggregated-usage-events',
+    todayUsageApiUrl:
+      process.env.CURSOR_TODAY_USAGE_API_URL ||
+      'https://cursor.com/api/dashboard/get-filtered-usage-events',
+    /** Cursor Dashboard API token（可选，优先） */
+    token: process.env.CURSOR_API_TOKEN || '',
+    /** Cursor Dashboard API Cookie（可选） */
+    cookie: process.env.CURSOR_COOKIE || '',
+  },
   shell: {
     allowedCwd: process.env.SHELL_CWD || process.cwd(),
   },

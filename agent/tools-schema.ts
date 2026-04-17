@@ -115,6 +115,42 @@ export const toolsSchema = [
   {
     type: 'function' as const,
     function: {
+      name: 'get_cursor_usage',
+      description:
+        '查询 Cursor 用量（调用 dashboard 聚合用量 API）。用户说「cursor用量」「查询cursor用量」时调用，无参数',
+      parameters: {
+        type: 'object',
+        properties: {},
+      },
+    },
+  },
+  {
+    type: 'function' as const,
+    function: {
+      name: 'get_cursor_today_usage',
+      description:
+        '查询 Cursor 今日用量（调用 dashboard filtered usage API）。用户说「cursor今日用量」「查询cursor今日用量」时调用，无参数',
+      parameters: {
+        type: 'object',
+        properties: {},
+      },
+    },
+  },
+  {
+    type: 'function' as const,
+    function: {
+      name: 'sync_cursor_cookie',
+      description:
+        '从本机 Chrome 登录态自动同步 cursor.com Cookie 到运行时内存。用户说「同步cursor登录态」时调用，无参数',
+      parameters: {
+        type: 'object',
+        properties: {},
+      },
+    },
+  },
+  {
+    type: 'function' as const,
+    function: {
       name: 'open_terminal',
       description: '打开内嵌终端工作区（我的工作），仅新建一个终端，不执行开始工作流',
       parameters: {

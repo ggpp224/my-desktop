@@ -87,6 +87,7 @@ npm run pack:mac
 - **Ollama**：`OLLAMA_BASE`（默认 `http://localhost:11434`）、`OLLAMA_MODEL`（默认 `qwen2.5`）
 - **Jenkins**：`JENKINS_BASE_URL`、`JENKINS_TOKEN`（勿提交到代码库，使用环境变量或本地配置）
 - **Jira（8.8，非 token）**：`JIRA_BASE_URL`、`JIRA_USERNAME`、`JIRA_PASSWORD`
+- **Cursor 用量**：`CURSOR_API_TOKEN` 或 `CURSOR_COOKIE`（接口默认 `https://cursor.com/api/dashboard/get-aggregated-usage-events`）
 - **Shell 工作目录**：`SHELL_CWD`（默认当前工作目录）
 
 敏感信息请使用环境变量，不要硬编码。
@@ -103,6 +104,7 @@ npm run pack:mac
 | IDE 打开/关闭 | ws打开base、cursor打开scm、关闭ws的nova、关闭cursor的base |
 | 浏览器 / Shell | 打开 Jenkins、执行 xxx 命令 |
 | Jira | 我的bug、查询我的bug |
+| Cursor | cursor用量、查询cursor用量、cursor今日用量、查询cursor今日用量、同步cursor登录态 |
 
 项目代号与 `config/projects` 一致，可扩展。
 

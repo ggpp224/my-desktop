@@ -20,7 +20,25 @@ import { mergeNova, mergeBizSolution, mergeScm } from '../tools/merge-tool.js';
 import { openInIde } from '../tools/open-ide-tool.js';
 import { closeIdeProject } from '../tools/close-ide-tool.js';
 import { searchMyBugs, searchOnlineBugs } from '../tools/jira-tool.js';
+import { getCursorTodayUsage, getCursorUsage } from '../tools/cursor-usage-tool.js';
+import { syncCursorCookieFromChrome } from '../tools/cursor-cookie-sync-tool.js';
 import type { ToolCall } from './ollama-client.js';
+
+async function withCursorAutoSync<T extends object>(executor: () => Promise<T>): Promise<T> {
+  try {
+    return await executor();
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    const needCookie =
+      msg.includes('CURSOR_API_TOKEN') ||
+      msg.includes('CURSOR_COOKIE') ||
+      msg.includes('认证信息缺失');
+    if (!needCookie) throw err;
+    const syncResult = await syncCursorCookieFromChrome();
+    const result = await executor();
+    return { ...result, authSync: syncResult } as T;
+  }
+}
 
 export async function routeAndExecute(call: ToolCall): Promise<unknown> {
   const { name, arguments: args } = call;
@@ -86,6 +104,14 @@ export async function routeAndExecute(call: ToolCall): Promise<unknown> {
       const maxResults = Number(args?.maxResults ?? 20);
       return searchOnlineBugs(maxResults);
     }
+    case 'get_cursor_usage': {
+      return withCursorAutoSync(getCursorUsage);
+    }
+    case 'get_cursor_today_usage': {
+      return withCursorAutoSync(getCursorTodayUsage);
+    }
+    case 'sync_cursor_cookie':
+      return syncCursorCookieFromChrome();
     case 'run_workflow_step': {
       const workflow = (args?.workflow as string) ?? 'start-work';
       const taskKey = (args?.taskKey as string) ?? '';

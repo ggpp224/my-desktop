@@ -20,6 +20,31 @@ type JiraBugItem = {
   url?: string;
 };
 type JiraBugPayload = { total?: number; issues?: JiraBugItem[] };
+type CursorUsageToolResult = {
+  success?: boolean;
+  fetchedAt?: string;
+  data?: unknown;
+};
+type CursorUsageRow = {
+  item: string;
+  tokensText: string;
+  costText: string;
+  includedText: string;
+  tokensNumber?: number;
+  costNumber?: number;
+};
+type CursorTodayUsageEvent = {
+  timestamp?: string;
+  model?: string;
+  kind?: string;
+  chargedCents?: number;
+  tokenUsage?: {
+    inputTokens?: number;
+    outputTokens?: number;
+    cacheReadTokens?: number;
+    cacheWriteTokens?: number;
+  };
+};
 
 interface ChatPanelProps {
   apiBase: string;
@@ -31,6 +56,8 @@ const QUICK_ACTIONS: Array<{ label: string; message: string }> = [
   { label: '开始工作', message: '开始工作' },
   { label: '打开终端', message: '打开终端' },
   { label: '线上bug', message: '线上bug' },
+  { label: 'cursor用量', message: 'cursor用量' },
+  { label: 'cursor今日用量', message: 'cursor今日用量' },
 ];
 
 /** 合并菜单项：走 SSE 流式接口，每步实时写入 Logs */
@@ -81,6 +108,9 @@ function buildCommandHints(projects: ProjectInfo[], inputHistory: string[]): str
     '打开 Jenkins',
     '我的bug',
     '线上bug',
+    'cursor用量',
+    '同步cursor登录态',
+    'cursor今日用量',
   ];
   const allCodes = Array.from(new Set(projects.flatMap((p) => p.codes)));
   const jenkinsCodes = Array.from(new Set(projects.filter((p) => p.jenkins).flatMap((p) => p.codes)));
@@ -132,6 +162,302 @@ function extractMyBugsResult(toolResults?: unknown[]): JiraBugPayload | null {
   const payload = row.result as JiraBugPayload;
   if (!Array.isArray(payload.issues)) return null;
   return payload;
+}
+
+function extractCursorUsageResult(toolResults?: unknown[]): CursorUsageToolResult | null {
+  if (!Array.isArray(toolResults)) return null;
+  const row = toolResults.find(
+    (item) =>
+      ((item as ToolResultItem | undefined)?.tool === 'get_cursor_usage' ||
+        (item as ToolResultItem | undefined)?.tool === 'get_cursor_today_usage') &&
+      (item as ToolResultItem | undefined)?.result
+  ) as ToolResultItem | undefined;
+  if (!row || typeof row.result !== 'object' || row.result == null) return null;
+  return row.result as CursorUsageToolResult;
+}
+
+function pickString(obj: Record<string, unknown>, keys: string[]): string {
+  for (const key of keys) {
+    const value = obj[key];
+    if (typeof value === 'string' && value.trim()) return value.trim();
+  }
+  return '';
+}
+
+function pickNumber(obj: Record<string, unknown>, keys: string[]): number | undefined {
+  for (const key of keys) {
+    const value = obj[key];
+    if (typeof value === 'number' && Number.isFinite(value)) return value;
+    if (typeof value === 'string' && value.trim()) {
+      const n = Number(value);
+      if (Number.isFinite(n)) return n;
+    }
+  }
+  return undefined;
+}
+
+function formatTokens(value: number | undefined, fallback = '--'): string {
+  if (value == null || !Number.isFinite(value)) return fallback;
+  const compact = new Intl.NumberFormat('zh-CN', { notation: 'compact', maximumFractionDigits: 1 }).format(value);
+  return `${compact} tokens`;
+}
+
+function formatCost(value: number | undefined, fallback = '--'): string {
+  if (value == null || !Number.isFinite(value)) return fallback;
+  return `US$${value.toFixed(2)}`;
+}
+
+function formatTokenCompact(value: number | undefined, fallback = '--'): string {
+  if (value == null || !Number.isFinite(value)) return fallback;
+  return new Intl.NumberFormat('zh-CN', { notation: 'compact', maximumFractionDigits: 1 }).format(value);
+}
+
+function toNumberSafe(value: unknown): number | undefined {
+  if (typeof value === 'number' && Number.isFinite(value)) return value;
+  if (typeof value === 'string' && value.trim()) {
+    const n = Number(value);
+    if (Number.isFinite(n)) return n;
+  }
+  return undefined;
+}
+
+function formatUsageDate(timestamp: string | undefined): string {
+  const ms = toNumberSafe(timestamp);
+  if (ms == null) return '--';
+  const d = new Date(ms);
+  const pad = (n: number) => String(n).padStart(2, '0');
+  const yyyy = d.getFullYear();
+  const mm = pad(d.getMonth() + 1);
+  const dd = pad(d.getDate());
+  const hh = pad(d.getHours());
+  const mi = pad(d.getMinutes());
+  return `${yyyy}-${mm}-${dd} ${hh}:${mi}`;
+}
+
+function mapUsageKind(kind: string | undefined): string {
+  if (!kind) return '--';
+  if (kind.includes('INCLUDED')) return 'Included';
+  if (kind.includes('PREMIUM')) return 'Premium';
+  return kind.replace(/^USAGE_EVENT_KIND_/, '').toLowerCase();
+}
+
+function normalizeCursorRows(data: unknown): CursorUsageRow[] {
+  const rows: CursorUsageRow[] = [];
+  const pushAggregationRow = (record: Record<string, unknown>) => {
+    const item = pickString(record, ['modelIntent', 'model_intent', 'intent', 'name']) || 'unknown';
+    const input = pickNumber(record, ['inputTokens', 'input_tokens']) ?? 0;
+    const output = pickNumber(record, ['outputTokens', 'output_tokens']) ?? 0;
+    const cacheRead = pickNumber(record, ['cacheReadTokens', 'cache_read_tokens']) ?? 0;
+    const cacheWrite = pickNumber(record, ['cacheWriteTokens', 'cache_write_tokens']) ?? 0;
+    const tokensNumber = input + output + cacheRead + cacheWrite;
+    const costCents = pickNumber(record, ['totalCents', 'total_cents']);
+    const costNumber = costCents != null ? costCents / 100 : undefined;
+    rows.push({
+      item,
+      tokensText: formatTokens(tokensNumber),
+      costText: formatCost(costNumber),
+      includedText: 'Included',
+      tokensNumber,
+      costNumber,
+    });
+  };
+  const pushRow = (record: Record<string, unknown>) => {
+    const item = pickString(record, ['item', 'name', 'model', 'label', 'type']);
+    const tokensNumber = pickNumber(record, ['tokens', 'tokenCount', 'totalTokens', 'usageTokens']);
+    const costNumber = pickNumber(record, ['cost', 'totalCost', 'usdCost', 'amount']);
+    const tokensText = pickString(record, ['tokensText', 'tokenText']) || formatTokens(tokensNumber);
+    const costText = pickString(record, ['costText']) || formatCost(costNumber);
+    const includedFlag = record.included ?? record.includedInPro ?? record.isIncluded;
+    const includedText =
+      typeof record.includedText === 'string'
+        ? record.includedText
+        : includedFlag === true
+          ? 'Included'
+          : includedFlag === false
+            ? '--'
+            : 'Included';
+    if (!item) return;
+    rows.push({ item, tokensText, costText, includedText, tokensNumber, costNumber });
+  };
+
+  const scanArray = (input: unknown[]) => {
+    for (const item of input) {
+      if (item && typeof item === 'object' && !Array.isArray(item)) {
+        pushRow(item as Record<string, unknown>);
+      }
+    }
+  };
+
+  if (Array.isArray(data)) {
+    scanArray(data);
+    return rows;
+  }
+  if (!data || typeof data !== 'object') return rows;
+  const dataRecord = data as Record<string, unknown>;
+  const root =
+    dataRecord.response && typeof dataRecord.response === 'object'
+      ? (dataRecord.response as Record<string, unknown>)
+      : dataRecord;
+  const aggregations = root.aggregations;
+  if (Array.isArray(aggregations)) {
+    for (const item of aggregations) {
+      if (item && typeof item === 'object' && !Array.isArray(item)) {
+        pushAggregationRow(item as Record<string, unknown>);
+      }
+    }
+    if (rows.length > 0) return rows;
+  }
+  const candidateLists = ['items', 'rows', 'models', 'usage', 'events', 'data', 'aggregatedUsage', 'aggregated_usage'];
+  for (const key of candidateLists) {
+    const value = root[key];
+    if (Array.isArray(value)) scanArray(value);
+  }
+  if (rows.length > 0) return rows;
+  for (const [key, value] of Object.entries(root)) {
+    if (!value || typeof value !== 'object' || Array.isArray(value)) continue;
+    const obj = value as Record<string, unknown>;
+    const tokensNumber = pickNumber(obj, ['tokens', 'tokenCount', 'totalTokens', 'usageTokens']);
+    const costNumber = pickNumber(obj, ['cost', 'totalCost', 'usdCost', 'amount']);
+    if (tokensNumber == null && costNumber == null) continue;
+    rows.push({
+      item: key,
+      tokensText: formatTokens(tokensNumber),
+      costText: formatCost(costNumber),
+      includedText: 'Included',
+      tokensNumber,
+      costNumber,
+    });
+  }
+  return rows;
+}
+
+function renderCursorUsage(toolResults?: unknown[]) {
+  const payload = extractCursorUsageResult(toolResults);
+  if (!payload) return null;
+  const dataObj = payload.data && typeof payload.data === 'object' ? (payload.data as Record<string, unknown>) : {};
+  const rows = normalizeCursorRows(payload.data);
+  if (!rows.length) return null;
+  const rangeText = (() => {
+    const startRaw =
+      pickString(dataObj, ['startDate', 'start_date', 'from', 'periodStart']) ||
+      pickString((dataObj.request as Record<string, unknown>) || {}, ['startDate', 'start_date', 'from', 'periodStart']);
+    const startNum =
+      pickNumber(dataObj, ['startDate', 'start_date', 'from', 'periodStart']) ??
+      pickNumber((dataObj.request as Record<string, unknown>) || {}, ['startDate', 'start_date', 'from', 'periodStart']);
+    const end = pickString(dataObj, ['endDate', 'end_date', 'to', 'periodEnd']);
+    const startText =
+      startRaw ||
+      (startNum != null && Number.isFinite(startNum)
+        ? new Date(startNum).toLocaleString('zh-CN', { hour12: false })
+        : '');
+    if (startText && end) return `${startText} - ${end}`;
+    if (startText) return `Start: ${startText}`;
+    return '';
+  })();
+  const totalTokens = rows.reduce((sum, row) => sum + (row.tokensNumber ?? 0), 0);
+  const totalCost = rows.reduce((sum, row) => sum + (row.costNumber ?? 0), 0);
+  return (
+    <div style={{ marginTop: 8, background: '#f3f4f6', color: '#111827', borderRadius: 6, border: '1px solid #d1d5db', padding: 12 }}>
+      {rangeText && <div style={{ fontSize: 13, marginBottom: 10, color: '#374151' }}>{rangeText}</div>}
+      <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 14 }}>
+        <thead>
+          <tr>
+            <th style={{ textAlign: 'left', padding: '8px 10px', borderBottom: '1px solid #d1d5db', color: '#4b5563' }}>Item</th>
+            <th style={{ textAlign: 'right', padding: '8px 10px', borderBottom: '1px solid #d1d5db', color: '#4b5563' }}>Tokens</th>
+            <th style={{ textAlign: 'right', padding: '8px 10px', borderBottom: '1px solid #d1d5db', color: '#4b5563' }}>Cost</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td style={{ padding: '10px', borderBottom: '1px solid #d1d5db', fontWeight: 600 }}>Included in Pro</td>
+            <td style={{ borderBottom: '1px solid #d1d5db' }} />
+            <td style={{ borderBottom: '1px solid #d1d5db' }} />
+          </tr>
+          {rows.map((row, idx) => (
+            <tr key={`${row.item}-${idx}`}>
+              <td style={{ padding: '9px 10px', borderBottom: '1px solid #e5e7eb' }}>{row.item}</td>
+              <td style={{ padding: '9px 10px', borderBottom: '1px solid #e5e7eb', textAlign: 'right', whiteSpace: 'nowrap' }}>{row.tokensText}</td>
+              <td style={{ padding: '9px 10px', borderBottom: '1px solid #e5e7eb', textAlign: 'right', whiteSpace: 'nowrap' }}>
+                {row.costText} <span style={{ color: '#6b7280' }}>{row.includedText}</span>
+              </td>
+            </tr>
+          ))}
+          <tr>
+            <td style={{ padding: '10px', fontWeight: 600 }}>Total</td>
+            <td style={{ padding: '10px', textAlign: 'right', fontWeight: 600, whiteSpace: 'nowrap' }}>{formatTokens(totalTokens, '--')}</td>
+            <td style={{ padding: '10px', textAlign: 'right', fontWeight: 600, whiteSpace: 'nowrap' }}>
+              {formatCost(totalCost, '--')} <span style={{ color: '#6b7280', fontWeight: 400 }}>Included</span>
+            </td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
+function renderCursorTodayUsage(toolResults?: unknown[]) {
+  if (!Array.isArray(toolResults)) return null;
+  const row = toolResults.find(
+    (item) => (item as ToolResultItem | undefined)?.tool === 'get_cursor_today_usage' && (item as ToolResultItem | undefined)?.result
+  ) as ToolResultItem | undefined;
+  if (!row || typeof row.result !== 'object' || row.result == null) return null;
+  const payload = row.result as CursorUsageToolResult;
+  const dataObj =
+    payload.data && typeof payload.data === 'object' ? (payload.data as Record<string, unknown>) : {};
+  const response =
+    dataObj.response && typeof dataObj.response === 'object'
+      ? (dataObj.response as Record<string, unknown>)
+      : {};
+  const usageEvents = Array.isArray(response.usageEventsDisplay)
+    ? (response.usageEventsDisplay as CursorTodayUsageEvent[])
+    : [];
+  if (!usageEvents.length) return null;
+
+  const rows = usageEvents.map((event) => {
+    const input = toNumberSafe(event.tokenUsage?.inputTokens) ?? 0;
+    const output = toNumberSafe(event.tokenUsage?.outputTokens) ?? 0;
+    const cacheRead = toNumberSafe(event.tokenUsage?.cacheReadTokens) ?? 0;
+    const cacheWrite = toNumberSafe(event.tokenUsage?.cacheWriteTokens) ?? 0;
+    const tokens = input + output + cacheRead + cacheWrite;
+    const cents = toNumberSafe(event.chargedCents);
+    const usd = cents != null ? cents / 100 : undefined;
+    return {
+      date: formatUsageDate(event.timestamp),
+      type: mapUsageKind(event.kind),
+      model: event.model || '--',
+      tokensText: formatTokenCompact(tokens),
+      costText: `${formatCost(usd)} Included`,
+    };
+  });
+
+  return (
+    <div style={{ marginTop: 8, background: '#f3f4f6', color: '#111827', borderRadius: 10, border: '1px solid #d1d5db', padding: 10 }}>
+      <div style={{ overflowX: 'auto' }}>
+        <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 14 }}>
+          <thead>
+            <tr>
+              <th style={{ textAlign: 'left', padding: '8px 10px', borderBottom: '1px solid #d1d5db', color: '#6b7280' }}>Date</th>
+              <th style={{ textAlign: 'left', padding: '8px 10px', borderBottom: '1px solid #d1d5db', color: '#6b7280' }}>Type</th>
+              <th style={{ textAlign: 'left', padding: '8px 10px', borderBottom: '1px solid #d1d5db', color: '#6b7280' }}>Model</th>
+              <th style={{ textAlign: 'right', padding: '8px 10px', borderBottom: '1px solid #d1d5db', color: '#6b7280' }}>Tokens</th>
+              <th style={{ textAlign: 'right', padding: '8px 10px', borderBottom: '1px solid #d1d5db', color: '#6b7280' }}>Cost</th>
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map((item, idx) => (
+              <tr key={`${item.date}-${idx}`}>
+                <td style={{ padding: '10px', borderBottom: '1px solid #e5e7eb' }}>{item.date}</td>
+                <td style={{ padding: '10px', borderBottom: '1px solid #e5e7eb' }}>{item.type}</td>
+                <td style={{ padding: '10px', borderBottom: '1px solid #e5e7eb' }}>{item.model}</td>
+                <td style={{ padding: '10px', borderBottom: '1px solid #e5e7eb', textAlign: 'right', whiteSpace: 'nowrap' }}>{item.tokensText}</td>
+                <td style={{ padding: '10px', borderBottom: '1px solid #e5e7eb', textAlign: 'right', whiteSpace: 'nowrap' }}>{item.costText}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
 }
 
 function renderToolResults(toolResults?: unknown[]) {
@@ -187,6 +513,10 @@ function renderToolResults(toolResults?: unknown[]) {
       </div>
     );
   }
+  const cursorTodayUsage = renderCursorTodayUsage(toolResults);
+  if (cursorTodayUsage) return cursorTodayUsage;
+  const cursorUsage = renderCursorUsage(toolResults);
+  if (cursorUsage) return cursorUsage;
   if (toolResults && toolResults.length > 0) {
     return (
       <pre style={{ marginTop: 8, fontSize: 12, background: '#1a1a2e', padding: 8, borderRadius: 4, overflow: 'auto' }}>
@@ -209,6 +539,7 @@ export function ChatPanel({ apiBase, addLog, onStartWorkEmbedded }: ChatPanelPro
   const [projects, setProjects] = useState<ProjectInfo[]>([]);
   const deployPollRef = useRef<{ stop: () => void } | null>(null);
   const inputWrapRef = useRef<HTMLDivElement>(null);
+  const feedbackListRef = useRef<HTMLDivElement>(null);
   const historyIndexRef = useRef(-1);
   const savedInputRef = useRef('');
 
@@ -263,6 +594,12 @@ export function ChatPanel({ apiBase, addLog, onStartWorkEmbedded }: ChatPanelPro
     if (showCompletion) document.addEventListener('click', onOutside);
     return () => document.removeEventListener('click', onOutside);
   }, [showCompletion]);
+
+  useEffect(() => {
+    const el = feedbackListRef.current;
+    if (!el) return;
+    el.scrollTop = el.scrollHeight;
+  }, [messages, loading]);
 
   const executeMerge = async (path: string, doneLabel: string) => {
     if (!apiBase) return;
@@ -474,7 +811,7 @@ export function ChatPanel({ apiBase, addLog, onStartWorkEmbedded }: ChatPanelPro
           ⊗
         </button>
       </div>
-      <div style={{ flex: 1, overflow: 'auto', marginBottom: 12, background: '#0d0d1a', borderRadius: 8, padding: 12 }}>
+      <div ref={feedbackListRef} style={{ flex: 1, overflow: 'auto', marginBottom: 12, background: '#0d0d1a', borderRadius: 8, padding: 12 }}>
         {messages.length === 0 && (
           <p style={{ color: '#888' }}>[Chat] 输入指令或点击上方快捷按钮，例如：开始工作、升级集测react18的nova版本、升级集测cc-web的nova版本、启动 react18、打开 Jenkins、部署order-service</p>
         )}
