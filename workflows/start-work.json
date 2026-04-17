@@ -5,7 +5,6 @@
     { "tool": "shell", "cmd": "yarn dev", "visible": true, "taskKey": "cc-web", "cwdCode": "cc-web2" },
     { "tool": "shell", "cmd": "yarn dev", "visible": true, "taskKey": "biz-solution", "cwdCode": "biz-solution" },
     { "tool": "shell", "cmd": "yarn dev", "visible": true, "taskKey": "uikit", "cwdCode": "uikit" },
-    { "tool": "shell", "cmd": "yarn dev", "visible": true, "taskKey": "shared", "cwdCode": "shared" },
-    { "tool": "shell", "cmd": "docker compose up -d" }
+    { "tool": "shell", "cmd": "yarn dev", "visible": true, "taskKey": "shared", "cwdCode": "shared" }
   ]
 }

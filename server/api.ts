@@ -11,6 +11,8 @@ import { open as openBrowser } from '../tools/browser-tool.js';
 import { getAllProjects, getProjectByCode } from '../config/projects.js';
 import { mergeByCode, mergeNova, mergeBizSolution, mergeScm } from '../tools/merge-tool.js';
 import { runWorkflowStep } from '../tools/workflow-tool.js';
+import { addManualTerminalToSession, getEmbeddedWorkflowSession, startEmbeddedWorkflow } from '../tools/workflow-embedded-service.js';
+import { getTerminalSessionOutput, resizeTerminalSession, writeTerminalSessionInput } from '../tools/terminal-session-service.js';
 import { promises as fs } from 'fs';
 import path from 'path';
 
@@ -233,6 +235,107 @@ app.post('/workflow/:workflowName/step', async (req, res) => {
     const msg = err instanceof Error ? err.message : String(err);
     res.status(500).json({ success: false, error: msg });
   }
+});
+
+/** 启动内嵌工作流终端：用于 UI 子页签展示，不再依赖外部终端 */
+app.post('/workflow/:workflowName/embedded', async (req, res) => {
+  const workflowName = (req.params?.workflowName ?? '').trim() || 'start-work';
+  try {
+    const result = await startEmbeddedWorkflow(workflowName);
+    res.json({ success: true, ...result });
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    res.status(500).json({ success: false, error: msg });
+  }
+});
+
+/** 查询内嵌工作流会话快照：前端轮询获取各终端输出 */
+app.get('/workflow/sessions/:sessionId', (req, res) => {
+  const sessionId = (req.params?.sessionId ?? '').trim();
+  if (!sessionId) {
+    res.status(400).json({ success: false, error: '缺少 sessionId' });
+    return;
+  }
+  const session = getEmbeddedWorkflowSession(sessionId);
+  if (!session) {
+    res.status(404).json({ success: false, error: `会话不存在: ${sessionId}` });
+    return;
+  }
+  res.json({
+    success: true,
+    sessionId: session.id,
+    workflowName: session.workflowName,
+    createdAt: session.createdAt,
+    terminals: session.terminals,
+  });
+});
+
+/** 在已有工作会话中新增手动终端 */
+app.post('/workflow/sessions/:sessionId/terminals', (req, res) => {
+  const sessionId = (req.params?.sessionId ?? '').trim();
+  if (!sessionId) {
+    res.status(400).json({ success: false, error: '缺少 sessionId' });
+    return;
+  }
+  const terminal = addManualTerminalToSession(sessionId);
+  if (!terminal) {
+    res.status(404).json({ success: false, error: `会话不存在: ${sessionId}` });
+    return;
+  }
+  res.json({ success: true, terminal });
+});
+
+/** 获取终端增量输出（from=上次 seq），用于 xterm 渲染 */
+app.get('/terminal/sessions/:sessionId/output', (req, res) => {
+  const sessionId = (req.params?.sessionId ?? '').trim();
+  const from = Number((req.query?.from ?? 0).toString());
+  if (!sessionId) {
+    res.status(400).json({ success: false, error: '缺少 sessionId' });
+    return;
+  }
+  const data = getTerminalSessionOutput(sessionId, Number.isFinite(from) ? from : 0);
+  if (!data) {
+    res.status(404).json({ success: false, error: `终端会话不存在: ${sessionId}` });
+    return;
+  }
+  res.json({ success: true, ...data });
+});
+
+/** 写入终端输入，支持回车/编辑/快捷键 */
+app.post('/terminal/sessions/:sessionId/input', (req, res) => {
+  const sessionId = (req.params?.sessionId ?? '').trim();
+  const data = (req.body?.data ?? '').toString();
+  if (!sessionId) {
+    res.status(400).json({ success: false, error: '缺少 sessionId' });
+    return;
+  }
+  if (!data) {
+    res.status(400).json({ success: false, error: '缺少 data' });
+    return;
+  }
+  const ok = writeTerminalSessionInput(sessionId, data);
+  if (!ok) {
+    res.status(404).json({ success: false, error: `终端会话不存在: ${sessionId}` });
+    return;
+  }
+  res.json({ success: true });
+});
+
+/** 通知后端终端尺寸变化，保证 curses 类程序正常显示 */
+app.post('/terminal/sessions/:sessionId/resize', (req, res) => {
+  const sessionId = (req.params?.sessionId ?? '').trim();
+  const cols = Number(req.body?.cols ?? 80);
+  const rows = Number(req.body?.rows ?? 24);
+  if (!sessionId) {
+    res.status(400).json({ success: false, error: '缺少 sessionId' });
+    return;
+  }
+  const ok = resizeTerminalSession(sessionId, cols, rows);
+  if (!ok) {
+    res.status(404).json({ success: false, error: `终端会话不存在: ${sessionId}` });
+    return;
+  }
+  res.json({ success: true });
 });
 
 /** 合并 nova：SSE 流式输出每步，前端可实时展示 */

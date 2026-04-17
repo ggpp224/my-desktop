@@ -50,11 +50,17 @@ export function runInTerminal(command: string): Promise<void> {
 
 export function run(command: string, options?: { requireConfirmation?: boolean }): Promise<{ stdout: string; stderr: string; code: number | null }> {
   const cwd = config.shell.allowedCwd;
+  const basePath = process.env.PATH || '';
+  const extraPaths = ['/opt/homebrew/bin', '/usr/local/bin', '/usr/bin', '/bin'];
+  const mergedPath = [...extraPaths, ...basePath.split(':').filter(Boolean)]
+    .filter((item, index, arr) => arr.indexOf(item) === index)
+    .join(':');
+  const env = { ...process.env, PATH: mergedPath };
   if (options?.requireConfirmation && isDangerous(command)) {
     return Promise.reject(new Error('该命令被判定为高危，需要用户确认后再执行。'));
   }
   return new Promise((resolve, reject) => {
-    exec(command, { cwd, maxBuffer: 2 * 1024 * 1024 }, (err, stdout, stderr) => {
+    exec(command, { cwd, env, maxBuffer: 2 * 1024 * 1024 }, (err, stdout, stderr) => {
       if (err && err.code !== undefined) {
         resolve({ stdout, stderr, code: err.code });
         return;

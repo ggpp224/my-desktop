@@ -1,13 +1,15 @@
 /* AI 生成 By Peng.Guo */
 import { useState } from 'react';
 import { appendToolResultsToLogs } from './log-tools';
+import type { WorkTerminal } from './MyWorkPanel';
 
 interface WorkflowPanelProps {
   apiBase: string;
   addLog: (line: string) => void;
+  onStartWorkEmbedded: (payload: { sessionId: string; terminals: WorkTerminal[] }) => void;
 }
 
-export function WorkflowPanel({ apiBase, addLog }: WorkflowPanelProps) {
+export function WorkflowPanel({ apiBase, addLog, onStartWorkEmbedded }: WorkflowPanelProps) {
   const [workflows] = useState<Array<{ name: string; label: string }>>([
     { name: 'start-work', label: '开始工作' },
     { name: 'upgrade-react18-nova', label: '升级集测 react18 的 nova 版本' },
@@ -19,14 +21,29 @@ export function WorkflowPanel({ apiBase, addLog }: WorkflowPanelProps) {
     setRunning(true);
     addLog(`执行工作流: ${label}（${name}）`);
     try {
-      const res = await fetch(`${apiBase}/agent/chat`, {
+      if (name === 'start-work') {
+        const res = await fetch(`${apiBase}/workflow/${name}/embedded`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+        });
+        const data = await res.json();
+        if (!res.ok || !data.success) {
+          addLog(`失败: ${data.error || '启动内嵌工作流失败'}`);
+          return;
+        }
+        onStartWorkEmbedded({ sessionId: data.sessionId, terminals: data.terminals ?? [] });
+        addLog(`工作流 ${label} 已在“我的工作”中启动`);
+        return;
+      }
+
+      const chatRes = await fetch(`${apiBase}/agent/chat`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ message: `执行工作流 ${name}` }),
       });
-      const data = await res.json();
-      appendToolResultsToLogs(data.toolResults, addLog);
-      addLog(data.success ? `工作流 ${label} 完成` : `失败: ${data.error}`);
+      const chatData = await chatRes.json();
+      appendToolResultsToLogs(chatData.toolResults, addLog);
+      addLog(chatData.success ? `工作流 ${label} 完成` : `失败: ${chatData.error}`);
     } catch (e) {
       addLog(`请求失败: ${e}`);
     } finally {

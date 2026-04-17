@@ -5,6 +5,7 @@ import { withJenkinsMarkdownLink } from './domain/deploy/jenkinsDeployDisplay';
 import type { DeployPollingTarget } from './domain/deploy/models';
 import { LinkifiedText } from './view/LinkifiedText';
 import { startDeployPolling } from './viewmodel/deploy/useDeployPolling';
+import type { WorkTerminal } from './MyWorkPanel';
 
 type AgentTiming = { firstLLMMs?: number; tools?: { name: string; ms: number }[]; secondLLMMs?: number; tokenUsage?: { promptTokens?: number; completionTokens?: number } };
 type AgentResult = { success: boolean; text?: string; toolResults?: unknown[]; error?: string; timing?: AgentTiming };
@@ -12,6 +13,7 @@ type AgentResult = { success: boolean; text?: string; toolResults?: unknown[]; e
 interface ChatPanelProps {
   apiBase: string;
   addLog: (line: string) => void;
+  onStartWorkEmbedded: (payload: { sessionId: string; terminals: WorkTerminal[] }) => void;
 }
 
 const QUICK_ACTIONS: Array<{ label: string; message: string }> = [
@@ -104,7 +106,7 @@ function buildCommandHints(projects: ProjectInfo[], inputHistory: string[]): str
   );
 }
 
-export function ChatPanel({ apiBase, addLog }: ChatPanelProps) {
+export function ChatPanel({ apiBase, addLog, onStartWorkEmbedded }: ChatPanelProps) {
   const [input, setInput] = useState('');
   const [inputHistory, setInputHistory] = useState<string[]>([]);
   const [loading, setLoading] = useState(false);
@@ -295,6 +297,17 @@ export function ChatPanel({ apiBase, addLog }: ChatPanelProps) {
       (t): t is { tool: string; result?: { steps?: string[] } } =>
         (t as { tool: string }).tool === 'merge_repo' && (t as { result?: unknown }).result != null
     );
+    const embeddedStartWork = data.toolResults?.find(
+      (t): t is { tool: string; result?: { embedded?: boolean; sessionId?: string; terminals?: WorkTerminal[] } } =>
+        (t as { tool?: string }).tool === 'run_workflow' && (t as { result?: { embedded?: boolean } }).result?.embedded === true
+    );
+    if (embeddedStartWork?.result?.sessionId) {
+      onStartWorkEmbedded({
+        sessionId: embeddedStartWork.result.sessionId,
+        terminals: embeddedStartWork.result.terminals ?? [],
+      });
+      addLog('开始工作已切换到内嵌终端（我的工作）');
+    }
     const mergeSteps = (mergeResult?.result?.steps as string[] | undefined);
     appendToolResultsToLogs(data.toolResults, addLog);
     if (Array.isArray(mergeSteps) && mergeSteps.length > 0) mergeSteps.forEach((step) => addLog(step));

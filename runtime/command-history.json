@@ -1,6 +1,5 @@
 {
   "items": [
-    "合并 nova",
     "部署nova",
     "部署react18",
     "部署cc-web",
@@ -9,6 +8,7 @@
     "升级集测cc-web的nova版本",
     "打开集测环境",
     "升级集测react18的nova版本",
-    "升级集测cc-web的nova版本"
+    "升级集测cc-web的nova版本",
+    "开始工作"
   ]
 }

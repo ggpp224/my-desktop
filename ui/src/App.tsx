@@ -4,12 +4,12 @@ import { ChatPanel } from './ChatPanel';
 import { WorkflowPanel } from './WorkflowPanel';
 import { ToolPanel } from './ToolPanel';
 import { LogsPanel } from './LogsPanel';
+import { MyWorkPanel, type WorkTerminal } from './MyWorkPanel';
 
 const DEFAULT_API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:3000';
 type HeaderTab = { key: string; label: string };
 const HEADER_TABS: HeaderTab[] = [
   { key: 'workspace', label: 'AI Dev Control Center' },
-  { key: 'settings', label: '配置中心' },
 ];
 
 /** 帮助弹层：可用指令及说明（与 docs/可用指令.md 一致） */
@@ -50,6 +50,9 @@ export default function App() {
   const [ollamaOk, setOllamaOk] = useState<boolean | null>(null);
   const [helpOpen, setHelpOpen] = useState(false);
   const [activeHeaderTab, setActiveHeaderTab] = useState<string>(HEADER_TABS[0].key);
+  const [headerTabs, setHeaderTabs] = useState<HeaderTab[]>(HEADER_TABS);
+  const [myWorkSessionId, setMyWorkSessionId] = useState('');
+  const [myWorkTerminals, setMyWorkTerminals] = useState<WorkTerminal[]>([]);
   const [leftCollapsed, setLeftCollapsed] = useState(true);
   const [rightWidth, setRightWidth] = useState(400);
   const [resizing, setResizing] = useState(false);
@@ -117,12 +120,22 @@ export default function App() {
     );
   }
 
+  const onStartWorkEmbedded = (payload: { sessionId: string; terminals: WorkTerminal[] }) => {
+    setMyWorkSessionId(payload.sessionId);
+    setMyWorkTerminals(payload.terminals);
+    setHeaderTabs((prev) => {
+      if (prev.some((tab) => tab.key === 'my-work')) return prev;
+      return [...prev, { key: 'my-work', label: '我的工作' }];
+    });
+    setActiveHeaderTab('my-work');
+  };
+
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100vh' }}>
       <header style={{ padding: '12px 16px', borderBottom: '1px solid #333', background: '#16213e', display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 16 }}>
         <div style={{ flex: 1, minWidth: 0 }}>
           <nav aria-label="头部功能页签" style={{ display: 'flex', gap: 6 }}>
-            {HEADER_TABS.map((tab) => {
+            {headerTabs.map((tab) => {
               const isActive = activeHeaderTab === tab.key;
               return (
                 <button
@@ -253,13 +266,17 @@ export default function App() {
           </button>
           {!leftCollapsed && (
             <>
-              <WorkflowPanel apiBase={apiBase} addLog={addLog} />
+              <WorkflowPanel apiBase={apiBase} addLog={addLog} onStartWorkEmbedded={onStartWorkEmbedded} />
               <ToolPanel />
             </>
           )}
         </aside>
         <main style={{ flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0, borderRight: '1px solid #333' }}>
-          <ChatPanel apiBase={apiBase} addLog={addLog} />
+          {activeHeaderTab === 'my-work' && myWorkSessionId ? (
+            <MyWorkPanel apiBase={apiBase} sessionId={myWorkSessionId} initialTerminals={myWorkTerminals} />
+          ) : (
+            <ChatPanel apiBase={apiBase} addLog={addLog} onStartWorkEmbedded={onStartWorkEmbedded} />
+          )}
         </main>
         <div
           role="separator"

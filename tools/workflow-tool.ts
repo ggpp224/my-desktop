@@ -119,7 +119,8 @@ export async function runWorkflowStep(
 }
 
 export async function runWorkflow(name: string): Promise<{ success: boolean; results: unknown[]; error?: string }> {
-  const baseName = name.replace(/\.json$/i, '');
+  const normalized = (name ?? '').trim() || 'start-work';
+  const baseName = normalized.replace(/\.json$/i, '');
   const workflowsDir = getWorkflowsDir();
   // 先按原名查找，再尝试将下划线转为连字符（AI 可能输出 start_work，实际文件为 start-work.json）
   let filePath = path.join(workflowsDir, `${baseName}.json`);
@@ -133,10 +134,10 @@ export async function runWorkflow(name: string): Promise<{ success: boolean; res
       try {
         raw = await readFile(filePath, 'utf-8');
       } catch {
-        return { success: false, results: [], error: `工作流文件不存在: ${name}` };
+        return { success: false, results: [], error: `工作流文件不存在: ${normalized}` };
       }
     } else {
-      return { success: false, results: [], error: `工作流文件不存在: ${name}` };
+      return { success: false, results: [], error: `工作流文件不存在: ${normalized}` };
     }
   }
   let def: WorkflowDef;
