@@ -1,5 +1,5 @@
 /* AI 生成 By Peng.Guo */
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Terminal } from 'xterm';
 import { FitAddon } from 'xterm-addon-fit';
 import 'xterm/css/xterm.css';
@@ -13,6 +13,7 @@ export interface WorkTerminal {
   stepIndex: number;
   status: TerminalStatus;
   lines: string[];
+  cwdAbs: string;
   terminalSessionId?: string;
 }
 
@@ -26,12 +27,35 @@ export function MyWorkPanel({ apiBase, sessionId, initialTerminals }: MyWorkPane
   const [terminals, setTerminals] = useState<WorkTerminal[]>(initialTerminals);
   const [activeTerminalId, setActiveTerminalId] = useState<string>(initialTerminals[0]?.id ?? '');
   const [creatingTerminal, setCreatingTerminal] = useState(false);
+  const [contextMenu, setContextMenu] = useState<{ x: number; y: number; path: string } | null>(null);
   const terminalMountRef = useRef<HTMLDivElement>(null);
   const xtermRef = useRef<Terminal | null>(null);
   const fitAddonRef = useRef<FitAddon | null>(null);
   const activePtySeqRef = useRef(0);
   const activePtyIdRef = useRef('');
   const renderedTerminalIdRef = useRef('');
+
+  const createManualTerminal = useCallback(async () => {
+    if (!sessionId || creatingTerminal) return;
+    setCreatingTerminal(true);
+    try {
+      const resp = await fetch(`${apiBase}/workflow/sessions/${encodeURIComponent(sessionId)}/terminals`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+      });
+      if (!resp.ok) return;
+      const data = await resp.json();
+      if (data?.success && data.terminal) {
+        const created = data.terminal as WorkTerminal;
+        setTerminals((prev) => [...prev, created]);
+        setActiveTerminalId(created.id);
+      }
+    } catch {
+      // ignore create failures to avoid interrupting existing terminals
+    } finally {
+      setCreatingTerminal(false);
+    }
+  }, [apiBase, creatingTerminal, sessionId]);
 
   useEffect(() => {
     setTerminals(initialTerminals);
@@ -66,6 +90,24 @@ export function MyWorkPanel({ apiBase, sessionId, initialTerminals }: MyWorkPane
     }, 1000);
     return () => window.clearInterval(timer);
   }, [apiBase, sessionId]);
+
+  useEffect(() => {
+    const onWindowClick = () => setContextMenu(null);
+    window.addEventListener('click', onWindowClick);
+    return () => window.removeEventListener('click', onWindowClick);
+  }, []);
+
+  useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent) => {
+      const cmdOrCtrl = event.metaKey || event.ctrlKey;
+      if (!cmdOrCtrl) return;
+      if (event.key.toLowerCase() !== 't') return;
+      event.preventDefault();
+      createManualTerminal();
+    };
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, [createManualTerminal]);
 
   const activeTerminal = useMemo(
     () => terminals.find((terminal) => terminal.id === activeTerminalId) ?? terminals[0],
@@ -174,27 +216,7 @@ export function MyWorkPanel({ apiBase, sessionId, initialTerminals }: MyWorkPane
         <button
           type="button"
           disabled={creatingTerminal}
-          onClick={async () => {
-            if (!sessionId || creatingTerminal) return;
-            setCreatingTerminal(true);
-            try {
-              const resp = await fetch(`${apiBase}/workflow/sessions/${encodeURIComponent(sessionId)}/terminals`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-              });
-              if (!resp.ok) return;
-              const data = await resp.json();
-              if (data?.success && data.terminal) {
-                const created = data.terminal as WorkTerminal;
-                setTerminals((prev) => [...prev, created]);
-                setActiveTerminalId(created.id);
-              }
-            } catch {
-              // ignore create failures to avoid interrupting existing terminals
-            } finally {
-              setCreatingTerminal(false);
-            }
-          }}
+          onClick={createManualTerminal}
           style={{
             padding: '6px 12px',
             borderRadius: 6,
@@ -212,23 +234,76 @@ export function MyWorkPanel({ apiBase, sessionId, initialTerminals }: MyWorkPane
         {terminals.map((terminal) => {
           const isActive = terminal.id === activeTerminal?.id;
           return (
-            <button
+            <div
               key={terminal.id}
-              type="button"
-              onClick={() => setActiveTerminalId(terminal.id)}
+              onContextMenu={(event) => {
+                event.preventDefault();
+                setContextMenu({ x: event.clientX, y: event.clientY, path: terminal.cwdAbs });
+              }}
               style={{
-                padding: '6px 12px',
+                display: 'flex',
+                alignItems: 'center',
+                gap: 6,
+                padding: '6px 8px 6px 12px',
                 borderRadius: 6,
                 border: `1px solid ${isActive ? '#4f83ff' : '#334155'}`,
                 background: isActive ? '#1d4ed8' : '#0f172a',
                 color: '#e2e8f0',
-                cursor: 'pointer',
                 whiteSpace: 'nowrap',
+                flexShrink: 0,
               }}
-              title={`${terminal.title} (${terminal.status})`}
+              title={`${terminal.cwdAbs} (${terminal.status})`}
             >
-              {terminal.title}
-            </button>
+              <button
+                type="button"
+                onClick={() => setActiveTerminalId(terminal.id)}
+                style={{
+                  border: 'none',
+                  background: 'transparent',
+                  color: 'inherit',
+                  cursor: 'pointer',
+                  padding: 0,
+                  font: 'inherit',
+                }}
+                title={`${terminal.cwdAbs} (${terminal.status})`}
+              >
+                {terminal.title}
+              </button>
+              <button
+                type="button"
+                onClick={async () => {
+                  try {
+                    await fetch(
+                      `${apiBase}/workflow/sessions/${encodeURIComponent(sessionId)}/terminals/${encodeURIComponent(terminal.id)}`,
+                      { method: 'DELETE' }
+                    );
+                    setTerminals((prev) => {
+                      const next = prev.filter((item) => item.id !== terminal.id);
+                      if (activeTerminalId === terminal.id) {
+                        setActiveTerminalId(next[0]?.id ?? '');
+                      }
+                      return next;
+                    });
+                  } catch {
+                    // ignore close errors
+                  }
+                }}
+                title={`关闭 ${terminal.title}`}
+                style={{
+                  border: 'none',
+                  background: 'transparent',
+                  color: '#cbd5e1',
+                  cursor: 'pointer',
+                  width: 16,
+                  height: 16,
+                  lineHeight: '16px',
+                  textAlign: 'center',
+                  padding: 0,
+                }}
+              >
+                ×
+              </button>
+            </div>
           );
         })}
       </div>
@@ -239,6 +314,45 @@ export function MyWorkPanel({ apiBase, sessionId, initialTerminals }: MyWorkPane
         ref={terminalMountRef}
         style={{ flex: 1, minHeight: 240, borderTop: '1px solid #1e293b', padding: 8, background: '#020617' }}
       />
+      {contextMenu && (
+        <div
+          style={{
+            position: 'fixed',
+            left: contextMenu.x,
+            top: contextMenu.y,
+            background: '#0f172a',
+            border: '1px solid #334155',
+            borderRadius: 6,
+            boxShadow: '0 8px 24px rgba(0,0,0,0.35)',
+            zIndex: 999,
+            minWidth: 140,
+          }}
+          onClick={(event) => event.stopPropagation()}
+        >
+          <button
+            type="button"
+            onClick={async () => {
+              try {
+                await navigator.clipboard.writeText(contextMenu.path);
+              } catch {
+                // ignore clipboard errors
+              }
+              setContextMenu(null);
+            }}
+            style={{
+              width: '100%',
+              textAlign: 'left',
+              border: 'none',
+              background: 'transparent',
+              color: '#e2e8f0',
+              padding: '8px 12px',
+              cursor: 'pointer',
+            }}
+          >
+            复制路径
+          </button>
+        </div>
+      )}
     </section>
   );
 }

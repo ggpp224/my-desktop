@@ -8,7 +8,7 @@ import { getProjectPath } from '../config/projects.js';
 import { open as browserOpen } from './browser-tool.js';
 import { deploy as jenkinsDeploy } from './jenkins-tool.js';
 import { run as shellRun } from './shell-tool.js';
-import { createTerminalSession } from './terminal-session-service.js';
+import { closeTerminalSession, createTerminalSession } from './terminal-session-service.js';
 
 type Step =
   | { tool: 'shell'; cmd: string; visible?: boolean; taskKey?: string; cwdCode?: string }
@@ -25,6 +25,7 @@ export interface EmbeddedTerminalSnapshot {
   stepIndex: number;
   status: TerminalStatus;
   lines: string[];
+  cwdAbs: string;
   terminalSessionId?: string;
 }
 
@@ -95,6 +96,7 @@ function createTerminal(step: Step, stepIndex: number): EmbeddedTerminalSnapshot
     stepIndex,
     status: 'running',
     lines: [],
+    cwdAbs: process.cwd(),
   };
 }
 
@@ -124,9 +126,11 @@ export async function startEmbeddedWorkflow(workflowName = DEFAULT_WORKFLOW): Pr
           });
           terminal.terminalSessionId = ptySession.id;
           terminal.status = ptySession.status;
+          terminal.cwdAbs = ptySession.cwdAbs;
           pushLine(terminal, `已创建可交互终端，会话: ${ptySession.id}`);
         } else {
           const runCommand = cwd ? `cd ${cwd} && ${command}` : command;
+          terminal.cwdAbs = cwd || process.cwd();
           pushLine(terminal, `执行命令: ${runCommand}`);
           const out = await shellRun(runCommand);
           if (out.stdout) out.stdout.split(/\r?\n/).filter(Boolean).forEach((line) => pushLine(terminal, line));
@@ -175,8 +179,22 @@ export function addManualTerminalToSession(sessionId: string): EmbeddedTerminalS
     stepIndex: session.terminals.length,
     status: ptySession.status,
     lines: [`${new Date().toLocaleTimeString('zh-CN', { hour12: false })} 已创建手动终端`],
+    cwdAbs: ptySession.cwdAbs,
     terminalSessionId: ptySession.id,
   };
   session.terminals.push(terminal);
   return terminal;
+}
+
+export function removeTerminalFromSession(sessionId: string, terminalId: string): boolean {
+  const session = sessions.get(sessionId);
+  if (!session) return false;
+  const index = session.terminals.findIndex((item) => item.id === terminalId);
+  if (index < 0) return false;
+  const terminal = session.terminals[index];
+  if (terminal.terminalSessionId) {
+    closeTerminalSession(terminal.terminalSessionId);
+  }
+  session.terminals.splice(index, 1);
+  return true;
 }

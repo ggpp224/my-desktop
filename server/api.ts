@@ -11,8 +11,8 @@ import { open as openBrowser } from '../tools/browser-tool.js';
 import { getAllProjects, getProjectByCode } from '../config/projects.js';
 import { mergeByCode, mergeNova, mergeBizSolution, mergeScm } from '../tools/merge-tool.js';
 import { runWorkflowStep } from '../tools/workflow-tool.js';
-import { addManualTerminalToSession, getEmbeddedWorkflowSession, startEmbeddedWorkflow } from '../tools/workflow-embedded-service.js';
-import { getTerminalSessionOutput, resizeTerminalSession, writeTerminalSessionInput } from '../tools/terminal-session-service.js';
+import { addManualTerminalToSession, getEmbeddedWorkflowSession, removeTerminalFromSession, startEmbeddedWorkflow } from '../tools/workflow-embedded-service.js';
+import { closeTerminalSession, getTerminalSessionOutput, resizeTerminalSession, writeTerminalSessionInput } from '../tools/terminal-session-service.js';
 import { promises as fs } from 'fs';
 import path from 'path';
 
@@ -285,6 +285,22 @@ app.post('/workflow/sessions/:sessionId/terminals', (req, res) => {
   res.json({ success: true, terminal });
 });
 
+/** 关闭并移除会话中的某个终端页签 */
+app.delete('/workflow/sessions/:sessionId/terminals/:terminalId', (req, res) => {
+  const sessionId = (req.params?.sessionId ?? '').trim();
+  const terminalId = (req.params?.terminalId ?? '').trim();
+  if (!sessionId || !terminalId) {
+    res.status(400).json({ success: false, error: '缺少 sessionId 或 terminalId' });
+    return;
+  }
+  const ok = removeTerminalFromSession(sessionId, terminalId);
+  if (!ok) {
+    res.status(404).json({ success: false, error: '终端不存在或会话不存在' });
+    return;
+  }
+  res.json({ success: true });
+});
+
 /** 获取终端增量输出（from=上次 seq），用于 xterm 渲染 */
 app.get('/terminal/sessions/:sessionId/output', (req, res) => {
   const sessionId = (req.params?.sessionId ?? '').trim();
@@ -331,6 +347,21 @@ app.post('/terminal/sessions/:sessionId/resize', (req, res) => {
     return;
   }
   const ok = resizeTerminalSession(sessionId, cols, rows);
+  if (!ok) {
+    res.status(404).json({ success: false, error: `终端会话不存在: ${sessionId}` });
+    return;
+  }
+  res.json({ success: true });
+});
+
+/** 直接关闭终端会话（保留接口，便于未来非 workflow 终端管理） */
+app.delete('/terminal/sessions/:sessionId', (req, res) => {
+  const sessionId = (req.params?.sessionId ?? '').trim();
+  if (!sessionId) {
+    res.status(400).json({ success: false, error: '缺少 sessionId' });
+    return;
+  }
+  const ok = closeTerminalSession(sessionId);
   if (!ok) {
     res.status(404).json({ success: false, error: `终端会话不存在: ${sessionId}` });
     return;

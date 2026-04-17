@@ -17,12 +17,14 @@ interface TerminalSession {
   id: string;
   title: string;
   status: TerminalStatus;
+  cwdAbs: string;
   createdAt: number;
   seq: number;
   events: TerminalEvent[];
   processKind: 'pty' | 'pipe';
   writer: (data: string) => void;
   resizer: (cols: number, rows: number) => void;
+  killer: () => void;
 }
 
 const MAX_EVENT_BACKLOG = 4000;
@@ -76,6 +78,7 @@ export function createTerminalSession(params: { title: string; cwd?: string; com
   id: string;
   title: string;
   status: TerminalStatus;
+  cwdAbs: string;
   createdAt: number;
 } {
   ensureSpawnHelperExecutable();
@@ -100,9 +103,11 @@ export function createTerminalSession(params: { title: string; cwd?: string; com
     id,
     title: params.title,
     status: 'running',
+    cwdAbs: spawnOptions.cwd,
     createdAt: Date.now(),
     seq: 0,
     events: [],
+    killer: () => {},
   };
 
   try {
@@ -112,6 +117,7 @@ export function createTerminalSession(params: { title: string; cwd?: string; com
       processKind: 'pty',
       writer: (data: string) => ptyProcess.write(data),
       resizer: (cols: number, rows: number) => ptyProcess.resize(cols, rows),
+      killer: () => ptyProcess.kill(),
     };
     ptyProcess.onData((data) => appendEvent(session, data));
     ptyProcess.onExit(({ exitCode }) => {
@@ -122,7 +128,7 @@ export function createTerminalSession(params: { title: string; cwd?: string; com
       ptyProcess.write(`${params.command}\r`);
     }
     sessions.set(id, session);
-    return { id, title: session.title, status: session.status, createdAt: session.createdAt };
+    return { id, title: session.title, status: session.status, cwdAbs: session.cwdAbs, createdAt: session.createdAt };
   } catch (firstErr) {
     try {
       const shell = getDefaultShell();
@@ -136,6 +142,7 @@ export function createTerminalSession(params: { title: string; cwd?: string; com
         processKind: 'pipe',
         writer: (data: string) => child.stdin.write(data),
         resizer: () => {},
+        killer: () => child.kill(),
       };
       child.stdout.on('data', (chunk: Buffer) => appendEvent(session, chunk.toString('utf-8')));
       child.stderr.on('data', (chunk: Buffer) => appendEvent(session, chunk.toString('utf-8')));
@@ -155,7 +162,7 @@ export function createTerminalSession(params: { title: string; cwd?: string; com
         child.stdin.write(`${params.command}\n`);
       }
       sessions.set(id, session);
-      return { id, title: session.title, status: session.status, createdAt: session.createdAt };
+      return { id, title: session.title, status: session.status, cwdAbs: session.cwdAbs, createdAt: session.createdAt };
     } catch (secondErr) {
       const first = firstErr instanceof Error ? firstErr.message : String(firstErr);
       const second = secondErr instanceof Error ? secondErr.message : String(secondErr);
@@ -168,6 +175,7 @@ export function getTerminalSessionOutput(sessionId: string, sinceSeq = 0): {
   id: string;
   title: string;
   status: TerminalStatus;
+  cwdAbs: string;
   seq: number;
   chunks: string[];
 } | null {
@@ -178,6 +186,7 @@ export function getTerminalSessionOutput(sessionId: string, sinceSeq = 0): {
     id: session.id,
     title: session.title,
     status: session.status,
+    cwdAbs: session.cwdAbs,
     seq: session.seq,
     chunks,
   };
@@ -196,5 +205,17 @@ export function resizeTerminalSession(sessionId: string, cols: number, rows: num
   const safeCols = Number.isFinite(cols) ? Math.max(20, Math.floor(cols)) : 80;
   const safeRows = Number.isFinite(rows) ? Math.max(10, Math.floor(rows)) : 24;
   session.resizer(safeCols, safeRows);
+  return true;
+}
+
+export function closeTerminalSession(sessionId: string): boolean {
+  const session = sessions.get(sessionId);
+  if (!session) return false;
+  try {
+    session.killer();
+  } catch {
+    // ignore kill errors
+  }
+  sessions.delete(sessionId);
   return true;
 }
