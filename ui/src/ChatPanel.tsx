@@ -30,6 +30,7 @@ interface ChatPanelProps {
 const QUICK_ACTIONS: Array<{ label: string; message: string }> = [
   { label: '开始工作', message: '开始工作' },
   { label: '打开终端', message: '打开终端' },
+  { label: '线上bug', message: '线上bug' },
 ];
 
 /** 合并菜单项：走 SSE 流式接口，每步实时写入 Logs */
@@ -79,6 +80,7 @@ function buildCommandHints(projects: ProjectInfo[], inputHistory: string[]): str
     '打开json配置中心',
     '打开 Jenkins',
     '我的bug',
+    '线上bug',
   ];
   const allCodes = Array.from(new Set(projects.flatMap((p) => p.codes)));
   const jenkinsCodes = Array.from(new Set(projects.filter((p) => p.jenkins).flatMap((p) => p.codes)));
@@ -121,7 +123,10 @@ function buildCommandHints(projects: ProjectInfo[], inputHistory: string[]): str
 function extractMyBugsResult(toolResults?: unknown[]): JiraBugPayload | null {
   if (!Array.isArray(toolResults)) return null;
   const row = toolResults.find(
-    (item) => (item as ToolResultItem | undefined)?.tool === 'search_my_bugs' && (item as ToolResultItem | undefined)?.result
+    (item) =>
+      ((item as ToolResultItem | undefined)?.tool === 'search_my_bugs' ||
+        (item as ToolResultItem | undefined)?.tool === 'search_online_bugs') &&
+      (item as ToolResultItem | undefined)?.result
   ) as ToolResultItem | undefined;
   if (!row || typeof row.result !== 'object' || row.result == null) return null;
   const payload = row.result as JiraBugPayload;

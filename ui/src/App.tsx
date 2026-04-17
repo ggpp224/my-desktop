@@ -26,6 +26,7 @@ const HELP_COMMANDS: HelpItem[] = [
   { section: '部署', command: '部署 nova / 部署 cc-web / 部署 react18 / 部署 base / 部署 base18 等', description: '触发 Jenkins 对应 Job 构建部署；可说「部署 nova 分支是 sprint-260326」指定分支' },
   { section: '合并', command: '合并 nova / 合并 biz-solution / 合并 scm', description: '执行对应仓库合并到测试分支（SSE 流式输出）' },
   { section: 'Jira', command: '我的bug / 查询我的bug', description: '按固定 JQL 查询 Jira Bug 列表，展示关键字、摘要、状态、解决结果、修复版本、经办人' },
+  { section: 'Jira', command: '线上bug / 查询线上bug', description: '按固定 JQL 查询 Jira 线上缺陷列表，展示关键字、摘要、状态、解决结果、修复版本、经办人' },
   { section: 'IDE 打开', command: 'ws打开base / cursor打开scm / 用 WebStorm 打开 nova', description: '用指定应用打开项目目录（ws=WebStorm，cursor=Cursor，code=VS Code）；项目代号与 config/projects 一致' },
   { section: 'IDE 关闭', command: '关闭ws的nova / 关闭cursor的base / 关闭 WebStorm 的 scm', description: '关闭该 IDE 中已打开的项目窗口（WebStorm 走菜单关闭项目，Cursor 走 Cmd+W）' },
   { section: '其他', command: '打开 https://… / 执行 xxx 命令', description: '由 AI Agent 理解并调用工具（如 open_browser、run_shell）' },
