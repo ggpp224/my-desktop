@@ -210,6 +210,19 @@ app.post('/agent/chat/stream', async (req, res) => {
           thinkingDelta: chunk.thinkingDelta,
           contentDelta: chunk.contentDelta,
         }),
+      onToolProgress: (e) => {
+        if (e.phase === 'start') send({ type: 'tool_progress', phase: 'start', tool: e.tool });
+        else if (e.phase === 'progress') send({ type: 'tool_progress', phase: 'progress', tool: e.tool, message: e.message });
+        else if (e.phase === 'stream_delta') {
+          send({
+            type: 'tool_progress',
+            phase: 'stream_delta',
+            tool: e.tool,
+            thinkingDelta: e.thinkingDelta,
+            contentDelta: e.contentDelta,
+          });
+        } else send({ type: 'tool_progress', phase: 'done', tool: e.tool, ok: e.ok, message: e.message });
+      },
     });
     send({ type: 'result', result });
   } catch (err) {

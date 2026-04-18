@@ -72,8 +72,8 @@ export async function chatWithTools(
   return { message: data.message, done: data.done !== false, tokenUsage };
 }
 
-/** Ollama 流式行：content/thinking 可能为增量或累计片段，用于合并去重 */
-function mergeStreamFragment(previous: string, fragment: string): { next: string; delta: string } {
+/** Ollama 流式行：content/thinking 可能为增量或累计片段，用于合并去重（周报等非 tools 流式复用） */
+export function mergeStreamFragment(previous: string, fragment: string): { next: string; delta: string } {
   if (!fragment) return { next: previous, delta: '' };
   if (previous && fragment.startsWith(previous)) {
     return { next: fragment, delta: fragment.slice(previous.length) };

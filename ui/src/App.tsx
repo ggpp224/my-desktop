@@ -29,7 +29,7 @@ const HELP_COMMANDS: HelpItem[] = [
   { section: '浏览器 / Wiki', command: '打开 Jenkins', description: '在浏览器中打开 Jenkins 地址' },
   { section: '浏览器 / Wiki', command: '打开jenkins nova / 打开 Jenkins 的 cc-web', description: '打开该项目对应的 Jenkins 任务页面（代号与部署一致）' },
   { section: '浏览器 / Wiki', command: '周报 / 打开周报 / 打开wiki周报', description: '使用 WIKI_TOKEN 鉴权读取 wiki 目录树，定位“低代码单据前端空间”最新季度下最新周报页并打开（未命中时回退搜索页）' },
-  { section: '浏览器 / Wiki', command: '写周报', description: '提取“本周已完成任务”的 Jira 号和标题，交给大模型按固定提示词生成 Markdown 周报' },
+  { section: '浏览器 / Wiki', command: '写周报', description: '提取“本周已完成任务”的 Jira 号和标题，大模型按 Markdown 生成周报，结果自动转为 Confluence Wiki 供粘贴' },
   { section: '部署', command: '部署 nova / 部署 cc-web / 部署 react18 / 部署 base / 部署 base18 等', description: '触发 Jenkins 对应 Job 构建部署；可说「部署 nova 分支是 sprint-260326」指定分支' },
   { section: '合并', command: '合并 nova / 合并 biz-solution / 合并 scm', description: '执行对应仓库合并到测试分支（SSE 流式输出）' },
   { section: 'Jira', command: '我的bug / 查询我的bug', description: '按固定 JQL 查询 Jira Bug 列表，展示关键字、摘要、状态、解决结果、修复版本、经办人' },

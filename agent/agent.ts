@@ -1,5 +1,6 @@
 /* AI 生成 By Peng.Guo */
 import { chatWithTools, chatWithToolsStream, parseToolCalls, type ChatMessage, type ToolCall } from './ollama-client.js';
+import type { RouteExecuteContext, ToolProgressCallback } from './tool-progress.js';
 import { routeAndExecute } from './tool-router.js';
 import { toolsSchema } from './tools-schema.js';
 import { getAllProjects } from '../config/projects.js';
@@ -85,6 +86,8 @@ export type RunAgentOptions = {
   signal?: AbortSignal;
   /** 首轮 LLM 流式增量（思考 / 正文），供 SSE 实时推送 */
   onFirstLLMStream?: (chunk: { thinkingDelta?: string; contentDelta?: string }) => void;
+  /** 工具开始 / 子步骤 / 结束，供 SSE 推送执行过程 */
+  onToolProgress?: ToolProgressCallback;
 };
 
 function throwIfAborted(signal: AbortSignal | undefined): void {
@@ -135,13 +138,16 @@ export async function runAgent(userMessage: string, options?: RunAgentOptions): 
     }
 
     const toolResults: unknown[] = [];
+    const routeCtx: RouteExecuteContext = { onToolProgress: options?.onToolProgress };
     for (const call of calls) {
       throwIfAborted(signal);
+      options?.onToolProgress?.({ phase: 'start', tool: call.name });
       const tTool = Date.now();
       try {
-        const result = await routeAndExecute(call);
+        const result = await routeAndExecute(call, routeCtx);
         if (timing.tools) timing.tools.push({ name: call.name, ms: Date.now() - tTool });
         toolResults.push({ tool: call.name, result });
+        options?.onToolProgress?.({ phase: 'done', tool: call.name, ok: true });
         messages.push(message);
         messages.push({
           role: 'tool',
@@ -152,6 +158,7 @@ export async function runAgent(userMessage: string, options?: RunAgentOptions): 
         if (timing.tools) timing.tools.push({ name: call.name, ms: Date.now() - tTool });
         const msg = err instanceof Error ? err.message : String(err);
         toolResults.push({ tool: call.name, error: msg });
+        options?.onToolProgress?.({ phase: 'done', tool: call.name, ok: false, message: msg });
         messages.push(message);
         messages.push({ role: 'tool', tool_name: call.name, content: `错误: ${msg}` } as ChatMessage);
       }

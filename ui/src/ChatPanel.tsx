@@ -1,5 +1,5 @@
 /* AI 生成 By Peng.Guo */
-import { useState, useRef, useEffect } from 'react';
+import { useState, useRef, useEffect, useLayoutEffect } from 'react';
 import { appendToolResultsToLogs } from './log-tools';
 import { withJenkinsMarkdownLink } from './domain/deploy/jenkinsDeployDisplay';
 import type { DeployPollingTarget } from './domain/deploy/models';
@@ -11,7 +11,7 @@ import {
   fetchAgentOllamaInstalledModels,
   postSwitchAgentModel,
 } from './infrastructure/agent/ollamaModelApi';
-import { postAgentChatStream } from './infrastructure/agent/agentChatStreamApi';
+import { postAgentChatStream, type AgentToolProgressEvent } from './infrastructure/agent/agentChatStreamApi';
 
 type AgentTiming = { firstLLMMs?: number; tools?: { name: string; ms: number }[]; secondLLMMs?: number; tokenUsage?: { promptTokens?: number; completionTokens?: number } };
 type AgentResult = {
@@ -594,6 +594,14 @@ function renderToolResults(toolResults: unknown[] | undefined, onTip: (message: 
   return null;
 }
 
+/* AI 生成 By Peng.Guo */
+function formatToolProgressLogLine(e: AgentToolProgressEvent): string {
+  if (e.phase === 'stream_delta') return '';
+  if (e.phase === 'start') return `[工具] ${e.tool} 开始`;
+  if (e.phase === 'progress') return `[${e.tool}] ${e.message ?? ''}`;
+  return e.ok ? `[工具] ${e.tool} 完成` : `[工具] ${e.tool} 失败${e.message ? `: ${e.message}` : ''}`;
+}
+
 export function ChatPanel({ apiBase, addLog, onStartWorkEmbedded }: ChatPanelProps) {
   const [input, setInput] = useState('');
   const [inputHistory, setInputHistory] = useState<string[]>([]);
@@ -602,8 +610,12 @@ export function ChatPanel({ apiBase, addLog, onStartWorkEmbedded }: ChatPanelPro
   const [currentModel, setCurrentModel] = useState<string>('');
   const [installedModels, setInstalledModels] = useState<string[]>([]);
   const [streamLive, setStreamLive] = useState<{ thinking: string; content: string } | null>(null);
+  /** 工具内二次调模型（如周报）的流式正文/思考，与首轮 Agent 流式分离 */
+  const [toolStreamLive, setToolStreamLive] = useState<{ thinking: string; content: string } | null>(null);
+  const [toolProgressLines, setToolProgressLines] = useState<string[]>([]);
   const chatAbortRef = useRef<AbortController | null>(null);
   const streamAccumRef = useRef({ thinking: '', content: '' });
+  const toolStreamAccumRef = useRef({ thinking: '', content: '' });
   const [completionList, setCompletionList] = useState<string[]>([]);
   const [completionIndex, setCompletionIndex] = useState(0);
   const [showCompletion, setShowCompletion] = useState(false);
@@ -612,6 +624,9 @@ export function ChatPanel({ apiBase, addLog, onStartWorkEmbedded }: ChatPanelPro
   const deployPollRef = useRef<{ stop: () => void } | null>(null);
   const inputWrapRef = useRef<HTMLDivElement>(null);
   const feedbackListRef = useRef<HTMLDivElement>(null);
+  /** 工具内流式 Thinking/正文各自有 maxHeight+overflow，与外层聊天滚动分离，需单独跟到底 */
+  const toolStreamThinkingPreRef = useRef<HTMLPreElement>(null);
+  const toolStreamContentPreRef = useRef<HTMLPreElement>(null);
   const historyIndexRef = useRef(-1);
   const savedInputRef = useRef('');
 
@@ -685,7 +700,18 @@ export function ChatPanel({ apiBase, addLog, onStartWorkEmbedded }: ChatPanelPro
     const el = feedbackListRef.current;
     if (!el) return;
     el.scrollTop = el.scrollHeight;
-  }, [messages, loading, streamLive]);
+  }, [messages, loading, streamLive, toolStreamLive, toolProgressLines]);
+
+  /* AI 生成 By Peng.Guo：内层 pre 在布局提交后滚到底，避免流式增量时滚动条停在顶部 */
+  useLayoutEffect(() => {
+    if (!toolStreamLive) return;
+    const scrollElBottom = (node: HTMLElement | null) => {
+      if (!node) return;
+      node.scrollTop = node.scrollHeight;
+    };
+    scrollElBottom(toolStreamThinkingPreRef.current);
+    scrollElBottom(toolStreamContentPreRef.current);
+  }, [toolStreamLive?.thinking, toolStreamLive?.content]);
 
   useEffect(() => {
     if (!tipMessage) return;
@@ -853,7 +879,11 @@ export function ChatPanel({ apiBase, addLog, onStartWorkEmbedded }: ChatPanelPro
     const { signal } = chatAbortRef.current;
     streamAccumRef.current = { thinking: '', content: '' };
     setStreamLive({ thinking: '', content: '' });
+    setToolStreamLive(null);
+    toolStreamAccumRef.current = { thinking: '', content: '' };
+    setToolProgressLines([]);
     let streamFlushRaf: number | null = null;
+    let toolStreamFlushRaf: number | null = null;
     const flushStreamLive = () => {
       if (streamFlushRaf != null) cancelAnimationFrame(streamFlushRaf);
       streamFlushRaf = requestAnimationFrame(() => {
@@ -864,6 +894,16 @@ export function ChatPanel({ apiBase, addLog, onStartWorkEmbedded }: ChatPanelPro
         });
       });
     };
+    const flushToolStreamLive = () => {
+      if (toolStreamFlushRaf != null) cancelAnimationFrame(toolStreamFlushRaf);
+      toolStreamFlushRaf = requestAnimationFrame(() => {
+        toolStreamFlushRaf = null;
+        setToolStreamLive({
+          thinking: toolStreamAccumRef.current.thinking,
+          content: toolStreamAccumRef.current.content,
+        });
+      });
+    };
     try {
       await postAgentChatStream(apiBase, msg, signal, {
         onLlmDelta: (d) => {
@@ -871,17 +911,40 @@ export function ChatPanel({ apiBase, addLog, onStartWorkEmbedded }: ChatPanelPro
           streamAccumRef.current.content += d.contentDelta ?? '';
           flushStreamLive();
         },
+        onToolProgress: (e) => {
+          if (e.phase === 'stream_delta') {
+            toolStreamAccumRef.current.thinking += e.thinkingDelta ?? '';
+            toolStreamAccumRef.current.content += e.contentDelta ?? '';
+            flushToolStreamLive();
+            return;
+          }
+          if (e.phase === 'start' && e.tool === 'write_weekly_report') {
+            toolStreamAccumRef.current = { thinking: '', content: '' };
+            setToolStreamLive({ thinking: '', content: '' });
+          }
+          const line = formatToolProgressLogLine(e);
+          addLog(line);
+          setToolProgressLines((prev) => [...prev.slice(-40), line]);
+        },
         onResult: (raw) => {
           if (streamFlushRaf != null) {
             cancelAnimationFrame(streamFlushRaf);
             streamFlushRaf = null;
           }
+          if (toolStreamFlushRaf != null) {
+            cancelAnimationFrame(toolStreamFlushRaf);
+            toolStreamFlushRaf = null;
+          }
           setStreamLive(null);
+          setToolStreamLive(null);
+          setToolProgressLines([]);
           const data = raw as AgentResult;
           handleAgentResponse(data, true);
         },
         onError: (errMsg) => {
           setStreamLive(null);
+          setToolStreamLive(null);
+          setToolProgressLines([]);
           setLoading(false);
           if (errMsg.trim()) {
             addLog(`请求异常: ${errMsg}`);
@@ -891,6 +954,8 @@ export function ChatPanel({ apiBase, addLog, onStartWorkEmbedded }: ChatPanelPro
       });
     } catch (e) {
       setStreamLive(null);
+      setToolStreamLive(null);
+      setToolProgressLines([]);
       if (e instanceof Error && e.name === 'AbortError') {
         addLog('请求已取消（本地中断）');
         setLoading(false);
@@ -1043,9 +1108,93 @@ export function ChatPanel({ apiBase, addLog, onStartWorkEmbedded }: ChatPanelPro
             ) : null}
           </div>
         )}
+        {toolStreamLive && (
+          <div
+            style={{
+              marginBottom: 12,
+              padding: 12,
+              borderRadius: 8,
+              border: '1px solid #3b2f5c',
+              background: '#130a1e',
+              fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace',
+            }}
+          >
+            <div style={{ fontSize: 12, color: '#a78bfa', marginBottom: 8, fontWeight: 600 }}>工具内输出（周报生成）</div>
+            {toolStreamLive.thinking ? (
+              <>
+                <div style={{ fontSize: 11, color: '#c4b5fd', marginBottom: 4 }}>Thinking</div>
+                <pre
+                  ref={toolStreamThinkingPreRef}
+                  style={{
+                    margin: '0 0 10px',
+                    whiteSpace: 'pre-wrap',
+                    wordBreak: 'break-word',
+                    fontSize: 12,
+                    color: '#e9d5ff',
+                    maxHeight: 260,
+                    overflow: 'auto',
+                    lineHeight: 1.45,
+                  }}
+                >
+                  {toolStreamLive.thinking}
+                </pre>
+              </>
+            ) : null}
+            {toolStreamLive.content ? (
+              <>
+                <div style={{ fontSize: 11, color: '#94a3b8', marginBottom: 4 }}>正文</div>
+                <pre
+                  ref={toolStreamContentPreRef}
+                  style={{
+                    margin: 0,
+                    whiteSpace: 'pre-wrap',
+                    wordBreak: 'break-word',
+                    fontSize: 13,
+                    color: '#f1f5f9',
+                    maxHeight: 360,
+                    overflow: 'auto',
+                    lineHeight: 1.45,
+                  }}
+                >
+                  {toolStreamLive.content}
+                </pre>
+              </>
+            ) : !toolStreamLive.thinking ? (
+              <div style={{ fontSize: 12, color: '#64748b' }}>等待模型输出…</div>
+            ) : null}
+          </div>
+        )}
+        {toolProgressLines.length > 0 && (
+          <div
+            style={{
+              marginBottom: 12,
+              padding: 10,
+              borderRadius: 8,
+              border: '1px solid #1e3a5f',
+              background: '#0c1526',
+              maxHeight: 200,
+              overflow: 'auto',
+            }}
+          >
+            <div style={{ fontSize: 11, color: '#64748b', marginBottom: 6 }}>工具执行进度</div>
+            {toolProgressLines.slice(-14).map((line, idx) => (
+              <div key={`${idx}-${line.slice(0, 24)}`} style={{ fontSize: 12, color: '#cbd5e1', marginBottom: 4, lineHeight: 1.4 }}>
+                {line}
+              </div>
+            ))}
+          </div>
+        )}
         {loading && (
           <p style={{ color: '#888' }}>
-            {streamLive && (streamLive.thinking || streamLive.content) ? '工具执行或收尾中…' : streamLive ? '连接模型…' : '处理中…'}
+            {toolStreamLive && (toolStreamLive.thinking || toolStreamLive.content)
+              ? '周报由本地模型流式生成中（见上方「工具内输出」）…'
+              : toolProgressLines.length > 0
+                ? toolProgressLines[toolProgressLines.length - 1]
+                : streamLive && (streamLive.thinking || streamLive.content)
+                  ? '工具执行或收尾中…'
+                  : streamLive
+                    ? '连接模型…'
+                    : '处理中…'}
           </p>
         )}
         {tipMessage && (

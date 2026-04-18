@@ -26,6 +26,7 @@ import { syncCursorCookieFromChrome } from '../tools/cursor-cookie-sync-tool.js'
 import { openWeeklyReportPage } from '../tools/wiki-tool.js';
 import { writeWeeklyReport } from '../tools/weekly-report-tool.js';
 import type { ToolCall } from './ollama-client.js';
+import type { RouteExecuteContext } from './tool-progress.js';
 
 async function withCursorAutoSync<T extends object>(executor: () => Promise<T>): Promise<T> {
   try {
@@ -43,7 +44,7 @@ async function withCursorAutoSync<T extends object>(executor: () => Promise<T>):
   }
 }
 
-export async function routeAndExecute(call: ToolCall): Promise<unknown> {
+export async function routeAndExecute(call: ToolCall, ctx?: RouteExecuteContext): Promise<unknown> {
   const { name, arguments: args } = call;
   switch (name) {
     case 'run_shell':
@@ -65,6 +66,11 @@ export async function routeAndExecute(call: ToolCall): Promise<unknown> {
       return browserOpen(url || 'about:blank');
     }
     case 'deploy_jenkins': {
+      ctx?.onToolProgress?.({
+        phase: 'progress',
+        tool: 'deploy_jenkins',
+        message: '正在触发 Jenkins 部署…',
+      });
       const job = (args?.job as string) ?? '';
       const branch = (args?.branch as string)?.trim();
       let preset = getJenkinsPreset(job);
@@ -133,7 +139,17 @@ export async function routeAndExecute(call: ToolCall): Promise<unknown> {
       return openWeeklyReportPage();
     case 'write_weekly_report': {
       const maxResults = Number(args?.maxResults ?? 100);
-      return writeWeeklyReport(maxResults);
+      return writeWeeklyReport(maxResults, {
+        onProgress: (message) =>
+          ctx?.onToolProgress?.({ phase: 'progress', tool: 'write_weekly_report', message }),
+        onStreamDelta: (d) =>
+          ctx?.onToolProgress?.({
+            phase: 'stream_delta',
+            tool: 'write_weekly_report',
+            thinkingDelta: d.thinkingDelta,
+            contentDelta: d.contentDelta,
+          }),
+      });
     }
     case 'run_workflow_step': {
       const workflow = (args?.workflow as string) ?? 'start-work';

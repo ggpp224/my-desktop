@@ -3,13 +3,32 @@
 
 export type AgentChatSsePayload =
   | { type: 'llm_delta'; thinkingDelta?: string; contentDelta?: string }
+  | {
+      type: 'tool_progress';
+      phase: 'start' | 'progress' | 'stream_delta' | 'done';
+      tool: string;
+      message?: string;
+      ok?: boolean;
+      thinkingDelta?: string;
+      contentDelta?: string;
+    }
   | { type: 'result'; result: unknown }
   | { type: 'error'; error: string };
+
+export type AgentToolProgressEvent = {
+  phase: 'start' | 'progress' | 'stream_delta' | 'done';
+  tool: string;
+  message?: string;
+  ok?: boolean;
+  thinkingDelta?: string;
+  contentDelta?: string;
+};
 
 export async function consumeAgentChatSseStream(
   body: ReadableStream<Uint8Array>,
   handlers: {
     onLlmDelta: (d: { thinkingDelta?: string; contentDelta?: string }) => void;
+    onToolProgress?: (e: AgentToolProgressEvent) => void;
     onResult: (result: unknown) => void;
     onError: (message: string) => void;
   }
@@ -43,6 +62,15 @@ export async function consumeAgentChatSseStream(
             thinkingDelta: payload.thinkingDelta,
             contentDelta: payload.contentDelta,
           });
+        } else if (payload.type === 'tool_progress') {
+          handlers.onToolProgress?.({
+            phase: payload.phase,
+            tool: payload.tool,
+            message: payload.message,
+            ok: payload.ok,
+            thinkingDelta: payload.thinkingDelta,
+            contentDelta: payload.contentDelta,
+          });
         } else if (payload.type === 'result' && 'result' in payload) {
           gotResult = true;
           handlers.onResult(payload.result);
@@ -69,7 +97,12 @@ export async function postAgentChatStream(
   apiBase: string,
   message: string,
   signal: AbortSignal,
-  handlers: Parameters<typeof consumeAgentChatSseStream>[1]
+  handlers: {
+    onLlmDelta: (d: { thinkingDelta?: string; contentDelta?: string }) => void;
+    onToolProgress?: (e: AgentToolProgressEvent) => void;
+    onResult: (result: unknown) => void;
+    onError: (message: string) => void;
+  }
 ): Promise<void> {
   const res = await fetch(`${apiBase}/agent/chat/stream`, {
     method: 'POST',
