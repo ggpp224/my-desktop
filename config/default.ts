@@ -1,8 +1,24 @@
 /* AI 生成 By Peng.Guo */
+/**
+ * Ollama「思考」链路与 CLI 对齐：需在 /api/chat 传 think，否则流式阶段几乎无增量、界面像卡住。
+ * @see https://docs.ollama.com/capabilities/thinking
+ */
+function parseOllamaThinkFromEnv(): true | 'low' | 'medium' | 'high' | undefined {
+  const v = process.env.OLLAMA_THINK;
+  if (v == null || String(v).trim() === '') return true;
+  const t = String(v).trim().toLowerCase();
+  if (['false', '0', 'off', 'no', 'none'].includes(t)) return undefined;
+  if (t === 'low' || t === 'medium' || t === 'high') return t;
+  if (['true', '1', 'on', 'yes'].includes(t)) return true;
+  return true;
+}
+
 export const config = {
   ollama: {
     baseUrl: process.env.OLLAMA_BASE || 'http://localhost:11434',
     model: process.env.OLLAMA_MODEL || 'qwen2.5',
+    /** 传入 Ollama chat 的 think；undefined 表示不传该字段（由模型默认） */
+    think: parseOllamaThinkFromEnv(),
   },
   server: {
     port: Number(process.env.PORT) || 3000,

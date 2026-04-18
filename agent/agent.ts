@@ -1,5 +1,5 @@
 /* AI 生成 By Peng.Guo */
-import { chatWithTools, parseToolCalls, type ChatMessage, type ToolCall } from './ollama-client.js';
+import { chatWithTools, chatWithToolsStream, parseToolCalls, type ChatMessage, type ToolCall } from './ollama-client.js';
 import { routeAndExecute } from './tool-router.js';
 import { toolsSchema } from './tools-schema.js';
 import { getAllProjects } from '../config/projects.js';
@@ -21,6 +21,8 @@ export type AgentResult = {
   text?: string;
   toolResults?: unknown[];
   error?: string;
+  /** 被 AbortSignal 打断（切换模型或新请求覆盖） */
+  aborted?: boolean;
   /** 各步骤耗时，便于在 Logs 中反馈 */
   timing?: AgentTiming;
 };
@@ -79,7 +81,22 @@ function normalizeToolCallWithExplicitCode(call: ToolCall, explicitCode: string 
   return call;
 }
 
-export async function runAgent(userMessage: string): Promise<AgentResult> {
+export type RunAgentOptions = {
+  signal?: AbortSignal;
+  /** 首轮 LLM 流式增量（思考 / 正文），供 SSE 实时推送 */
+  onFirstLLMStream?: (chunk: { thinkingDelta?: string; contentDelta?: string }) => void;
+};
+
+function throwIfAborted(signal: AbortSignal | undefined): void {
+  if (signal?.aborted) {
+    const err = new Error('Aborted');
+    err.name = 'AbortError';
+    throw err;
+  }
+}
+
+export async function runAgent(userMessage: string, options?: RunAgentOptions): Promise<AgentResult> {
+  const { signal } = options ?? {};
   const messages: ChatMessage[] = [
     { role: 'system', content: AGENT_SYSTEM_PROMPT },
     { role: 'user', content: userMessage },
@@ -92,8 +109,15 @@ export async function runAgent(userMessage: string): Promise<AgentResult> {
   const timing: AgentTiming = { tools: [] };
 
   try {
+    throwIfAborted(signal);
     const t0 = Date.now();
-    const { message, tokenUsage: rawTokens } = await chatWithTools(messages, tools);
+    const streamCb = options?.onFirstLLMStream;
+    const { message, tokenUsage: rawTokens } = streamCb
+      ? await chatWithToolsStream(messages, tools, {
+          signal,
+          onDelta: streamCb,
+        })
+      : await chatWithTools(messages, tools, { signal });
     timing.firstLLMMs = Date.now() - t0;
     if (rawTokens?.prompt_eval_count != null || rawTokens?.eval_count != null) {
       timing.tokenUsage = {
@@ -112,6 +136,7 @@ export async function runAgent(userMessage: string): Promise<AgentResult> {
 
     const toolResults: unknown[] = [];
     for (const call of calls) {
+      throwIfAborted(signal);
       const tTool = Date.now();
       try {
         const result = await routeAndExecute(call);
@@ -135,6 +160,9 @@ export async function runAgent(userMessage: string): Promise<AgentResult> {
     /* 有 tool 执行时跳过第二次模型推理，直接返回固定回复以缩短耗时 */
     return { success: true, text: '已执行完成。', toolResults, timing };
   } catch (err) {
+    if (signal?.aborted || (err instanceof Error && err.name === 'AbortError')) {
+      return { success: false, error: '请求已取消', aborted: true };
+    }
     const message = err instanceof Error ? err.message : String(err);
     return { success: false, error: message };
   }

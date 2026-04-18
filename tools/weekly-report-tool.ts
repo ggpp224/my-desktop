@@ -1,11 +1,12 @@
 /* AI 生成 By Peng.Guo */
 import { config } from '../config/default.js';
+import { getOllamaActiveModel } from '../agent/ollama-runtime.js';
 import { searchWeeklyDoneTasks } from './jira-tool.js';
 
 type OllamaMessage = { role: 'system' | 'user'; content: string };
 
 interface OllamaChatResponse {
-  message?: { content?: string };
+  message?: { content?: string; thinking?: string };
 }
 
 export interface WeeklyReportDraftResult {
@@ -42,28 +43,58 @@ ${titlesText}
   return [{ role: 'user', content: userPrompt }];
 }
 
+/** 周报篇幅较长，放宽上下文与最大生成长度；部分推理模型正文在 thinking 字段 */
+const WEEKLY_REPORT_OLLAMA_OPTIONS = {
+  num_ctx: 8192,
+  num_predict: 4096,
+};
+
+/** Ollama 慢请求：默认无超时，此处给足时间避免大模型/大列表被误判失败 */
+const WEEKLY_REPORT_FETCH_MS = Number(process.env.OLLAMA_WEEKLY_REPORT_TIMEOUT_MS ?? 600_000);
+
 async function summarizeWeeklyReportByOllama(jiraTitles: string[]): Promise<string> {
-  const response = await fetch(`${config.ollama.baseUrl}/api/chat`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      model: config.ollama.model,
-      messages: buildWeeklyReportPrompt(jiraTitles),
-      stream: false,
-      options: {
-        num_ctx: 4096,
-        num_predict: 768,
-      },
-    }),
-  });
+  const timeoutMs = Number.isFinite(WEEKLY_REPORT_FETCH_MS) && WEEKLY_REPORT_FETCH_MS > 0 ? WEEKLY_REPORT_FETCH_MS : 600_000;
+  const signal =
+    typeof AbortSignal !== 'undefined' && 'timeout' in AbortSignal && typeof AbortSignal.timeout === 'function'
+      ? AbortSignal.timeout(timeoutMs)
+      : undefined;
+
+  let response: Response;
+  try {
+    response = await fetch(`${config.ollama.baseUrl}/api/chat`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      ...(signal ? { signal } : {}),
+      body: JSON.stringify({
+        model: getOllamaActiveModel(),
+        messages: buildWeeklyReportPrompt(jiraTitles),
+        stream: false,
+        ...(config.ollama.think !== undefined ? { think: config.ollama.think } : {}),
+        options: WEEKLY_REPORT_OLLAMA_OPTIONS,
+      }),
+    });
+  } catch (e) {
+    const name = e instanceof Error ? e.name : '';
+    if (name === 'TimeoutError' || name === 'AbortError') {
+      throw new Error(`周报总结失败：请求超时（>${Math.round(timeoutMs / 1000)}s），可增大环境变量 OLLAMA_WEEKLY_REPORT_TIMEOUT_MS`);
+    }
+    throw e;
+  }
   if (!response.ok) {
     const bodyText = await response.text();
     throw new Error(`周报总结失败(${response.status}): ${bodyText || response.statusText}`);
   }
   const data = (await response.json()) as OllamaChatResponse;
-  const content = (data.message?.content ?? '').trim();
-  if (!content) throw new Error('周报总结失败：模型未返回内容');
-  return content;
+  const msg = data.message;
+  const content = (msg?.content ?? '').trim();
+  const thinking = (msg?.thinking ?? '').trim();
+  const text = content || thinking;
+  if (!text) {
+    throw new Error(
+      '周报总结失败：模型未返回内容（content/thinking 均为空）。可尝试换模型、或检查 num_ctx 是否够容纳 Jira 列表'
+    );
+  }
+  return text;
 }
 
 export async function writeWeeklyReport(maxResults = 100): Promise<WeeklyReportDraftResult> {

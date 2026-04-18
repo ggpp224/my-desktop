@@ -6,9 +6,22 @@ import type { DeployPollingTarget } from './domain/deploy/models';
 import { LinkifiedText } from './view/LinkifiedText';
 import { startDeployPolling } from './viewmodel/deploy/useDeployPolling';
 import type { WorkTerminal } from './MyWorkPanel';
+import {
+  fetchAgentCurrentModel,
+  fetchAgentOllamaInstalledModels,
+  postSwitchAgentModel,
+} from './infrastructure/agent/ollamaModelApi';
+import { postAgentChatStream } from './infrastructure/agent/agentChatStreamApi';
 
 type AgentTiming = { firstLLMMs?: number; tools?: { name: string; ms: number }[]; secondLLMMs?: number; tokenUsage?: { promptTokens?: number; completionTokens?: number } };
-type AgentResult = { success: boolean; text?: string; toolResults?: unknown[]; error?: string; timing?: AgentTiming };
+type AgentResult = {
+  success: boolean;
+  text?: string;
+  toolResults?: unknown[];
+  error?: string;
+  aborted?: boolean;
+  timing?: AgentTiming;
+};
 type ToolResultItem = { tool?: string; result?: unknown; error?: string };
 type JiraBugItem = {
   key?: string;
@@ -587,6 +600,10 @@ export function ChatPanel({ apiBase, addLog, onStartWorkEmbedded }: ChatPanelPro
   const [loading, setLoading] = useState(false);
   const [messages, setMessages] = useState<Array<{ role: 'user' | 'assistant'; content: string; toolResults?: unknown[] }>>([]);
   const [currentModel, setCurrentModel] = useState<string>('');
+  const [installedModels, setInstalledModels] = useState<string[]>([]);
+  const [streamLive, setStreamLive] = useState<{ thinking: string; content: string } | null>(null);
+  const chatAbortRef = useRef<AbortController | null>(null);
+  const streamAccumRef = useRef({ thinking: '', content: '' });
   const [completionList, setCompletionList] = useState<string[]>([]);
   const [completionIndex, setCompletionIndex] = useState(0);
   const [showCompletion, setShowCompletion] = useState(false);
@@ -604,11 +621,25 @@ export function ChatPanel({ apiBase, addLog, onStartWorkEmbedded }: ChatPanelPro
 
   useEffect(() => {
     if (!apiBase) return;
-    fetch(`${apiBase}/agent/model`)
-      .then((r) => (r.ok ? r.json() : null))
-      .then((data: { model?: string } | null) => data?.model != null && setCurrentModel(data.model))
+    let cancelled = false;
+    Promise.all([fetchAgentCurrentModel(apiBase), fetchAgentOllamaInstalledModels(apiBase)])
+      .then(([model, models]) => {
+        if (cancelled) return;
+        if (model) setCurrentModel(model);
+        setInstalledModels(models);
+      })
       .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
   }, [apiBase]);
+
+  useEffect(
+    () => () => {
+      chatAbortRef.current?.abort();
+    },
+    []
+  );
 
   useEffect(() => {
     if (!apiBase) return;
@@ -654,7 +685,7 @@ export function ChatPanel({ apiBase, addLog, onStartWorkEmbedded }: ChatPanelPro
     const el = feedbackListRef.current;
     if (!el) return;
     el.scrollTop = el.scrollHeight;
-  }, [messages, loading]);
+  }, [messages, loading, streamLive]);
 
   useEffect(() => {
     if (!tipMessage) return;
@@ -716,6 +747,11 @@ export function ChatPanel({ apiBase, addLog, onStartWorkEmbedded }: ChatPanelPro
   };
 
   const handleAgentResponse = (data: AgentResult, clearLoading: boolean) => {
+    if (data.aborted) {
+      addLog('推理已取消（模型切换或请求被中断）');
+      if (clearLoading) setLoading(false);
+      return;
+    }
     addLog(data.success ? 'Agent 完成' : `错误: ${data.error}`);
     if (data.timing) {
       if (data.timing.firstLLMMs != null) addLog(`  [耗时] 模型推理（解析指令）: ${data.timing.firstLLMMs} ms`);
@@ -812,19 +848,80 @@ export function ChatPanel({ apiBase, addLog, onStartWorkEmbedded }: ChatPanelPro
       await executeMerge(mergeTask.path, mergeTask.label);
       return;
     }
-    try {
-      const res = await fetch(`${apiBase}/agent/chat`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ message: msg }),
+    chatAbortRef.current?.abort();
+    chatAbortRef.current = new AbortController();
+    const { signal } = chatAbortRef.current;
+    streamAccumRef.current = { thinking: '', content: '' };
+    setStreamLive({ thinking: '', content: '' });
+    let streamFlushRaf: number | null = null;
+    const flushStreamLive = () => {
+      if (streamFlushRaf != null) cancelAnimationFrame(streamFlushRaf);
+      streamFlushRaf = requestAnimationFrame(() => {
+        streamFlushRaf = null;
+        setStreamLive({
+          thinking: streamAccumRef.current.thinking,
+          content: streamAccumRef.current.content,
+        });
       });
-      const data: AgentResult = await res.json();
-      handleAgentResponse(data, true);
+    };
+    try {
+      await postAgentChatStream(apiBase, msg, signal, {
+        onLlmDelta: (d) => {
+          streamAccumRef.current.thinking += d.thinkingDelta ?? '';
+          streamAccumRef.current.content += d.contentDelta ?? '';
+          flushStreamLive();
+        },
+        onResult: (raw) => {
+          if (streamFlushRaf != null) {
+            cancelAnimationFrame(streamFlushRaf);
+            streamFlushRaf = null;
+          }
+          setStreamLive(null);
+          const data = raw as AgentResult;
+          handleAgentResponse(data, true);
+        },
+        onError: (errMsg) => {
+          setStreamLive(null);
+          setLoading(false);
+          if (errMsg.trim()) {
+            addLog(`请求异常: ${errMsg}`);
+            setMessages((prev) => [...prev, { role: 'assistant', content: `请求失败: ${errMsg}` }]);
+          }
+        },
+      });
     } catch (e) {
+      setStreamLive(null);
+      if (e instanceof Error && e.name === 'AbortError') {
+        addLog('请求已取消（本地中断）');
+        setLoading(false);
+        return;
+      }
       const err = e instanceof Error ? e.message : String(e);
       addLog(`请求异常: ${err}`);
       setMessages((prev) => [...prev, { role: 'assistant', content: `请求失败: ${err}` }]);
       setLoading(false);
+    }
+  };
+
+  const refreshOllamaModels = () => {
+    if (!apiBase) return;
+    fetchAgentOllamaInstalledModels(apiBase).then(setInstalledModels).catch(() => {});
+  };
+
+  const handleModelSelectChange = async (next: string) => {
+    if (!apiBase || !next || next === currentModel) return;
+    chatAbortRef.current?.abort();
+    setLoading(false);
+    addLog(`切换模型: ${next}…`);
+    const result = await postSwitchAgentModel(apiBase, next);
+    if (result.success && result.model) {
+      setCurrentModel(result.model);
+      addLog(`已切换为: ${result.model}`);
+      refreshOllamaModels();
+    } else {
+      addLog(`切换失败: ${result.error ?? '未知错误'}`);
+      const m = await fetchAgentCurrentModel(apiBase);
+      if (m) setCurrentModel(m);
     }
   };
 
@@ -885,7 +982,72 @@ export function ChatPanel({ apiBase, addLog, onStartWorkEmbedded }: ChatPanelPro
             {renderToolResults(m.toolResults, setTipMessage)}
           </div>
         ))}
-        {loading && <p style={{ color: '#888' }}>处理中…</p>}
+        {streamLive && (
+          <div
+            style={{
+              marginBottom: 12,
+              padding: 12,
+              borderRadius: 8,
+              border: '1px solid #334155',
+              background: '#111827',
+              fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace',
+            }}
+          >
+            {streamLive.thinking ? (
+              <>
+                <div style={{ fontSize: 13, color: '#c4b5fd', marginBottom: 8, fontWeight: 600 }}>Thinking…</div>
+                <pre
+                  style={{
+                    margin: '0 0 8px',
+                    whiteSpace: 'pre-wrap',
+                    wordBreak: 'break-word',
+                    fontSize: 12,
+                    color: '#e9d5ff',
+                    maxHeight: 280,
+                    overflow: 'auto',
+                    lineHeight: 1.45,
+                  }}
+                >
+                  {streamLive.thinking}
+                </pre>
+                {streamLive.content ? (
+                  <div style={{ fontSize: 12, color: '#86efac', margin: '0 0 8px' }}>...done thinking.</div>
+                ) : null}
+              </>
+            ) : (
+              !streamLive.content && (
+                <div style={{ fontSize: 13, color: '#c4b5fd', marginBottom: 8, fontWeight: 600 }}>Thinking…</div>
+              )
+            )}
+            {!streamLive.thinking && !streamLive.content && (
+              <div style={{ fontSize: 12, color: '#64748b' }}>已请求流式推理；若久无文字请升级 Ollama，或检查 .env 中 OLLAMA_THINK</div>
+            )}
+            {streamLive.content ? (
+              <>
+                <div style={{ fontSize: 11, color: '#94a3b8', margin: '0 0 6px' }}>Answer</div>
+                <pre
+                  style={{
+                    margin: 0,
+                    whiteSpace: 'pre-wrap',
+                    wordBreak: 'break-word',
+                    fontSize: 13,
+                    color: '#e2e8f0',
+                    maxHeight: 320,
+                    overflow: 'auto',
+                    lineHeight: 1.45,
+                  }}
+                >
+                  {streamLive.content}
+                </pre>
+              </>
+            ) : null}
+          </div>
+        )}
+        {loading && (
+          <p style={{ color: '#888' }}>
+            {streamLive && (streamLive.thinking || streamLive.content) ? '工具执行或收尾中…' : streamLive ? '连接模型…' : '处理中…'}
+          </p>
+        )}
         {tipMessage && (
           <div
             style={{
@@ -1048,11 +1210,35 @@ export function ChatPanel({ apiBase, addLog, onStartWorkEmbedded }: ChatPanelPro
           )}
         </div>
         <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 6 }}>
-          {currentModel && (
-            <span style={{ fontSize: 12, color: '#64748b' }} title="当前使用的本地模型">
-              {currentModel}
-            </span>
-          )}
+          <label style={{ fontSize: 12, color: '#64748b', display: 'flex', flexDirection: 'column', gap: 4, alignItems: 'flex-end' }}>
+            <span>Ollama 模型</span>
+            <select
+              value={currentModel}
+              onFocus={refreshOllamaModels}
+              onChange={(e) => void handleModelSelectChange(e.target.value)}
+              title="从本机已安装模型中选择；切换时会停止当前推理并卸载上一模型"
+              style={{
+                maxWidth: 220,
+                fontSize: 12,
+                padding: '6px 8px',
+                background: '#16213e',
+                color: '#e2e8f0',
+                border: '1px solid #334155',
+                borderRadius: 6,
+                cursor: 'pointer',
+              }}
+            >
+              {currentModel && !installedModels.includes(currentModel) && (
+                <option value={currentModel}>{currentModel}</option>
+              )}
+              {installedModels.length === 0 && !currentModel && <option value="">（无已安装模型）</option>}
+              {installedModels.map((name) => (
+                <option key={name} value={name}>
+                  {name}
+                </option>
+              ))}
+            </select>
+          </label>
           <button
             type="submit"
             disabled={loading}

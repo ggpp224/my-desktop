@@ -4,6 +4,13 @@ import express from 'express';
 import cors from 'cors';
 import { runAgent } from '../agent/agent.js';
 import { healthCheck } from '../agent/ollama-client.js';
+import {
+  fetchOllamaInstalledModelNames,
+  getOllamaActiveModel,
+  setOllamaActiveModel,
+  syncActiveModelFromOllamaPs,
+  unloadOllamaModel,
+} from '../agent/ollama-runtime.js';
 import { config } from '../config/default.js';
 import { getJenkinsPreset } from '../config/jenkins-presets.js';
 import { deploy as jenkinsDeploy, getDeployStatus, getDeployStatusByBuildHistory } from '../tools/jenkins-tool.js';
@@ -19,6 +26,14 @@ import path from 'path';
 const app = express();
 app.use(cors());
 app.use(express.json());
+
+/** 进行中的 /agent/chat 可中止：切换模型或新请求时取消与 Ollama 的连接 */
+let agentChatAbort: AbortController | null = null;
+
+function abortAgentChat(): void {
+  agentChatAbort?.abort();
+  agentChatAbort = null;
+}
 
 const COMMAND_HISTORY_MAX = 30;
 const COMMAND_HISTORY_FILE = path.resolve(process.cwd(), 'runtime', 'command-history.json');
@@ -59,9 +74,50 @@ app.get('/health', async (_req, res) => {
   res.status(ok ? 200 : 503).json({ ok, service: 'ai-dev-control-center' });
 });
 
-/** 返回当前使用的本地模型名，供前端展示 */
+/** 返回当前使用的本地模型名（可运行时切换），供前端展示 */
 app.get('/agent/model', (_req, res) => {
-  res.json({ model: config.ollama.model });
+  res.json({ model: getOllamaActiveModel() });
+});
+
+/** Ollama 已安装模型列表（/api/tags），供下拉切换 */
+app.get('/agent/ollama/models', async (_req, res) => {
+  try {
+    const models = await fetchOllamaInstalledModelNames();
+    res.json({ models });
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    res.status(503).json({ models: [] as string[], error: msg });
+  }
+});
+
+/**
+ * 切换 Agent 使用的 Ollama 模型：中止当前推理、卸载旧模型、启用新模型（下次 chat 加载）。
+ */
+app.post('/agent/model', async (req, res) => {
+  const next = (req.body?.model ?? '').toString().trim();
+  if (!next) {
+    res.status(400).json({ success: false, error: '缺少 model' });
+    return;
+  }
+  let installed: string[];
+  try {
+    installed = await fetchOllamaInstalledModelNames();
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    res.status(503).json({ success: false, error: `无法连接 Ollama: ${msg}` });
+    return;
+  }
+  if (!installed.includes(next)) {
+    res.status(400).json({ success: false, error: `模型未安装或名称不匹配: ${next}` });
+    return;
+  }
+  const prev = getOllamaActiveModel();
+  if (prev !== next) {
+    abortAgentChat();
+    await unloadOllamaModel(prev);
+    setOllamaActiveModel(next);
+  }
+  res.json({ success: true, model: getOllamaActiveModel() });
 });
 
 /** 最近指令历史：从本地文件读取，避免重启丢失 */
@@ -96,12 +152,76 @@ app.post('/agent/chat', async (req, res) => {
     res.status(400).json({ success: false, error: '缺少 message' });
     return;
   }
+  abortAgentChat();
+  agentChatAbort = new AbortController();
+  const { signal } = agentChatAbort;
   try {
-    const result = await runAgent(message);
+    const result = await runAgent(message, { signal });
     res.json(result);
   } catch (err) {
+    const aborted = signal.aborted || (err instanceof Error && err.name === 'AbortError');
+    if (aborted) {
+      res.json({ success: false, error: '请求已取消（模型切换或新请求已打断当前推理）', aborted: true });
+      return;
+    }
     const msg = err instanceof Error ? err.message : String(err);
     res.status(500).json({ success: false, error: msg });
+  } finally {
+    if (agentChatAbort?.signal === signal) agentChatAbort = null;
+  }
+});
+
+/**
+ * Agent 对话（SSE）：首轮模型思考/输出以 `llm_delta` 事件实时推送，结束时 `result` 与 POST /agent/chat 一致。
+ */
+app.post('/agent/chat/stream', async (req, res) => {
+  const message = (req.body?.message ?? '').toString().trim();
+  if (!message) {
+    res.status(400).json({ success: false, error: '缺少 message' });
+    return;
+  }
+  abortAgentChat();
+  agentChatAbort = new AbortController();
+  const { signal } = agentChatAbort;
+
+  res.setHeader('Content-Type', 'text/event-stream');
+  res.setHeader('Cache-Control', 'no-cache');
+  res.setHeader('Connection', 'keep-alive');
+  res.setHeader('X-Accel-Buffering', 'no');
+  const socket = (res as unknown as { socket?: { setNoDelay?: (v: boolean) => void } }).socket;
+  if (socket?.setNoDelay) socket.setNoDelay(true);
+  res.flushHeaders?.();
+
+  const send = (obj: unknown) => {
+    const payload = `data: ${JSON.stringify(obj)}\n\n`;
+    res.write(payload, 'utf8', () => {
+      if (typeof (res as unknown as { flush?: () => void }).flush === 'function') {
+        (res as unknown as { flush: () => void }).flush();
+      }
+    });
+  };
+
+  try {
+    const result = await runAgent(message, {
+      signal,
+      onFirstLLMStream: (chunk) =>
+        send({
+          type: 'llm_delta',
+          thinkingDelta: chunk.thinkingDelta,
+          contentDelta: chunk.contentDelta,
+        }),
+    });
+    send({ type: 'result', result });
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    try {
+      send({ type: 'error', error: msg });
+    } catch {
+      /* 客户端已断开 */
+    }
+  } finally {
+    if (agentChatAbort?.signal === signal) agentChatAbort = null;
+    res.end();
   }
 });
 
@@ -505,9 +625,13 @@ app.post('/merge/:code', async (req, res) => {
 });
 
 /** 启动 API 服务；若端口被占用则尝试 3001、3002…，返回实际监听端口 */
-export function startServer(): Promise<number> {
+export async function startServer(): Promise<number> {
   const basePort = config.server.port;
   const maxPort = basePort + 20;
+
+  await syncActiveModelFromOllamaPs().catch(() => {
+    /* Ollama 未启动或 /api/ps 不可用时保留内存中的默认（来自 env） */
+  });
 
   function tryListen(port: number): Promise<number> {
     return new Promise((resolve, reject) => {
@@ -531,4 +655,4 @@ export function startServer(): Promise<number> {
 }
 
 const isMain = process.argv[1]?.includes('api.');
-if (isMain) startServer();
+if (isMain) void startServer().catch((e) => console.error('startServer failed:', e));
