@@ -23,6 +23,13 @@ interface MyWorkPanelProps {
   initialTerminals: WorkTerminal[];
 }
 
+/** 新建页签时继承的目录：当前选中页签，若无则第一个页签 */
+function resolveInheritCwdForNewTab(terminals: WorkTerminal[], activeTerminalId: string): string | undefined {
+  const active = terminals.find((t) => t.id === activeTerminalId) ?? terminals[0];
+  const cwd = active?.cwdAbs?.trim();
+  return cwd || undefined;
+}
+
 export function MyWorkPanel({ apiBase, sessionId, initialTerminals }: MyWorkPanelProps) {
   const [terminals, setTerminals] = useState<WorkTerminal[]>(initialTerminals);
   const [activeTerminalId, setActiveTerminalId] = useState<string>(initialTerminals[0]?.id ?? '');
@@ -34,14 +41,18 @@ export function MyWorkPanel({ apiBase, sessionId, initialTerminals }: MyWorkPane
   const activePtySeqRef = useRef(0);
   const activePtyIdRef = useRef('');
   const renderedTerminalIdRef = useRef('');
+  const tabContextRef = useRef({ terminals: initialTerminals, activeTerminalId: initialTerminals[0]?.id ?? '' });
+  tabContextRef.current = { terminals, activeTerminalId };
 
   const createManualTerminal = useCallback(async () => {
     if (!sessionId || creatingTerminal) return;
     setCreatingTerminal(true);
     try {
+      const inheritCwd = resolveInheritCwdForNewTab(tabContextRef.current.terminals, tabContextRef.current.activeTerminalId);
       const resp = await fetch(`${apiBase}/workflow/sessions/${encodeURIComponent(sessionId)}/terminals`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(inheritCwd ? { cwdAbs: inheritCwd } : {}),
       });
       if (!resp.ok) return;
       const data = await resp.json();
@@ -227,7 +238,7 @@ export function MyWorkPanel({ apiBase, sessionId, initialTerminals }: MyWorkPane
             whiteSpace: 'nowrap',
             flexShrink: 0,
           }}
-          title="手动创建空终端"
+          title="手动创建空终端（目录与当前页签一致，⌘T / Ctrl+T 同）"
         >
           + 新建终端
         </button>

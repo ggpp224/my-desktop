@@ -28,7 +28,7 @@ export type AgentResult = {
 /* AI 生成 By Peng.Guo - 精简 system prompt 降低 token 与推理耗时 */
 const AGENT_SYSTEM_PROMPT = `你是开发流程助手，根据用户意图选择工具并填对参数。项目代号见 config/projects，常用：base、base18、nova、scm、react18、cc-web、cc-node、biz-solution、biz-guide、uikit、shared 等。
 
-工作流：开始工作/执行 start-work → run_workflow(name=start-work)。打开终端/新建终端（不执行开始工作）→ open_terminal()。standalone → run_workflow(name=standalone)。启动 cpxy/react18/scm/cc-web/biz-solution/uikit/shared → run_workflow_step(workflow=start-work 或 standalone，taskKey=对应 key)；start-work 不含 base18，需启动 base18 时用 run_shell 进入项目目录执行。升级集测react18的nova版本 → run_workflow(name=upgrade-react18-nova)。升级集测cc-web的nova版本 → run_workflow(name=upgrade-cc-web-nova)。
+工作流：开始工作/执行 start-work → run_workflow(name=start-work)。打开终端/新建终端（不执行开始工作）→ open_terminal()；终端打开某项目目录（内嵌新页签）→ open_terminal(code=项目代号)，如终端打开 react18、终端打开 cc-web2。standalone → run_workflow(name=standalone)。启动 cpxy/react18/scm/cc-web/biz-solution/uikit/shared → run_workflow_step(workflow=start-work 或 standalone，taskKey=对应 key)；start-work 不含 base18，需启动 base18 时用 run_shell 进入项目目录执行。升级集测react18的nova版本 → run_workflow(name=upgrade-react18-nova)。升级集测cc-web的nova版本 → run_workflow(name=upgrade-cc-web-nova)。
 部署：部署 xxx → deploy_jenkins(job=…)。可指定分支，如「部署nova 分支是sprint-260326」→ deploy_jenkins(job=nova, branch=sprint-260326)。合并 xxx → merge_repo(repo=nova|biz-solution|scm)。
 IDE：ws打开base、cursor打开scm → open_in_ide(app=ws|webstorm|cursor|vscode|code，code=项目代号)。关闭 → close_ide_project(app=ws|cursor，code=项目代号)。
 浏览器：打开 Jenkins/URL → open_browser(url=完整 URL)。打开集测环境 → open_jice_env()。打开测试环境 → open_test_env()。打开json配置中心 → open_json_config_center()。打开某项目 Jenkins 任务页 → open_jenkins_job(job=nova|cc-web|cc-node|react18|base|base18|biz-solution|biz-guide|scm)。周报：用户说「周报」→ open_weekly_report()（按低代码单据前端空间的“最近季度+最近日期区间”定位）；用户说「写周报」→ write_weekly_report(maxResults=可选)（先查本周已完成任务，再让大模型生成周报）。Jira：我的bug/查询我的bug → search_my_bugs(maxResults=可选)；线上bug/查询线上bug → search_online_bugs(maxResults=可选)；本周已完成任务/查询本周已完成任务 → search_weekly_done_tasks(maxResults=可选)。Cursor：cursor用量/查询cursor用量 → get_cursor_usage()（若无 token/cookie 会自动尝试同步本机 Chrome 登录态）；cursor今日用量/查询cursor今日用量 → get_cursor_today_usage()；同步cursor登录态 → sync_cursor_cookie()。Shell：执行命令 → run_shell(command=命令)。`;
@@ -61,9 +61,15 @@ function extractExplicitProjectCode(userMessage: string): string | null {
   return [...candidates][0] ?? null;
 }
 
-function normalizeToolCallWithExplicitCode(call: ToolCall, explicitCode: string | null): ToolCall {
-  if (!explicitCode) return call;
+function normalizeToolCallWithExplicitCode(call: ToolCall, explicitCode: string | null, userMessage: string): ToolCall {
   const args = (call.arguments ?? {}) as Record<string, unknown>;
+  if (explicitCode && call.name === 'open_terminal') {
+    const hasCode = String(args.code ?? '').trim();
+    if (!hasCode && /终端\s*打开/.test((userMessage ?? '').toLowerCase())) {
+      return { ...call, arguments: { ...args, code: explicitCode } };
+    }
+  }
+  if (!explicitCode) return call;
   if (call.name === 'deploy_jenkins' || call.name === 'open_jenkins_job') {
     return { ...call, arguments: { ...args, job: explicitCode } };
   }
@@ -97,7 +103,7 @@ export async function runAgent(userMessage: string): Promise<AgentResult> {
     }
 
     const explicitCode = extractExplicitProjectCode(userMessage);
-    const calls = parseToolCalls(message).map((call) => normalizeToolCallWithExplicitCode(call, explicitCode));
+    const calls = parseToolCalls(message).map((call) => normalizeToolCallWithExplicitCode(call, explicitCode, userMessage));
 
     if (calls.length === 0) {
       const text = (message.content ?? '').trim() || '未解析到可执行操作，请换一种说法试试。';

@@ -285,14 +285,15 @@ app.delete('/workflow/sessions/:sessionId', (req, res) => {
   res.json({ success: true });
 });
 
-/** 在已有工作会话中新增手动终端 */
+/** 在已有工作会话中新增手动终端；可选 body.cwdAbs 为初始工作目录（通常继承当前页签） */
 app.post('/workflow/sessions/:sessionId/terminals', (req, res) => {
   const sessionId = (req.params?.sessionId ?? '').trim();
   if (!sessionId) {
     res.status(400).json({ success: false, error: '缺少 sessionId' });
     return;
   }
-  const terminal = addManualTerminalToSession(sessionId);
+  const cwdFromBody = (req.body?.cwdAbs ?? req.body?.cwd ?? '').toString().trim();
+  const terminal = addManualTerminalToSession(sessionId, cwdFromBody ? { cwd: cwdFromBody } : undefined);
   if (!terminal) {
     res.status(404).json({ success: false, error: `会话不存在: ${sessionId}` });
     return;

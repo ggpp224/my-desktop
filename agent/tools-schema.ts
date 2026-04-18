@@ -192,10 +192,17 @@ export const toolsSchema = [
     type: 'function' as const,
     function: {
       name: 'open_terminal',
-      description: '打开内嵌终端工作区（我的工作），仅新建一个终端，不执行开始工作流',
+      description:
+        '打开内嵌终端工作区（我的工作），新建一个终端页签，不执行开始工作流。用户说「终端打开 react18」「终端打开 cc-web」等 → 必传 code=项目代号，cwd 为该代号在 config/projects 中的路径；仅「打开终端/新建终端」不传 code，cwd 为用户主目录。代号示例：react18、cc-web、cc-web2、biz-solution、biz-guide、uikit、shared、scm、scm18、nova、nova-next、base、base18、ai-import、uikit-compat、cc-node、app-service、biz-framework、front-entity、front-pub、evoui、chanjet-grid、nova-form、nova-grid、nova-server、nova-ui、chanjet-nova、h5-biz-common、cc-web-hkj',
       parameters: {
         type: 'object',
-        properties: {},
+        properties: {
+          code: {
+            type: 'string',
+            description:
+              '可选。config/projects 中的项目代号；与「终端打开 xx」中的 xx 一致；不传则空白主目录终端',
+          },
+        },
       },
     },
   },

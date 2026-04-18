@@ -139,6 +139,7 @@ function buildCommandHints(projects: ProjectInfo[], inputHistory: string[]): str
     `关闭 VS Code 的 ${code}`,
   ]);
   const mergeHints = mergeCodes.map((code) => `合并 ${code}`);
+  const openProjectTerminalHints = allCodes.map((code) => `终端打开 ${code}`);
   return Array.from(
     new Set([
       ...fixedHints,
@@ -149,6 +150,7 @@ function buildCommandHints(projects: ProjectInfo[], inputHistory: string[]): str
       ...openIdeHints,
       ...closeIdeHints,
       ...mergeHints,
+      ...openProjectTerminalHints,
       ...inputHistory,
     ])
   );
@@ -872,7 +874,9 @@ export function ChatPanel({ apiBase, addLog, onStartWorkEmbedded }: ChatPanelPro
       </div>
       <div ref={feedbackListRef} style={{ flex: 1, overflow: 'auto', marginBottom: 12, background: '#0d0d1a', borderRadius: 8, padding: 12 }}>
         {messages.length === 0 && (
-          <p style={{ color: '#888' }}>[Chat] 输入指令或点击上方快捷按钮，例如：开始工作、升级集测react18的nova版本、升级集测cc-web的nova版本、启动 react18、打开 Jenkins、部署order-service</p>
+          <p style={{ color: '#888' }}>
+            [Chat] 输入指令或点击上方快捷按钮，例如：开始工作、终端打开 react18、升级集测react18的nova版本、启动 react18、打开 Jenkins、部署order-service
+          </p>
         )}
         {messages.map((m, i) => (
           <div key={i} style={{ marginBottom: 12 }}>

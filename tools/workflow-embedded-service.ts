@@ -166,19 +166,29 @@ export function getEmbeddedWorkflowSession(sessionId: string): EmbeddedSession |
   return sessions.get(sessionId) ?? null;
 }
 
-export function addManualTerminalToSession(sessionId: string): EmbeddedTerminalSnapshot | null {
+/** 在已有会话中新建手动终端页签；cwd 默认用户主目录 */
+export function addManualTerminalToSession(
+  sessionId: string,
+  opts?: { cwd?: string; tabTitle?: string }
+): EmbeddedTerminalSnapshot | null {
   const session = sessions.get(sessionId);
   if (!session) return null;
   const existingManualCount = session.terminals.filter((item) => item.taskKey === 'manual').length;
-  const title = `terminal-${existingManualCount + 1}`;
-  const ptySession = createTerminalSession({ title, cwd: homedir() });
+  const cwdInput = (opts?.cwd ?? '').trim();
+  const cwdResolved = cwdInput || homedir();
+  const title = (opts?.tabTitle ?? '').trim() || `terminal-${existingManualCount + 1}`;
+  const ptySession = createTerminalSession({ title, cwd: cwdResolved });
   const terminal: EmbeddedTerminalSnapshot = {
     id: `manual-${Date.now()}`,
     title,
     taskKey: 'manual',
     stepIndex: session.terminals.length,
     status: ptySession.status,
-    lines: [`${new Date().toLocaleTimeString('zh-CN', { hour12: false })} 已创建手动终端`],
+    lines: [
+      `${new Date().toLocaleTimeString('zh-CN', { hour12: false })} 已创建手动终端${
+        cwdInput ? `，目录: ${ptySession.cwdAbs}` : ''
+      }`,
+    ],
     cwdAbs: ptySession.cwdAbs,
     terminalSessionId: ptySession.id,
   };
@@ -186,7 +196,11 @@ export function addManualTerminalToSession(sessionId: string): EmbeddedTerminalS
   return terminal;
 }
 
-export function openEmbeddedTerminalWorkspace(): { sessionId: string; terminals: EmbeddedTerminalSnapshot[] } {
+/** 打开仅含手动终端的内嵌工作区；可指定初始 cwd 与页签标题（如项目代号） */
+export function openEmbeddedTerminalWorkspace(opts?: {
+  cwd?: string;
+  tabTitle?: string;
+}): { sessionId: string; terminals: EmbeddedTerminalSnapshot[] } {
   const sessionId = randomUUID();
   const session: EmbeddedSession = {
     id: sessionId,
@@ -195,7 +209,7 @@ export function openEmbeddedTerminalWorkspace(): { sessionId: string; terminals:
     createdAt: Date.now(),
   };
   sessions.set(sessionId, session);
-  const terminal = addManualTerminalToSession(sessionId);
+  const terminal = addManualTerminalToSession(sessionId, opts);
   return { sessionId, terminals: terminal ? [terminal] : [] };
 }
 

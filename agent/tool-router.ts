@@ -10,7 +10,8 @@ const JSON_CONFIG_CENTER_URL = 'https://inte-feconfig.chanjet.com.cn/#/project/p
 
 import { config } from '../config/default.js';
 import { getJenkinsPreset } from '../config/jenkins-presets.js';
-import { getProjectByCode } from '../config/projects.js';
+import { existsSync, statSync } from 'fs';
+import { getProjectByCode, getProjectPath } from '../config/projects.js';
 import { run as shellRun } from '../tools/shell-tool.js';
 import { open as browserOpen } from '../tools/browser-tool.js';
 import { deploy as jenkinsDeploy } from '../tools/jenkins-tool.js';
@@ -95,6 +96,16 @@ export async function routeAndExecute(call: ToolCall): Promise<unknown> {
       return runWorkflow(workflowName);
     }
     case 'open_terminal': {
+      const code = ((args?.code as string) ?? '').trim();
+      if (code) {
+        const dir = getProjectPath(code);
+        if (!dir) throw new Error(`未知项目代号: ${code}，请使用 config/projects 中已配置的代号`);
+        if (!existsSync(dir) || !statSync(dir).isDirectory()) {
+          throw new Error(`项目目录不可用或未配置: ${code} → ${dir}`);
+        }
+        const embedded = openEmbeddedTerminalWorkspace({ cwd: dir, tabTitle: code });
+        return { success: true, embedded: true, projectCode: code, ...embedded };
+      }
       const embedded = openEmbeddedTerminalWorkspace();
       return { success: true, embedded: true, ...embedded };
     }

@@ -21,6 +21,11 @@ const HELP_COMMANDS: HelpItem[] = [
   { section: '工作流', command: '启动 cpxy', description: '单独在终端启动 cpxy' },
   { section: '工作流', command: '启动 react18 / 启动 cc-web / 启动 biz-solution / 启动 uikit / 启动 shared', description: '单独在终端启动对应项目（start-work 单步）' },
   { section: '工作流', command: '启动 scm', description: '单独在终端启动 scm（可用 standalone 工作流）' },
+  {
+    section: '终端',
+    command: '终端打开 react18 / 终端打开 cc-web2 / 终端打开 nova',
+    description: '在「我的工作」内嵌终端中新建页签，初始目录为该项目在 config/projects 与 .env 中配置的路径（代号同部署与 IDE 打开）',
+  },
   { section: '浏览器 / Wiki', command: '打开 Jenkins', description: '在浏览器中打开 Jenkins 地址' },
   { section: '浏览器 / Wiki', command: '打开jenkins nova / 打开 Jenkins 的 cc-web', description: '打开该项目对应的 Jenkins 任务页面（代号与部署一致）' },
   { section: '浏览器 / Wiki', command: '周报 / 打开周报 / 打开wiki周报', description: '使用 WIKI_TOKEN 鉴权读取 wiki 目录树，定位“低代码单据前端空间”最新季度下最新周报页并打开（未命中时回退搜索页）' },
