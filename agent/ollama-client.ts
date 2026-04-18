@@ -28,6 +28,11 @@ export type ChatWithToolsOptions = {
   signal?: AbortSignal;
 };
 
+/** Ollama 返回 400 且模型不支持 thinking 时用于去掉 think 重试 */
+export function isOllamaThinkingUnsupportedMessage(bodyText: string): boolean {
+  return /does not support thinking/i.test(bodyText);
+}
+
 function buildOllamaToolChatBody(
   messages: ChatMessage[],
   tools: Array<{ type: 'function'; function: { name: string; description: string; parameters: object } }>,
@@ -47,18 +52,37 @@ function buildOllamaToolChatBody(
   return body;
 }
 
+/**
+ * POST /api/chat：若因 think 不被模型支持而 400，自动去掉 think 再请求一次（流式/非流式共用）。
+ */
+export async function fetchOllamaApiChatWithThinkFallback(
+  body: Record<string, unknown>,
+  init: Omit<RequestInit, 'body'>
+): Promise<Response> {
+  const url = `${config.ollama.baseUrl}/api/chat`;
+  let res = await fetch(url, { ...init, body: JSON.stringify(body) });
+  if (res.ok) return res;
+  const errText = await res.text().catch(() => '');
+  if (res.status === 400 && isOllamaThinkingUnsupportedMessage(errText) && body.think !== undefined) {
+    const next = { ...body };
+    delete next.think;
+    res = await fetch(url, { ...init, body: JSON.stringify(next) });
+    return res;
+  }
+  return new Response(errText, { status: res.status, statusText: res.statusText });
+}
+
 export async function chatWithTools(
   messages: ChatMessage[],
   tools: Array<{ type: 'function'; function: { name: string; description: string; parameters: object } }>,
   options?: ChatWithToolsOptions
 ): Promise<{ message: ChatMessage; done: boolean; tokenUsage?: OllamaTokenUsage }> {
-  const res = await fetch(`${config.ollama.baseUrl}/api/chat`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    signal: options?.signal,
-    body: JSON.stringify(buildOllamaToolChatBody(messages, tools, false)),
-  });
-  if (!res.ok) throw new Error(`Ollama chat failed: ${res.status}`);
+  const baseInit = { method: 'POST' as const, headers: { 'Content-Type': 'application/json' }, signal: options?.signal };
+  let res = await fetchOllamaApiChatWithThinkFallback(buildOllamaToolChatBody(messages, tools, false), baseInit);
+  if (!res.ok) {
+    const t = await res.text().catch(() => '');
+    throw new Error(`Ollama chat failed: ${res.status} ${t}`.trim());
+  }
   const data = (await res.json()) as {
     message: ChatMessage;
     done?: boolean;
@@ -99,12 +123,8 @@ export async function chatWithToolsStream(
     onDelta: (d: { thinkingDelta?: string; contentDelta?: string }) => void;
   }
 ): Promise<{ message: ChatMessage; done: boolean; tokenUsage?: OllamaTokenUsage }> {
-  const res = await fetch(`${config.ollama.baseUrl}/api/chat`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    signal: options.signal,
-    body: JSON.stringify(buildOllamaToolChatBody(messages, tools, true)),
-  });
+  const baseInit = { method: 'POST' as const, headers: { 'Content-Type': 'application/json' }, signal: options.signal };
+  let res = await fetchOllamaApiChatWithThinkFallback(buildOllamaToolChatBody(messages, tools, true), baseInit);
   if (!res.ok) {
     const t = await res.text().catch(() => '');
     throw new Error(`Ollama chat failed: ${res.status} ${t}`.trim());

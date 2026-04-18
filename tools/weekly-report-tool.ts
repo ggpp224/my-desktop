@@ -1,9 +1,11 @@
 /* AI 生成 By Peng.Guo */
 import { config } from '../config/default.js';
-import { mergeStreamFragment, type ChatMessage } from '../agent/ollama-client.js';
+import { fetchOllamaApiChatWithThinkFallback, mergeStreamFragment, type ChatMessage } from '../agent/ollama-client.js';
 import { getOllamaActiveModel } from '../agent/ollama-runtime.js';
 import { searchWeeklyDoneTasks } from './jira-tool.js';
 import { markdownToConfluenceWiki } from './markdown-to-confluence-wiki.js';
+import { markdownToHtmlFragment } from './markdown-to-html.js';
+import { compactConfluenceWikiBlankLines, normalizeMarkdownForWeeklyExport } from './weekly-report-markdown-normalize.js';
 
 type OllamaMessage = { role: 'system' | 'user'; content: string };
 
@@ -17,7 +19,10 @@ export interface WeeklyReportDraftResult {
   success: boolean;
   total: number;
   jiraTitles: string[];
-  report: string;
+  /** 富文本 HTML，粘贴到 Confluence 新版 / 表格单元格时优先使用 */
+  reportHtml: string;
+  /** Legacy Wiki 标记（「插入 → Wiki」或仍解析 Wiki 的环境） */
+  reportWiki: string;
 }
 
 function buildWeeklyReportPrompt(jiraTitles: string[]): OllamaMessage[] {
@@ -37,6 +42,8 @@ function buildWeeklyReportPrompt(jiraTitles: string[]): OllamaMessage[] {
    - 列表：模块下用「- 」开头的无序列表归纳要点；需要时可用「1. 」有序列表。
    - 强调：关键字可用「**加粗**」；链接用「[说明](https://...)」。
    - 代码或片段：可用行内反引号或 Markdown 围栏代码块。
+5. **排版**：章节之间、标题与列表之间**不要连续多行空行**（最多一个空行）；否则粘贴到 Wiki/表格后会出现很大段纵向留白。
+   （说明：系统会在保存结果前自动将正文转为 HTML 与 Confluence Wiki，你只需按 Markdown 输出。）
 # Jira Titles
 [在此处粘贴你的 Jira 标题列表，例如：
 - PROJ-123 优化登录页面加载速度
@@ -62,7 +69,7 @@ const WEEKLY_REPORT_FETCH_MS = Number(process.env.OLLAMA_WEEKLY_REPORT_TIMEOUT_M
 async function summarizeWeeklyReportByOllama(
   jiraTitles: string[],
   hooks?: { onProgress?: (message: string) => void; onStreamDelta?: (d: { thinkingDelta?: string; contentDelta?: string }) => void }
-): Promise<string> {
+): Promise<{ reportHtml: string; reportWiki: string }> {
   const timeoutMs = Number.isFinite(WEEKLY_REPORT_FETCH_MS) && WEEKLY_REPORT_FETCH_MS > 0 ? WEEKLY_REPORT_FETCH_MS : 600_000;
   const signal =
     typeof AbortSignal !== 'undefined' && 'timeout' in AbortSignal && typeof AbortSignal.timeout === 'function'
@@ -71,19 +78,20 @@ async function summarizeWeeklyReportByOllama(
 
   hooks?.onProgress?.('已连接模型，开始流式生成周报…');
 
+  const chatBody: Record<string, unknown> = {
+    model: getOllamaActiveModel(),
+    messages: buildWeeklyReportPrompt(jiraTitles) as ChatMessage[],
+    stream: true,
+    ...(config.ollama.think !== undefined ? { think: config.ollama.think } : {}),
+    options: WEEKLY_REPORT_OLLAMA_OPTIONS,
+  };
+
   let response: Response;
   try {
-    response = await fetch(`${config.ollama.baseUrl}/api/chat`, {
+    response = await fetchOllamaApiChatWithThinkFallback(chatBody, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       ...(signal ? { signal } : {}),
-      body: JSON.stringify({
-        model: getOllamaActiveModel(),
-        messages: buildWeeklyReportPrompt(jiraTitles) as ChatMessage[],
-        stream: true,
-        ...(config.ollama.think !== undefined ? { think: config.ollama.think } : {}),
-        options: WEEKLY_REPORT_OLLAMA_OPTIONS,
-      }),
     });
   } catch (e) {
     const name = e instanceof Error ? e.name : '';
@@ -163,10 +171,12 @@ async function summarizeWeeklyReportByOllama(
       '周报总结失败：模型未返回内容（content/thinking 均为空）。可尝试换模型、或检查 num_ctx 是否够容纳 Jira 列表'
     );
   }
-  hooks?.onProgress?.('周报正文已生成完毕，正在转为 Confluence Wiki…');
-  const wiki = markdownToConfluenceWiki(text);
-  hooks?.onProgress?.('已转为 Wiki 标记。');
-  return wiki;
+  hooks?.onProgress?.('周报正文已生成完毕，正在生成 HTML 与 Wiki…');
+  const md = normalizeMarkdownForWeeklyExport(text);
+  const reportWiki = compactConfluenceWikiBlankLines(markdownToConfluenceWiki(md));
+  const reportHtml = markdownToHtmlFragment(md);
+  hooks?.onProgress?.('已生成 HTML（富文本粘贴）与 Wiki。');
+  return { reportHtml, reportWiki };
 }
 
 export type WriteWeeklyReportHooks = {
@@ -184,11 +194,12 @@ export async function writeWeeklyReport(
     .map((issue) => `${issue.key} ${issue.summary}`.trim())
     .filter(Boolean);
   hooks?.onProgress?.(`已获取 ${jiraTitles.length} 条任务标题，正在调用本地模型流式生成周报…`);
-  const report = await summarizeWeeklyReportByOllama(jiraTitles, hooks);
+  const { reportHtml, reportWiki } = await summarizeWeeklyReportByOllama(jiraTitles, hooks);
   return {
     success: true,
     total: jiraTitles.length,
     jiraTitles,
-    report,
+    reportHtml,
+    reportWiki,
   };
 }

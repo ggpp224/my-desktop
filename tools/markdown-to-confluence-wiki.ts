@@ -32,12 +32,12 @@ function lineMarkdownHeadingToWiki(line: string): string {
   return `${m[1]}h${level}. ${m[3].trimEnd()}`;
 }
 
-/** 行首无序列表（含缩进层级）→ Wiki * / ** / *** */
+/** 行首无序列表（含缩进层级）→ Wiki 用「-」圆点列表（官方支持），避免行首「*」与加粗「*词*」粘连成「* *词*」 */
 function lineMarkdownUlToWiki(line: string): string {
   const m = line.match(/^(\s*)[-*+]\s+(.*)$/);
   if (!m) return line;
   const depth = Math.min(6, Math.floor(m[1].length / 2) + 1);
-  return `${'*'.repeat(depth)} ${m[2]}`;
+  return `${'-'.repeat(depth)} ${m[2]}`;
 }
 
 /** 行首有序列表 → Wiki # */

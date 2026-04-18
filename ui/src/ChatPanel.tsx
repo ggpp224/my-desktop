@@ -33,7 +33,14 @@ type JiraBugItem = {
   url?: string;
 };
 type JiraBugPayload = { total?: number; issues?: JiraBugItem[] };
-type WeeklyReportPayload = { total?: number; jiraTitles?: string[]; report?: string };
+type WeeklyReportPayload = {
+  total?: number;
+  jiraTitles?: string[];
+  /** 旧版仅 Wiki / Markdown 字符串 */
+  report?: string;
+  reportHtml?: string;
+  reportWiki?: string;
+};
 type CursorUsageToolResult = {
   success?: boolean;
   fetchedAt?: string;
@@ -491,22 +498,47 @@ function renderCursorTodayUsage(toolResults?: unknown[]) {
   );
 }
 
+/* AI 生成 By Peng.Guo：Confluence 新版/表格粘贴优先写 text/html，纯文本槽位放 Wiki 作降级 */
+async function copyWeeklyReportToClipboard(header: string, htmlFragment: string, wikiPlain: string): Promise<void> {
+  const fullHtml = `<!DOCTYPE html><html><head><meta charset="utf-8"></head><body>${htmlFragment}</body></html>`;
+  const plain = `${header}\n\n${wikiPlain}`.trim();
+  try {
+    await navigator.clipboard.write([
+      new ClipboardItem({
+        'text/html': new Blob([fullHtml], { type: 'text/html' }),
+        'text/plain': new Blob([plain], { type: 'text/plain' }),
+      }),
+    ]);
+  } catch {
+    await navigator.clipboard.writeText(plain);
+  }
+}
+
 function renderToolResults(toolResults: unknown[] | undefined, onTip: (message: string) => void) {
   const weeklyReport = extractWeeklyReportResult(toolResults);
-  if (weeklyReport?.report) {
+  const reportHtml = weeklyReport?.reportHtml;
+  const reportWiki = weeklyReport?.reportWiki ?? weeklyReport?.report;
+  if (weeklyReport && (reportHtml || reportWiki)) {
     const titleCount = Array.isArray(weeklyReport.jiraTitles) ? weeklyReport.jiraTitles.length : weeklyReport.total ?? 0;
     const reportHeader = `已基于 ${titleCount} 条 Jira 任务生成周报`;
     return (
       <div style={{ marginTop: 8, background: '#1a1a2e', borderRadius: 6, border: '1px solid #2a2a3d', padding: 10 }}>
         <div style={{ fontSize: 12, color: '#94a3b8', marginBottom: 8, display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8 }}>
-          <span>{reportHeader}</span>
+          <span>
+            {reportHeader}
+            {reportHtml ? <span style={{ color: '#64748b', marginLeft: 8 }}>（复制带富文本，便于贴表格/新版编辑器）</span> : null}
+          </span>
           <button
             type="button"
             onClick={async () => {
               try {
-                const textToCopy = `${reportHeader}\n\n${weeklyReport.report ?? ''}`.trim();
-                await navigator.clipboard.writeText(textToCopy);
-                onTip('周报已复制到剪贴板');
+                if (reportHtml) {
+                  await copyWeeklyReportToClipboard(reportHeader, reportHtml, reportWiki ?? '');
+                  onTip('已复制：富文本 HTML + 纯文本（Wiki）');
+                } else {
+                  await navigator.clipboard.writeText(`${reportHeader}\n\n${reportWiki ?? ''}`.trim());
+                  onTip('周报已复制到剪贴板');
+                }
               } catch {
                 onTip('复制失败，请手动复制');
               }
@@ -524,7 +556,31 @@ function renderToolResults(toolResults: unknown[] | undefined, onTip: (message: 
             复制周报
           </button>
         </div>
-        <div style={{ whiteSpace: 'pre-wrap', color: '#e2e8f0', fontSize: 13, lineHeight: 1.7 }}>{weeklyReport.report}</div>
+        {reportHtml ? (
+          <>
+            <style>
+              {`
+              .weekly-report-html { font-size: 13px; line-height: 1.55; color: #e2e8f0; }
+              .weekly-report-html h1 { font-size: 1.2rem; margin: 0.35em 0 0.15em; font-weight: 700; color: #f8fafc; }
+              .weekly-report-html h2 { font-size: 1.05rem; margin: 0.3em 0 0.12em; font-weight: 600; color: #e2e8f0; }
+              .weekly-report-html h3 { font-size: 1rem; margin: 0.25em 0 0.1em; color: #cbd5e1; }
+              .weekly-report-html ul, .weekly-report-html ol { margin: 0.2em 0 0.3em 1em; padding: 0; }
+              .weekly-report-html li { margin: 0.1em 0; }
+              .weekly-report-html p { margin: 0.15em 0; }
+              .weekly-report-html pre { background: #111827; padding: 8px; border-radius: 4px; overflow: auto; font-size: 12px; }
+              .weekly-report-html a { color: #93c5fd; }
+            `}
+            </style>
+            <div
+              className="weekly-report-html"
+              style={{ maxHeight: 480, overflow: 'auto' }}
+              // eslint-disable-next-line react/no-danger -- 内容由本地工具链从 Markdown 生成并已 escape 片段
+              dangerouslySetInnerHTML={{ __html: reportHtml }}
+            />
+          </>
+        ) : (
+          <div style={{ whiteSpace: 'pre-wrap', color: '#e2e8f0', fontSize: 13, lineHeight: 1.7 }}>{reportWiki}</div>
+        )}
       </div>
     );
   }
@@ -1085,7 +1141,7 @@ export function ChatPanel({ apiBase, addLog, onStartWorkEmbedded }: ChatPanelPro
               )
             )}
             {!streamLive.thinking && !streamLive.content && (
-              <div style={{ fontSize: 12, color: '#64748b' }}>已请求流式推理；若久无文字请升级 Ollama，或检查 .env 中 OLLAMA_THINK</div>
+              <div style={{ fontSize: 12, color: '#64748b' }}>已请求流式推理；若久无文字请升级 Ollama；仅在使用支持 thinking 的模型且需要思考流时配置 OLLAMA_THINK</div>
             )}
             {streamLive.content ? (
               <>

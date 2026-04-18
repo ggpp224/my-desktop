@@ -179,7 +179,7 @@ export const toolsSchema = [
     function: {
       name: 'write_weekly_report',
       description:
-        '编写本周周报：先查询“本周已完成任务”的 Jira 列表（含编号+标题），再调用大模型按 Markdown 模板生成周报，服务端再转为 Confluence Wiki 供粘贴；用户说「写周报」时调用',
+        '编写本周周报：先查询“本周已完成任务”的 Jira 列表（含编号+标题），再调用大模型按 Markdown 生成；服务端产出 reportHtml（富文本粘贴）与 reportWiki（Legacy Wiki）；用户说「写周报」时调用',
       parameters: {
         type: 'object',
         properties: {
