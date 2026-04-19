@@ -191,6 +191,18 @@ export const toolsSchema = [
   {
     type: 'function' as const,
     function: {
+      name: 'fetch_weekly_report_info',
+      description:
+        '抓取 wiki 周报页信息（不打开浏览器）：与「周报」相同规则解析最新周区间子页，再通过 Confluence REST 拉取正文（body.storage/view）与版本号，供总结或对照。用户说「抓取周报信息」「拉取周报页」时调用，无参数',
+      parameters: {
+        type: 'object',
+        properties: {},
+      },
+    },
+  },
+  {
+    type: 'function' as const,
+    function: {
       name: 'write_weekly_report',
       description:
         '编写本周周报：先并行查询 Jira「本周已完成任务」与「本周经我手的 bug」（经办曾为我、现经办/开发不含我），合并去重后取标题列表，再调用大模型按 Markdown 生成；产出 reportHtml 与 reportWiki；用户说「写周报」时调用',

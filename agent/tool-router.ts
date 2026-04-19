@@ -23,7 +23,7 @@ import { closeIdeProject } from '../tools/close-ide-tool.js';
 import { searchMyBugs, searchOnlineBugs, searchWeeklyDoneTasks, searchWeeklyHandoffBugs } from '../tools/jira-tool.js';
 import { getCursorTodayUsage, getCursorUsage } from '../tools/cursor-usage-tool.js';
 import { syncCursorCookieFromChrome } from '../tools/cursor-cookie-sync-tool.js';
-import { openWeeklyReportPage } from '../tools/wiki-tool.js';
+import { fetchWeeklyReportPageInfo, openWeeklyReportPage } from '../tools/wiki-tool.js';
 import { writeWeeklyReport } from '../tools/weekly-report-tool.js';
 import type { ToolCall } from './ollama-client.js';
 import type { RouteExecuteContext } from './tool-progress.js';
@@ -141,6 +141,8 @@ export async function routeAndExecute(call: ToolCall, ctx?: RouteExecuteContext)
       return syncCursorCookieFromChrome();
     case 'open_weekly_report':
       return openWeeklyReportPage();
+    case 'fetch_weekly_report_info':
+      return fetchWeeklyReportPageInfo();
     case 'write_weekly_report': {
       const maxResults = Number(args?.maxResults ?? 100);
       return writeWeeklyReport(maxResults, {

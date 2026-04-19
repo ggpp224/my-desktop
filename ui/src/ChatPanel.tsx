@@ -43,6 +43,21 @@ type WeeklyReportPayload = {
   reportHtml?: string;
   reportWiki?: string;
 };
+type FetchWeeklyReportInfoPayload = {
+  success?: boolean;
+  error?: string;
+  quarter?: string;
+  weekRange?: string;
+  rootUrl?: string;
+  searchUrl?: string;
+  targetUrl?: string;
+  matchMode?: string;
+  pageId?: string;
+  pageTitle?: string;
+  bodyStorage?: string;
+  versionNumber?: number;
+  versionWhen?: string;
+};
 type CursorUsageToolResult = {
   success?: boolean;
   fetchedAt?: string;
@@ -80,6 +95,7 @@ const QUICK_ACTIONS: Array<{ label: string; message: string }> = [
   { label: '打开终端', message: '打开终端' },
   { label: '我的bug', message: '我的bug' },
   { label: '本周经我手的bug', message: '本周经我手的bug' },
+  { label: '抓取周报信息', message: '抓取周报信息' },
   { label: '线上bug', message: '线上bug' },
   { label: 'cursor用量', message: 'cursor用量' },
   { label: 'cursor今日用量', message: 'cursor今日用量' },
@@ -136,6 +152,7 @@ function buildCommandHints(projects: ProjectInfo[], inputHistory: string[]): str
     '本周已完成任务',
     '本周经我手的bug',
     '写周报',
+    '抓取周报信息',
     'cursor用量',
     '同步cursor登录态',
     'cursor今日用量',
@@ -205,6 +222,17 @@ function extractWeeklyReportResult(toolResults?: unknown[]): WeeklyReportPayload
   ) as ToolResultItem | undefined;
   if (!row || typeof row.result !== 'object' || row.result == null) return null;
   return row.result as WeeklyReportPayload;
+}
+
+function extractFetchWeeklyReportInfoResult(toolResults?: unknown[]): FetchWeeklyReportInfoPayload | null {
+  if (!Array.isArray(toolResults)) return null;
+  const row = toolResults.find(
+    (item) =>
+      (item as ToolResultItem | undefined)?.tool === 'fetch_weekly_report_info' &&
+      (item as ToolResultItem | undefined)?.result
+  ) as ToolResultItem | undefined;
+  if (!row || typeof row.result !== 'object' || row.result == null) return null;
+  return row.result as FetchWeeklyReportInfoPayload;
 }
 
 function extractCursorUsageResult(toolResults?: unknown[]): CursorUsageToolResult | null {
@@ -586,6 +614,62 @@ function renderToolResults(toolResults: unknown[] | undefined, onTip: (message: 
         ) : (
           <div style={{ whiteSpace: 'pre-wrap', color: '#e2e8f0', fontSize: 13, lineHeight: 1.7 }}>{reportWiki}</div>
         )}
+      </div>
+    );
+  }
+  const wikiWeeklyFetch = extractFetchWeeklyReportInfoResult(toolResults);
+  if (wikiWeeklyFetch && (wikiWeeklyFetch.success !== undefined || wikiWeeklyFetch.error)) {
+    const ok = wikiWeeklyFetch.success === true;
+    const body = (wikiWeeklyFetch.bodyStorage ?? '').trim();
+    return (
+      <div style={{ marginTop: 8, background: '#1a1a2e', borderRadius: 6, border: '1px solid #2a2a3d', padding: 10 }}>
+        <div style={{ fontSize: 13, fontWeight: 600, color: ok ? '#86efac' : '#fca5a5', marginBottom: 8 }}>
+          {ok ? '已抓取周报页信息' : '抓取周报页失败'}
+        </div>
+        {wikiWeeklyFetch.error ? (
+          <div style={{ fontSize: 12, color: '#fecaca', marginBottom: 8, whiteSpace: 'pre-wrap' }}>{wikiWeeklyFetch.error}</div>
+        ) : null}
+        <div style={{ fontSize: 12, color: '#94a3b8', lineHeight: 1.6, marginBottom: 8 }}>
+          {wikiWeeklyFetch.quarter ? <div>季度：{wikiWeeklyFetch.quarter}</div> : null}
+          {wikiWeeklyFetch.weekRange ? <div>周区间：{wikiWeeklyFetch.weekRange}</div> : null}
+          {wikiWeeklyFetch.pageId ? <div>pageId：{wikiWeeklyFetch.pageId}</div> : null}
+          {wikiWeeklyFetch.pageTitle ? <div>标题：{wikiWeeklyFetch.pageTitle}</div> : null}
+          {wikiWeeklyFetch.versionNumber != null ? (
+            <div>
+              版本：{wikiWeeklyFetch.versionNumber}
+              {wikiWeeklyFetch.versionWhen ? `（${wikiWeeklyFetch.versionWhen}）` : ''}
+            </div>
+          ) : null}
+          {wikiWeeklyFetch.targetUrl ? (
+            <div style={{ marginTop: 6 }}>
+              页面：{' '}
+              <a href={wikiWeeklyFetch.targetUrl} target="_blank" rel="noreferrer" style={{ color: '#93c5fd' }}>
+                打开
+              </a>
+            </div>
+          ) : null}
+        </div>
+        {ok && body ? (
+          <pre
+            style={{
+              margin: 0,
+              maxHeight: 360,
+              overflow: 'auto',
+              fontSize: 11,
+              lineHeight: 1.45,
+              color: '#e2e8f0',
+              background: '#0f172a',
+              padding: 10,
+              borderRadius: 4,
+              whiteSpace: 'pre-wrap',
+              wordBreak: 'break-word',
+            }}
+          >
+            {body}
+          </pre>
+        ) : ok && !body ? (
+          <div style={{ fontSize: 12, color: '#94a3b8' }}>正文为空（实例可能未返回 body.storage / body.view）。</div>
+        ) : null}
       </div>
     );
   }

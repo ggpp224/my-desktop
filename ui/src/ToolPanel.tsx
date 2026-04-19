@@ -10,6 +10,7 @@ const TOOLS = [
   { name: 'open_jenkins_job', desc: '打开某项目 Jenkins 任务页（如：打开jenkins nova、打开 Jenkins 的 cc-web）' },
   { name: 'search_weekly_done_tasks', desc: '查询 Jira 本周已完成任务（如：本周已完成任务）' },
   { name: 'search_weekly_handoff_bugs', desc: '本周经办人曾是我、现经办与开发均不是我（如：本周经我手的bug）' },
+  { name: 'fetch_weekly_report_info', desc: '抓取 wiki 当前周报页正文（与「周报」同定位规则，如：抓取周报信息）' },
   { name: 'write_weekly_report', desc: '基于本周已完成任务生成周报（如：写周报）' },
   { name: 'run_shell', desc: '执行 shell 命令' },
 ];
