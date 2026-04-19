@@ -129,6 +129,20 @@ export const toolsSchema = [
   {
     type: 'function' as const,
     function: {
+      name: 'search_weekly_handoff_bugs',
+      description:
+        '查询 Jira「本周经我手的 bug」：本周（与周报相同业务周）内经办人曾为当前用户，但当前经办人不是当前用户且开发人员中也不含当前用户（经办/开发为空视为「不含我」）。用户说「本周经我手的bug」「经我手的bug」等时调用，可选 maxResults',
+      parameters: {
+        type: 'object',
+        properties: {
+          maxResults: { type: 'number', description: '可选，返回数量上限，默认 100，最大 100' },
+        },
+      },
+    },
+  },
+  {
+    type: 'function' as const,
+    function: {
       name: 'get_cursor_usage',
       description:
         '查询 Cursor 用量（调用 dashboard 聚合用量 API）。用户说「cursor用量」「查询cursor用量」时调用，无参数',
@@ -179,7 +193,7 @@ export const toolsSchema = [
     function: {
       name: 'write_weekly_report',
       description:
-        '编写本周周报：先查询“本周已完成任务”的 Jira 列表（含编号+标题），再调用大模型按 Markdown 生成；服务端产出 reportHtml（富文本粘贴）与 reportWiki（Legacy Wiki）；用户说「写周报」时调用',
+        '编写本周周报：先并行查询 Jira「本周已完成任务」与「本周经我手的 bug」（经办曾为我、现经办/开发不含我），合并去重后取标题列表，再调用大模型按 Markdown 生成；产出 reportHtml 与 reportWiki；用户说「写周报」时调用',
       parameters: {
         type: 'object',
         properties: {

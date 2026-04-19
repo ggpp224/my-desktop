@@ -79,6 +79,7 @@ const QUICK_ACTIONS: Array<{ label: string; message: string }> = [
   { label: '开始工作', message: '开始工作' },
   { label: '打开终端', message: '打开终端' },
   { label: '我的bug', message: '我的bug' },
+  { label: '本周经我手的bug', message: '本周经我手的bug' },
   { label: '线上bug', message: '线上bug' },
   { label: 'cursor用量', message: 'cursor用量' },
   { label: 'cursor今日用量', message: 'cursor今日用量' },
@@ -133,6 +134,7 @@ function buildCommandHints(projects: ProjectInfo[], inputHistory: string[]): str
     '我的bug',
     '线上bug',
     '本周已完成任务',
+    '本周经我手的bug',
     '写周报',
     'cursor用量',
     '同步cursor登录态',
@@ -184,7 +186,8 @@ function extractMyBugsResult(toolResults?: unknown[]): JiraBugPayload | null {
     (item) =>
       ((item as ToolResultItem | undefined)?.tool === 'search_my_bugs' ||
         (item as ToolResultItem | undefined)?.tool === 'search_online_bugs' ||
-        (item as ToolResultItem | undefined)?.tool === 'search_weekly_done_tasks') &&
+        (item as ToolResultItem | undefined)?.tool === 'search_weekly_done_tasks' ||
+        (item as ToolResultItem | undefined)?.tool === 'search_weekly_handoff_bugs') &&
       (item as ToolResultItem | undefined)?.result
   ) as ToolResultItem | undefined;
   if (!row || typeof row.result !== 'object' || row.result == null) return null;

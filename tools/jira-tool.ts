@@ -230,3 +230,15 @@ export async function searchWeeklyDoneTasks(maxResults = 100): Promise<MyBugResu
   const jqlList = supplementOff ? [primary] : [primary, buildWeeklyDoneResolutionSupplementJql(tz, now)];
   return searchByMultipleJql(jqlList, maxResults);
 }
+
+// AI 生成 By Peng.Guo
+/** 本周内经办人曾为当前用户，但当前经办人、开发人员均不含当前用户（与周报同一业务周、时区）。 */
+function buildWeeklyHandoffBugsJql(weeklyDuring: string): string {
+  return `filter = bus AND assignee was currentUser() ${weeklyDuring} AND (assignee is EMPTY OR assignee != currentUser()) AND (开发人员 is EMPTY OR 开发人员 not in (currentUser())) ORDER BY updated DESC`;
+}
+
+export async function searchWeeklyHandoffBugs(maxResults = 100): Promise<MyBugResult> {
+  const tz = config.jira.weeklyReportTimeZone.trim() || 'Asia/Shanghai';
+  const weeklyDuring = buildWeeklyReportDuringClause(tz, new Date());
+  return searchByMultipleJql([buildWeeklyHandoffBugsJql(weeklyDuring)], maxResults);
+}

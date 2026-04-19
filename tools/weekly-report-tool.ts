@@ -2,7 +2,7 @@
 import { config } from '../config/default.js';
 import { fetchOllamaApiChatWithThinkFallback, mergeStreamFragment, type ChatMessage } from '../agent/ollama-client.js';
 import { getOllamaActiveModel } from '../agent/ollama-runtime.js';
-import { searchWeeklyDoneTasks } from './jira-tool.js';
+import { searchWeeklyDoneTasks, searchWeeklyHandoffBugs } from './jira-tool.js';
 import { markdownToConfluenceWiki } from './markdown-to-confluence-wiki.js';
 import { markdownToHtmlFragment } from './markdown-to-html.js';
 import { compactConfluenceWikiBlankLines, normalizeMarkdownForWeeklyExport } from './weekly-report-markdown-normalize.js';
@@ -31,7 +31,7 @@ function buildWeeklyReportPrompt(jiraTitles: string[]): OllamaMessage[] {
 你是一位专业的项目管理助手，擅长将零散的 Jira 任务标题整理成逻辑清晰、专业练达的工作周报。
 
 # Task
-请根据以下提供的 Jira 任务标题列表，撰写一份本周工作总结。
+请根据以下提供的 Jira 任务标题列表撰写本周工作总结。列表合并自「本周已完成」与「本周曾由我经办、当前经办/开发已不含我」的缺陷（同一编号仅一条）。
 
 # Requirement
 1. **归类总结**：不要直接翻译标题，请将相似的任务合并，并归纳为“重点项目推进”、“日常运维/Bug修复”、“跨部门协作”等模块。
@@ -184,16 +184,34 @@ export type WriteWeeklyReportHooks = {
   onStreamDelta?: (d: { thinkingDelta?: string; contentDelta?: string }) => void;
 };
 
+// AI 生成 By Peng.Guo
+function mergeWeeklyReportIssueLines(
+  doneIssues: Array<{ key: string; summary: string }>,
+  handoffIssues: Array<{ key: string; summary: string }>,
+  maxLines: number
+): string[] {
+  const limit = Math.max(1, Math.min(100, Math.floor(maxLines)));
+  const byKey = new Map<string, string>();
+  const push = (issue: { key: string; summary: string }) => {
+    const k = issue.key.trim();
+    if (!k || byKey.has(k)) return;
+    const line = `${issue.key} ${issue.summary}`.trim();
+    if (line) byKey.set(k, line);
+  };
+  for (const issue of doneIssues) push(issue);
+  for (const issue of handoffIssues) push(issue);
+  return [...byKey.values()].slice(0, limit);
+}
+
 export async function writeWeeklyReport(
   maxResults = 100,
   hooks?: WriteWeeklyReportHooks
 ): Promise<WeeklyReportDraftResult> {
-  hooks?.onProgress?.('正在查询本周已完成的 Jira 任务…');
-  const jiraResult = await searchWeeklyDoneTasks(maxResults);
-  const jiraTitles = (jiraResult.issues ?? [])
-    .map((issue) => `${issue.key} ${issue.summary}`.trim())
-    .filter(Boolean);
-  hooks?.onProgress?.(`已获取 ${jiraTitles.length} 条任务标题，正在调用本地模型流式生成周报…`);
+  hooks?.onProgress?.('正在查询本周已完成任务与本周经我手的 bug…');
+  const limit = Math.max(1, Math.min(100, Math.floor(maxResults)));
+  const [doneResult, handoffResult] = await Promise.all([searchWeeklyDoneTasks(limit), searchWeeklyHandoffBugs(limit)]);
+  const jiraTitles = mergeWeeklyReportIssueLines(doneResult.issues ?? [], handoffResult.issues ?? [], limit);
+  hooks?.onProgress?.(`已获取 ${jiraTitles.length} 条任务标题（已合并去重），正在调用本地模型流式生成周报…`);
   const { reportHtml, reportWiki } = await summarizeWeeklyReportByOllama(jiraTitles, hooks);
   return {
     success: true,

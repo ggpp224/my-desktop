@@ -20,7 +20,7 @@ import { openEmbeddedTerminalWorkspace, startEmbeddedWorkflow } from '../tools/w
 import { mergeNova, mergeBizSolution, mergeScm } from '../tools/merge-tool.js';
 import { openInIde } from '../tools/open-ide-tool.js';
 import { closeIdeProject } from '../tools/close-ide-tool.js';
-import { searchMyBugs, searchOnlineBugs, searchWeeklyDoneTasks } from '../tools/jira-tool.js';
+import { searchMyBugs, searchOnlineBugs, searchWeeklyDoneTasks, searchWeeklyHandoffBugs } from '../tools/jira-tool.js';
 import { getCursorTodayUsage, getCursorUsage } from '../tools/cursor-usage-tool.js';
 import { syncCursorCookieFromChrome } from '../tools/cursor-cookie-sync-tool.js';
 import { openWeeklyReportPage } from '../tools/wiki-tool.js';
@@ -126,6 +126,10 @@ export async function routeAndExecute(call: ToolCall, ctx?: RouteExecuteContext)
     case 'search_weekly_done_tasks': {
       const maxResults = Number(args?.maxResults ?? 100);
       return searchWeeklyDoneTasks(maxResults);
+    }
+    case 'search_weekly_handoff_bugs': {
+      const maxResults = Number(args?.maxResults ?? 100);
+      return searchWeeklyHandoffBugs(maxResults);
     }
     case 'get_cursor_usage': {
       return withCursorAutoSync(getCursorUsage);
