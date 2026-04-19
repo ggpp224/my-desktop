@@ -1,5 +1,12 @@
 /* AI 生成 By Peng.Guo */
-import { chatWithTools, chatWithToolsStream, parseToolCalls, type ChatMessage, type ToolCall } from './ollama-client.js';
+import {
+  chatWithTools,
+  chatWithToolsStream,
+  parseToolCalls,
+  type ChatMessage,
+  type ToolCall,
+} from './ollama-client.js';
+import { chatWithToolsGeminiStream } from './gemini-client.js';
 import type { RouteExecuteContext, ToolProgressCallback } from './tool-progress.js';
 import { routeAndExecute } from './tool-router.js';
 import { toolsSchema } from './tools-schema.js';
@@ -82,12 +89,20 @@ function normalizeToolCallWithExplicitCode(call: ToolCall, explicitCode: string 
   return call;
 }
 
+/** Agent 使用的 LLM：默认本地 Ollama；外部模式由前端传入密钥（经本机后端转发，不落盘） */
+export type AgentLlmOptions =
+  | { mode: 'local' }
+  /** apiKey 可选：未传时使用进程环境变量 GEMINI_API_KEY / GOOGLE_API_KEY（与 A2UI 一致） */
+  | { mode: 'external'; provider: 'gemini'; apiKey?: string; model: string; baseUrl?: string };
+
 export type RunAgentOptions = {
   signal?: AbortSignal;
   /** 首轮 LLM 流式增量（思考 / 正文），供 SSE 实时推送 */
   onFirstLLMStream?: (chunk: { thinkingDelta?: string; contentDelta?: string }) => void;
   /** 工具开始 / 子步骤 / 结束，供 SSE 推送执行过程 */
   onToolProgress?: ToolProgressCallback;
+  /** 未传或 mode=local 时使用 Ollama */
+  llm?: AgentLlmOptions;
 };
 
 function throwIfAborted(signal: AbortSignal | undefined): void {
@@ -110,23 +125,45 @@ export async function runAgent(userMessage: string, options?: RunAgentOptions): 
   }));
 
   const timing: AgentTiming = { tools: [] };
+  const llm = options?.llm;
+  const useGemini = llm?.mode === 'external' && llm.provider === 'gemini';
 
   try {
     throwIfAborted(signal);
     const t0 = Date.now();
     const streamCb = options?.onFirstLLMStream;
-    const { message, tokenUsage: rawTokens } = streamCb
-      ? await chatWithToolsStream(messages, tools, {
+    let message: ChatMessage;
+    if (useGemini) {
+      const model = (llm.model ?? '').trim() || 'gemini-2.0-flash';
+      const { message: gemMsg, tokenUsage: gemUsage } = await chatWithToolsGeminiStream(
+        messages,
+        tools,
+        { apiKey: (llm.apiKey ?? '').trim(), model, baseUrl: llm.baseUrl },
+        {
           signal,
-          onDelta: streamCb,
-        })
-      : await chatWithTools(messages, tools, { signal });
-    timing.firstLLMMs = Date.now() - t0;
-    if (rawTokens?.prompt_eval_count != null || rawTokens?.eval_count != null) {
-      timing.tokenUsage = {
-        promptTokens: rawTokens.prompt_eval_count,
-        completionTokens: rawTokens.eval_count,
-      };
+          onDelta: streamCb ?? ((_d) => {}),
+        }
+      );
+      message = gemMsg;
+      timing.firstLLMMs = Date.now() - t0;
+      if (gemUsage?.promptTokens != null || gemUsage?.completionTokens != null) {
+        timing.tokenUsage = { promptTokens: gemUsage.promptTokens, completionTokens: gemUsage.completionTokens };
+      }
+    } else {
+      const { message: oMsg, tokenUsage: rawTokens } = streamCb
+        ? await chatWithToolsStream(messages, tools, {
+            signal,
+            onDelta: streamCb,
+          })
+        : await chatWithTools(messages, tools, { signal });
+      message = oMsg;
+      timing.firstLLMMs = Date.now() - t0;
+      if (rawTokens?.prompt_eval_count != null || rawTokens?.eval_count != null) {
+        timing.tokenUsage = {
+          promptTokens: rawTokens.prompt_eval_count,
+          completionTokens: rawTokens.eval_count,
+        };
+      }
     }
 
     const explicitCode = extractExplicitProjectCode(userMessage);

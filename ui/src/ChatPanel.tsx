@@ -12,6 +12,13 @@ import {
   postSwitchAgentModel,
 } from './infrastructure/agent/ollamaModelApi';
 import { postAgentChatStream, type AgentToolProgressEvent } from './infrastructure/agent/agentChatStreamApi';
+import type { AgentChatLlmBody, LlmRuntimeMode } from './domain/llm/agentLlmRequest';
+import {
+  buildTeamSummaryCopyLeadLine,
+  buildWeeklyReportLeadLine,
+  escapeHtmlForClipboard,
+  type ReportCopyLlmContext,
+} from './domain/llm/reportCopyLeadLine';
 
 type AgentTiming = { firstLLMMs?: number; tools?: { name: string; ms: number }[]; secondLLMMs?: number; tokenUsage?: { promptTokens?: number; completionTokens?: number } };
 type AgentResult = {
@@ -98,15 +105,16 @@ interface ChatPanelProps {
   apiBase: string;
   addLog: (line: string) => void;
   onStartWorkEmbedded: (payload: { sessionId: string; terminals: WorkTerminal[] }) => void;
+  /** 本地 Ollama / 外部 Gemini */
+  llmRuntimeMode: LlmRuntimeMode;
+  /** 外部模式且已填 Key 时传入，随请求发往本机后端 */
+  agentChatLlmBody?: AgentChatLlmBody;
 }
 
 const QUICK_ACTIONS: Array<{ label: string; message: string }> = [
   { label: '开始工作', message: '开始工作' },
   { label: '打开终端', message: '打开终端' },
   { label: '我的bug', message: '我的bug' },
-  { label: '本周经我手的bug', message: '本周经我手的bug' },
-  { label: '抓取周报信息', message: '抓取周报信息' },
-  { label: '本周组内总结', message: '本周组内总结' },
   { label: '线上bug', message: '线上bug' },
   { label: 'cursor用量', message: 'cursor用量' },
   { label: 'cursor今日用量', message: 'cursor今日用量' },
@@ -554,10 +562,11 @@ function renderCursorTodayUsage(toolResults?: unknown[]) {
   );
 }
 
-/* AI 生成 By Peng.Guo：Confluence 新版/表格粘贴优先写 text/html，纯文本槽位放 Wiki 作降级 */
-async function copyWeeklyReportToClipboard(header: string, htmlFragment: string, wikiPlain: string): Promise<void> {
-  const fullHtml = `<!DOCTYPE html><html><head><meta charset="utf-8"></head><body>${htmlFragment}</body></html>`;
-  const plain = `${header}\n\n${wikiPlain}`.trim();
+/* AI 生成 By Peng.Guo：Confluence 新版/表格粘贴优先写 text/html，纯文本槽位放 Wiki 作降级；HTML 顶部带与纯文本一致的首行说明 */
+async function copyWeeklyReportToClipboard(leadLine: string, htmlFragment: string, wikiPlain: string): Promise<void> {
+  const leadHtml = `<p style="margin:0 0 0.75em;font-size:13px;color:#cbd5e1;">${escapeHtmlForClipboard(leadLine)}</p>`;
+  const fullHtml = `<!DOCTYPE html><html><head><meta charset="utf-8"></head><body>${leadHtml}${htmlFragment}</body></html>`;
+  const plain = `${leadLine}\n\n${wikiPlain}`.trim();
   try {
     await navigator.clipboard.write([
       new ClipboardItem({
@@ -570,18 +579,22 @@ async function copyWeeklyReportToClipboard(header: string, htmlFragment: string,
   }
 }
 
-function renderToolResults(toolResults: unknown[] | undefined, onTip: (message: string) => void) {
+function renderToolResults(
+  toolResults: unknown[] | undefined,
+  onTip: (message: string) => void,
+  copyCtx: ReportCopyLlmContext,
+) {
   const weeklyReport = extractWeeklyReportResult(toolResults);
   const reportHtml = weeklyReport?.reportHtml;
   const reportWiki = weeklyReport?.reportWiki ?? weeklyReport?.report;
   if (weeklyReport && (reportHtml || reportWiki)) {
     const titleCount = Array.isArray(weeklyReport.jiraTitles) ? weeklyReport.jiraTitles.length : weeklyReport.total ?? 0;
-    const reportHeader = `已基于 ${titleCount} 条 Jira 任务生成周报`;
+    const reportLead = buildWeeklyReportLeadLine(titleCount, copyCtx);
     return (
       <div style={{ marginTop: 8, background: '#1a1a2e', borderRadius: 6, border: '1px solid #2a2a3d', padding: 10 }}>
         <div style={{ fontSize: 12, color: '#94a3b8', marginBottom: 8, display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8 }}>
           <span>
-            {reportHeader}
+            {reportLead}
             {reportHtml ? <span style={{ color: '#64748b', marginLeft: 8 }}>（复制带富文本，便于贴表格/新版编辑器）</span> : null}
           </span>
           <button
@@ -589,10 +602,10 @@ function renderToolResults(toolResults: unknown[] | undefined, onTip: (message: 
             onClick={async () => {
               try {
                 if (reportHtml) {
-                  await copyWeeklyReportToClipboard(reportHeader, reportHtml, reportWiki ?? '');
+                  await copyWeeklyReportToClipboard(reportLead, reportHtml, reportWiki ?? '');
                   onTip('已复制：富文本 HTML + 纯文本（Wiki）');
                 } else {
-                  await navigator.clipboard.writeText(`${reportHeader}\n\n${reportWiki ?? ''}`.trim());
+                  await navigator.clipboard.writeText(`${reportLead}\n\n${reportWiki ?? ''}`.trim());
                   onTip('周报已复制到剪贴板');
                 }
               } catch {
@@ -645,23 +658,25 @@ function renderToolResults(toolResults: unknown[] | undefined, onTip: (message: 
   const teamReportWiki = teamSummary?.reportWiki;
   if (teamSummary && teamSummary.success === true && (teamReportHtml || teamReportWiki)) {
     const meta = [teamSummary.wikiQuarter, teamSummary.wikiWeekRange].filter(Boolean).join(' · ');
-    const reportHeader = `本周组内总结${meta ? `（${meta}）` : ''} · 来源 HTML 约 ${teamSummary.sourceHtmlChars ?? 0} 字符`;
+    const teamCopyLead = buildTeamSummaryCopyLeadLine(copyCtx);
+    const teamSubLine = `本周组内总结${meta ? ` · ${meta}` : ''} · 来源 HTML 约 ${teamSummary.sourceHtmlChars ?? 0} 字符`;
     return (
       <div style={{ marginTop: 8, background: '#1a1a2e', borderRadius: 6, border: '1px solid #2a2a3d', padding: 10 }}>
-        <div style={{ fontSize: 12, color: '#94a3b8', marginBottom: 8, display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8 }}>
-          <span>
-            {reportHeader}
-            {teamReportHtml ? <span style={{ color: '#64748b', marginLeft: 8 }}>（复制带富文本）</span> : null}
+        <div style={{ fontSize: 12, color: '#94a3b8', marginBottom: 8, display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 8 }}>
+          <span style={{ lineHeight: 1.45, flex: 1, minWidth: 0 }}>
+            <span style={{ color: '#e2e8f0' }}>{teamCopyLead}</span>
+            <div style={{ color: '#64748b', fontSize: 11, marginTop: 4 }}>{teamSubLine}</div>
+            {teamReportHtml ? <span style={{ color: '#64748b', fontSize: 11 }}>（复制带富文本）</span> : null}
           </span>
           <button
             type="button"
             onClick={async () => {
               try {
                 if (teamReportHtml) {
-                  await copyWeeklyReportToClipboard(reportHeader, teamReportHtml, teamReportWiki ?? '');
+                  await copyWeeklyReportToClipboard(teamCopyLead, teamReportHtml, teamReportWiki ?? '');
                   onTip('已复制：富文本 HTML + 纯文本（Wiki）');
                 } else {
-                  await navigator.clipboard.writeText(`${reportHeader}\n\n${teamReportWiki ?? ''}`.trim());
+                  await navigator.clipboard.writeText(`${teamCopyLead}\n\n${teamReportWiki ?? ''}`.trim());
                   onTip('组内总结已复制到剪贴板');
                 }
               } catch {
@@ -848,7 +863,7 @@ function formatToolProgressLogLine(e: AgentToolProgressEvent): string {
   return e.ok ? `[工具] ${e.tool} 完成` : `[工具] ${e.tool} 失败${e.message ? `: ${e.message}` : ''}`;
 }
 
-export function ChatPanel({ apiBase, addLog, onStartWorkEmbedded }: ChatPanelProps) {
+export function ChatPanel({ apiBase, addLog, onStartWorkEmbedded, llmRuntimeMode, agentChatLlmBody }: ChatPanelProps) {
   const [input, setInput] = useState('');
   const [inputHistory, setInputHistory] = useState<string[]>([]);
   const [loading, setLoading] = useState(false);
@@ -881,7 +896,7 @@ export function ChatPanel({ apiBase, addLog, onStartWorkEmbedded }: ChatPanelPro
   }, []);
 
   useEffect(() => {
-    if (!apiBase) return;
+    if (!apiBase || llmRuntimeMode !== 'local') return;
     let cancelled = false;
     Promise.all([fetchAgentCurrentModel(apiBase), fetchAgentOllamaInstalledModels(apiBase)])
       .then(([model, models]) => {
@@ -893,7 +908,7 @@ export function ChatPanel({ apiBase, addLog, onStartWorkEmbedded }: ChatPanelPro
     return () => {
       cancelled = true;
     };
-  }, [apiBase]);
+  }, [apiBase, llmRuntimeMode]);
 
   useEffect(
     () => () => {
@@ -1151,7 +1166,11 @@ export function ChatPanel({ apiBase, addLog, onStartWorkEmbedded }: ChatPanelPro
       });
     };
     try {
-      await postAgentChatStream(apiBase, msg, signal, {
+      await postAgentChatStream(
+        apiBase,
+        msg,
+        signal,
+        {
         onLlmDelta: (d) => {
           streamAccumRef.current.thinking += d.thinkingDelta ?? '';
           streamAccumRef.current.content += d.contentDelta ?? '';
@@ -1197,7 +1216,9 @@ export function ChatPanel({ apiBase, addLog, onStartWorkEmbedded }: ChatPanelPro
             setMessages((prev) => [...prev, { role: 'assistant', content: `请求失败: ${errMsg}` }]);
           }
         },
-      });
+      },
+        agentChatLlmBody ? { llm: agentChatLlmBody } : undefined
+      );
     } catch (e) {
       setStreamLive(null);
       setToolStreamLive(null);
@@ -1290,7 +1311,11 @@ export function ChatPanel({ apiBase, addLog, onStartWorkEmbedded }: ChatPanelPro
           <div key={i} style={{ marginBottom: 12 }}>
             <strong style={{ color: m.role === 'user' ? '#7f9cf5' : '#68d391' }}>{m.role === 'user' ? 'You' : 'AI'}:</strong>{' '}
             <LinkifiedText text={m.content} />
-            {renderToolResults(m.toolResults, setTipMessage)}
+            {renderToolResults(m.toolResults, setTipMessage, {
+              llmRuntimeMode,
+              ollamaModelName: currentModel,
+              agentChatLlmBody,
+            })}
           </div>
         ))}
         {streamLive && (
@@ -1605,35 +1630,47 @@ export function ChatPanel({ apiBase, addLog, onStartWorkEmbedded }: ChatPanelPro
           )}
         </div>
         <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 6 }}>
-          <label style={{ fontSize: 12, color: '#64748b', display: 'flex', flexDirection: 'column', gap: 4, alignItems: 'flex-end' }}>
-            <span>Ollama 模型</span>
-            <select
-              value={currentModel}
-              onFocus={refreshOllamaModels}
-              onChange={(e) => void handleModelSelectChange(e.target.value)}
-              title="从本机已安装模型中选择；切换时会停止当前推理并卸载上一模型"
-              style={{
-                maxWidth: 220,
-                fontSize: 12,
-                padding: '6px 8px',
-                background: '#16213e',
-                color: '#e2e8f0',
-                border: '1px solid #334155',
-                borderRadius: 6,
-                cursor: 'pointer',
-              }}
-            >
-              {currentModel && !installedModels.includes(currentModel) && (
-                <option value={currentModel}>{currentModel}</option>
-              )}
-              {installedModels.length === 0 && !currentModel && <option value="">（无已安装模型）</option>}
-              {installedModels.map((name) => (
-                <option key={name} value={name}>
-                  {name}
-                </option>
-              ))}
-            </select>
-          </label>
+          {llmRuntimeMode === 'local' ? (
+            <label style={{ fontSize: 12, color: '#64748b', display: 'flex', flexDirection: 'column', gap: 4, alignItems: 'flex-end' }}>
+              <span>Ollama 模型</span>
+              <select
+                value={currentModel}
+                onFocus={refreshOllamaModels}
+                onChange={(e) => void handleModelSelectChange(e.target.value)}
+                title="从本机已安装模型中选择；切换时会停止当前推理并卸载上一模型"
+                style={{
+                  maxWidth: 220,
+                  fontSize: 12,
+                  padding: '6px 8px',
+                  background: '#16213e',
+                  color: '#e2e8f0',
+                  border: '1px solid #334155',
+                  borderRadius: 6,
+                  cursor: 'pointer',
+                }}
+              >
+                {currentModel && !installedModels.includes(currentModel) && (
+                  <option value={currentModel}>{currentModel}</option>
+                )}
+                {installedModels.length === 0 && !currentModel && <option value="">（无已安装模型）</option>}
+                {installedModels.map((name) => (
+                  <option key={name} value={name}>
+                    {name}
+                  </option>
+                ))}
+              </select>
+            </label>
+          ) : (
+            <div style={{ fontSize: 12, color: '#94a3b8', textAlign: 'right', maxWidth: 220, lineHeight: 1.45 }}>
+              外部 Gemini
+              <div style={{ color: '#64748b', marginTop: 4 }}>
+                {agentChatLlmBody?.mode === 'external' ? agentChatLlmBody.model : '--'}
+                {agentChatLlmBody?.mode === 'external' && !agentChatLlmBody.apiKey ? (
+                  <span style={{ display: 'block', marginTop: 4 }}>Key：服务端环境变量</span>
+                ) : null}
+              </div>
+            </div>
+          )}
           <button
             type="submit"
             disabled={loading}

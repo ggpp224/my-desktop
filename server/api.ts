@@ -1,8 +1,10 @@
 /* AI 生成 By Peng.Guo */
 import 'dotenv/config';
+import dns from 'node:dns';
 import express from 'express';
 import cors from 'cors';
-import { runAgent } from '../agent/agent.js';
+import { runAgent, type AgentLlmOptions } from '../agent/agent.js';
+import { testGeminiConnection } from '../agent/gemini-client.js';
 import { healthCheck } from '../agent/ollama-client.js';
 import {
   fetchOllamaInstalledModelNames,
@@ -22,6 +24,11 @@ import { addManualTerminalToSession, closeEmbeddedWorkflowSession, getEmbeddedWo
 import { closeTerminalSession, getTerminalSessionOutput, resizeTerminalSession, writeTerminalSessionInput } from '../tools/terminal-session-service.js';
 import { promises as fs } from 'fs';
 import path from 'path';
+
+/** 出站 DNS 优先 IPv4，避免部分网络 IPv6 不通导致 Google 等连接在 IPv6 上卡死至超时 */
+if (typeof dns.setDefaultResultOrder === 'function') {
+  dns.setDefaultResultOrder('ipv4first');
+}
 
 const app = express();
 app.use(cors());
@@ -69,9 +76,60 @@ async function writeCommandHistory(items: string[]): Promise<void> {
 
 app.get('/', (_req, res) => res.status(200).json({ ok: true, service: 'ai-dev-control-center' }));
 
+function parseAgentLlmFromBody(body: unknown): AgentLlmOptions | undefined {
+  if (!body || typeof body !== 'object') return undefined;
+  const raw = (body as Record<string, unknown>).llm;
+  if (raw == null || typeof raw !== 'object') return undefined;
+  const l = raw as Record<string, unknown>;
+  const mode = String(l.mode ?? 'local').toLowerCase();
+  if (mode !== 'external') return { mode: 'local' };
+  const provider = String(l.provider ?? '').toLowerCase();
+  if (provider !== 'gemini') {
+    throw new Error(`不支持的 provider: ${provider}（当前仅支持 gemini）`);
+  }
+  const apiKeyFromBody = String(l.apiKey ?? '').trim();
+  const apiKeyFromEnv = (process.env.GEMINI_API_KEY ?? process.env.GOOGLE_API_KEY ?? '').trim();
+  if (!apiKeyFromBody && !apiKeyFromEnv) {
+    throw new Error('外部模型需要提供 API Key：在请求 body.llm.apiKey 中传入，或在启动 API 的进程中设置 GEMINI_API_KEY / GOOGLE_API_KEY（与 A2UI 一致）');
+  }
+  const model = String(l.model ?? '').trim() || 'gemini-2.0-flash';
+  const baseUrlRaw = String(l.baseUrl ?? '').trim();
+  return {
+    mode: 'external',
+    provider: 'gemini',
+    ...(apiKeyFromBody ? { apiKey: apiKeyFromBody } : {}),
+    model,
+    baseUrl: baseUrlRaw || undefined,
+  };
+}
+
+/** 设置页：测试当前表单或环境变量中的 Gemini 是否可达（不落盘） */
+app.post('/agent/gemini/test', async (req, res) => {
+  const apiKeyFromBody = String(req.body?.apiKey ?? '').trim();
+  const apiKeyFromEnv = (process.env.GEMINI_API_KEY ?? process.env.GOOGLE_API_KEY ?? '').trim();
+  const apiKey = apiKeyFromBody || apiKeyFromEnv;
+  if (!apiKey) {
+    res.status(400).json({ ok: false, error: '缺少 API Key：在请求体中传入 apiKey，或配置 GEMINI_API_KEY / GOOGLE_API_KEY' });
+    return;
+  }
+  const model = String(req.body?.model ?? '').trim() || 'gemini-2.0-flash';
+  const baseUrlRaw = String(req.body?.baseUrl ?? '').trim();
+  try {
+    const result = await testGeminiConnection({ apiKey, model, baseUrl: baseUrlRaw || undefined });
+    if (result.ok) {
+      res.json({ ok: true, message: result.message });
+    } else {
+      res.status(502).json({ ok: false, error: result.error });
+    }
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    res.status(500).json({ ok: false, error: msg });
+  }
+});
+
 app.get('/health', async (_req, res) => {
-  const ok = await healthCheck();
-  res.status(ok ? 200 : 503).json({ ok, service: 'ai-dev-control-center' });
+  const ollamaReachable = await healthCheck();
+  res.status(200).json({ ok: true, ollamaReachable, service: 'ai-dev-control-center' });
 });
 
 /** 返回当前使用的本地模型名（可运行时切换），供前端展示 */
@@ -152,11 +210,19 @@ app.post('/agent/chat', async (req, res) => {
     res.status(400).json({ success: false, error: '缺少 message' });
     return;
   }
+  let llm: AgentLlmOptions | undefined;
+  try {
+    llm = parseAgentLlmFromBody(req.body);
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : String(e);
+    res.status(400).json({ success: false, error: msg });
+    return;
+  }
   abortAgentChat();
   agentChatAbort = new AbortController();
   const { signal } = agentChatAbort;
   try {
-    const result = await runAgent(message, { signal });
+    const result = await runAgent(message, { signal, llm });
     res.json(result);
   } catch (err) {
     const aborted = signal.aborted || (err instanceof Error && err.name === 'AbortError');
@@ -178,6 +244,14 @@ app.post('/agent/chat/stream', async (req, res) => {
   const message = (req.body?.message ?? '').toString().trim();
   if (!message) {
     res.status(400).json({ success: false, error: '缺少 message' });
+    return;
+  }
+  let llm: AgentLlmOptions | undefined;
+  try {
+    llm = parseAgentLlmFromBody(req.body);
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : String(e);
+    res.status(400).json({ success: false, error: msg });
     return;
   }
   abortAgentChat();
@@ -204,6 +278,7 @@ app.post('/agent/chat/stream', async (req, res) => {
   try {
     const result = await runAgent(message, {
       signal,
+      llm,
       onFirstLLMStream: (chunk) =>
         send({
           type: 'llm_delta',

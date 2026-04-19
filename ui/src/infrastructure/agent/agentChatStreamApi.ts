@@ -1,6 +1,8 @@
 /* AI 生成 By Peng.Guo */
 /** 解析 POST /agent/chat/stream 返回的 SSE，驱动 UI 增量与最终结果 */
 
+import type { AgentChatLlmBody } from '../../domain/llm/agentLlmRequest.js';
+
 export type AgentChatSsePayload =
   | { type: 'llm_delta'; thinkingDelta?: string; contentDelta?: string }
   | {
@@ -102,12 +104,15 @@ export async function postAgentChatStream(
     onToolProgress?: (e: AgentToolProgressEvent) => void;
     onResult: (result: unknown) => void;
     onError: (message: string) => void;
-  }
+  },
+  opts?: { llm?: AgentChatLlmBody }
 ): Promise<void> {
+  const body: Record<string, unknown> = { message };
+  if (opts?.llm) body.llm = opts.llm;
   const res = await fetch(`${apiBase}/agent/chat/stream`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ message }),
+    body: JSON.stringify(body),
     signal,
   });
   if (!res.ok) {

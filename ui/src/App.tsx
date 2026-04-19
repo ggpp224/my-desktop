@@ -1,10 +1,14 @@
 /* AI 生成 By Peng.Guo */
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useMemo } from 'react';
 import { ChatPanel } from './ChatPanel';
 import { WorkflowPanel } from './WorkflowPanel';
 import { ToolPanel } from './ToolPanel';
 import { LogsPanel } from './LogsPanel';
 import { MyWorkPanel, type WorkTerminal } from './MyWorkPanel';
+import { LlmSettingsModal } from './view/LlmSettingsModal';
+import { loadLlmSettings, saveLlmSettings } from './infrastructure/llm/llmSettingsRepository';
+import { buildAgentChatLlmBody } from './domain/llm/agentLlmRequest';
+import type { GeminiUserSettings, LlmRuntimeMode } from './domain/llm/agentLlmRequest';
 
 const DEFAULT_API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:3000';
 type HeaderTab = { key: string; label: string };
@@ -62,6 +66,10 @@ export default function App() {
   const [logs, setLogs] = useState<string[]>([]);
   const [ollamaOk, setOllamaOk] = useState<boolean | null>(null);
   const [helpOpen, setHelpOpen] = useState(false);
+  const [settingsOpen, setSettingsOpen] = useState(false);
+  const [llmMode, setLlmMode] = useState<LlmRuntimeMode>(() => loadLlmSettings().mode);
+  const [geminiSettings, setGeminiSettings] = useState<GeminiUserSettings>(() => loadLlmSettings().gemini);
+  const agentChatLlmBody = useMemo(() => buildAgentChatLlmBody(llmMode, geminiSettings), [llmMode, geminiSettings]);
   const [activeHeaderTab, setActiveHeaderTab] = useState<string>(HEADER_TABS[0].key);
   const [headerTabs, setHeaderTabs] = useState<HeaderTab[]>(HEADER_TABS);
   const [hoveredHeaderTab, setHoveredHeaderTab] = useState<string | null>(null);
@@ -71,6 +79,7 @@ export default function App() {
   const [rightWidth, setRightWidth] = useState(400);
   const [resizing, setResizing] = useState(false);
   const helpRef = useRef<HTMLDivElement>(null);
+  const settingsRef = useRef<HTMLDivElement>(null);
   const contentRef = useRef<HTMLDivElement>(null);
   const addLog = (line: string) =>
     setLogs((prev) => [
@@ -113,6 +122,15 @@ export default function App() {
   }, [helpOpen]);
 
   useEffect(() => {
+    if (!settingsOpen) return;
+    const onOutside = (e: MouseEvent) => {
+      if (settingsRef.current && !settingsRef.current.contains(e.target as Node)) setSettingsOpen(false);
+    };
+    document.addEventListener('click', onOutside);
+    return () => document.removeEventListener('click', onOutside);
+  }, [settingsOpen]);
+
+  useEffect(() => {
     if (apiBase === null && window.electronAPI) {
       window.electronAPI.getApiBase().then(setApiBase);
     }
@@ -122,7 +140,10 @@ export default function App() {
     if (!apiBase) return;
     fetch(`${apiBase}/health`)
       .then((r) => r.json())
-      .then((d) => setOllamaOk(d.ok))
+      .then((d: { ok?: boolean; ollamaReachable?: boolean }) => {
+        if (typeof d.ollamaReachable === 'boolean') setOllamaOk(d.ollamaReachable);
+        else setOllamaOk(!!d.ok);
+      })
       .catch(() => setOllamaOk(false));
   }, [apiBase]);
 
@@ -234,16 +255,110 @@ export default function App() {
               );
             })}
           </nav>
-          {ollamaOk === false && (
+          {llmMode === 'local' && ollamaOk === false && (
             <p style={{ margin: '8px 0 0', fontSize: 12, color: '#f59e0b' }}>
               请先安装并启动 Ollama，并拉取模型（如 ollama pull qwen2.5）。<a href="https://ollama.com" target="_blank" rel="noreferrer" style={{ color: '#93c5fd' }}>文档</a>
             </p>
           )}
+          {llmMode === 'external' && !geminiSettings.apiKey.trim() && (
+            <p style={{ margin: '8px 0 0', fontSize: 12, color: '#94a3b8' }}>
+              外部模式：未在界面填写 Key 时，将使用启动 API 进程中的 <code style={{ color: '#cbd5e1' }}>GEMINI_API_KEY</code> /{' '}
+              <code style={{ color: '#cbd5e1' }}>GOOGLE_API_KEY</code>（与 A2UI 相同，可在 shell 中 export）。
+            </p>
+          )}
         </div>
-        <div ref={helpRef} style={{ position: 'relative', flexShrink: 0 }}>
+        <div style={{ display: 'flex', alignItems: 'flex-start', gap: 8, flexShrink: 0 }}>
+          <div
+            role="group"
+            aria-label="本地或外部模型"
+            style={{ display: 'flex', borderRadius: 8, overflow: 'hidden', border: '1px solid #475569', background: '#0f172a' }}
+          >
+            <button
+              type="button"
+              onClick={() => {
+                const next: LlmRuntimeMode = 'local';
+                setLlmMode(next);
+                saveLlmSettings({ mode: next, gemini: geminiSettings });
+              }}
+              style={{
+                padding: '6px 12px',
+                fontSize: 12,
+                fontWeight: 600,
+                border: 'none',
+                cursor: 'pointer',
+                background: llmMode === 'local' ? '#1d4ed8' : 'transparent',
+                color: llmMode === 'local' ? '#f8fafc' : '#94a3b8',
+              }}
+            >
+              本地
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                const next: LlmRuntimeMode = 'external';
+                setLlmMode(next);
+                saveLlmSettings({ mode: next, gemini: geminiSettings });
+              }}
+              style={{
+                padding: '6px 12px',
+                fontSize: 12,
+                fontWeight: 600,
+                border: 'none',
+                borderLeft: '1px solid #334155',
+                cursor: 'pointer',
+                background: llmMode === 'external' ? '#1d4ed8' : 'transparent',
+                color: llmMode === 'external' ? '#f8fafc' : '#94a3b8',
+              }}
+            >
+              外部
+            </button>
+          </div>
+          <div ref={settingsRef} style={{ position: 'relative' }}>
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                setSettingsOpen((v) => !v);
+                setHelpOpen(false);
+              }}
+              title="设置：外部模型（Gemini）"
+              style={{
+                width: 28,
+                height: 28,
+                borderRadius: '50%',
+                border: '1px solid #475569',
+                background: settingsOpen ? '#334155' : '#1e293b',
+                color: '#94a3b8',
+                cursor: 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                fontSize: 14,
+                fontWeight: 600,
+              }}
+            >
+              ⚙
+            </button>
+            {settingsOpen && (
+              <LlmSettingsModal
+                open
+                apiBase={apiBase}
+                mode={llmMode}
+                gemini={geminiSettings}
+                onClose={() => setSettingsOpen(false)}
+                onSave={(next) => {
+                  setGeminiSettings(next.gemini);
+                  setLlmMode(next.mode);
+                  saveLlmSettings({ mode: next.mode, gemini: next.gemini });
+                  setSettingsOpen(false);
+                }}
+              />
+            )}
+          </div>
+          <div ref={helpRef} style={{ position: 'relative' }}>
           <button
             type="button"
-            onClick={(e) => { e.stopPropagation(); setHelpOpen((v) => !v); }}
+            onClick={(e) => { e.stopPropagation(); setHelpOpen((v) => !v); setSettingsOpen(false); }}
             title="帮助：可用指令"
             style={{
               width: 28,
@@ -308,6 +423,7 @@ export default function App() {
             </div>
           )}
         </div>
+        </div>
       </header>
       <div ref={contentRef} style={{ display: 'flex', flex: 1, minHeight: 0 }}>
         <aside
@@ -351,7 +467,13 @@ export default function App() {
           {activeHeaderTab === 'my-work' && myWorkSessionId ? (
             <MyWorkPanel apiBase={apiBase} sessionId={myWorkSessionId} initialTerminals={myWorkTerminals} />
           ) : (
-            <ChatPanel apiBase={apiBase} addLog={addLog} onStartWorkEmbedded={onStartWorkEmbedded} />
+            <ChatPanel
+              apiBase={apiBase}
+              addLog={addLog}
+              onStartWorkEmbedded={onStartWorkEmbedded}
+              llmRuntimeMode={llmMode}
+              agentChatLlmBody={agentChatLlmBody}
+            />
           )}
         </main>
         <div

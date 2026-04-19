@@ -21,6 +21,11 @@ alwaysApply: false
 | `JENKINS_BASE_URL` | Jenkins 根地址 | `https://jenkins.rd.chanjet.com/` |
 | `JENKINS_USERNAME` | Jenkins Basic 认证用户名 | - |
 | `JENKINS_TOKEN` | Jenkins API Token（Basic 密码） | - |
+| `GEMINI_API_KEY` / `GOOGLE_API_KEY` | 外部 Gemini 鉴权（与 A2UI 一致）；未在 UI 传 Key 时由 `agent/gemini-client.ts` 经 `@google/genai` 读取 | `export GEMINI_API_KEY=...` |
+| `HTTPS_PROXY` / `HTTP_PROXY` / `ALL_PROXY` | 可选：访问 Google 时代理。`http(s)://` 走 undici `ProxyAgent`；**`socks5://` / `socks5h://`** 走 `fetch-socks`（undici 不支持 socks URL） | 例：`http://127.0.0.1:7890` 或 `socks5h://127.0.0.1:1081` |
+| `GEMINI_SOCKS_URL` | 可选：仅 SOCKS 时代理地址，优先级高于 `ALL_PROXY` 等 | 例：`socks5://127.0.0.1:1081` |
+| `GEMINI_USE_MAC_SYSTEM_SOCKS` | 默认自动：在 macOS 且未配置上述 HTTP/SOCKS 环境变量时，读取 `scutil --proxy` 的系统 SOCKS；设为 `0` 可关闭 | `0` |
+| `GEMINI_CONNECT_TIMEOUT_MS` | undici **TCP 连接**超时（毫秒），默认 `120000`；仅作用于外部 Gemini 请求 | `180000` |
 
 ## 二、Jenkins 默认分支（config/projects.ts → 部署时 BRANCH_NAME）
 
