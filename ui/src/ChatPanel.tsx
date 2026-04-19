@@ -30,6 +30,8 @@ type JiraBugItem = {
   resolution?: string;
   fixVersion?: string;
   assignee?: string;
+  /** Jira 自定义字段「开发人员」 */
+  developer?: string;
   url?: string;
 };
 type JiraBugPayload = { total?: number; issues?: JiraBugItem[] };
@@ -596,12 +598,13 @@ function renderToolResults(toolResults: unknown[] | undefined, onTip: (message: 
           <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12, color: '#e2e8f0', tableLayout: 'fixed' }}>
             <thead>
               <tr style={{ background: '#111827' }}>
-                <th style={{ width: '14%', textAlign: 'left', padding: '8px 10px', borderBottom: '1px solid #2a2a3d' }}>关键字</th>
-                <th style={{ width: '38%', textAlign: 'left', padding: '8px 10px', borderBottom: '1px solid #2a2a3d' }}>摘要</th>
-                <th style={{ width: '10%', textAlign: 'left', padding: '8px 10px', borderBottom: '1px solid #2a2a3d' }}>状态</th>
-                <th style={{ width: '10%', textAlign: 'left', padding: '8px 10px', borderBottom: '1px solid #2a2a3d' }}>解决结果</th>
-                <th style={{ width: '14%', textAlign: 'left', padding: '8px 10px', borderBottom: '1px solid #2a2a3d' }}>修复版本</th>
-                <th style={{ width: '14%', textAlign: 'left', padding: '8px 10px', borderBottom: '1px solid #2a2a3d' }}>经办人</th>
+                <th style={{ width: '12%', textAlign: 'left', padding: '8px 10px', borderBottom: '1px solid #2a2a3d' }}>关键字</th>
+                <th style={{ width: '30%', textAlign: 'left', padding: '8px 10px', borderBottom: '1px solid #2a2a3d' }}>摘要</th>
+                <th style={{ width: '9%', textAlign: 'left', padding: '8px 10px', borderBottom: '1px solid #2a2a3d' }}>状态</th>
+                <th style={{ width: '9%', textAlign: 'left', padding: '8px 10px', borderBottom: '1px solid #2a2a3d' }}>解决结果</th>
+                <th style={{ width: '11%', textAlign: 'left', padding: '8px 10px', borderBottom: '1px solid #2a2a3d' }}>修复版本</th>
+                <th style={{ width: '11%', textAlign: 'left', padding: '8px 10px', borderBottom: '1px solid #2a2a3d' }}>经办人</th>
+                <th style={{ width: '18%', textAlign: 'left', padding: '8px 10px', borderBottom: '1px solid #2a2a3d' }}>开发人员</th>
               </tr>
             </thead>
             <tbody>
@@ -621,11 +624,12 @@ function renderToolResults(toolResults: unknown[] | undefined, onTip: (message: 
                   <td style={{ padding: '8px 10px', borderBottom: '1px solid #2a2a3d', wordBreak: 'break-word' }}>{issue.resolution || '--'}</td>
                   <td style={{ padding: '8px 10px', borderBottom: '1px solid #2a2a3d', wordBreak: 'break-word' }}>{issue.fixVersion || '--'}</td>
                   <td style={{ padding: '8px 10px', borderBottom: '1px solid #2a2a3d', wordBreak: 'break-word' }}>{issue.assignee || '--'}</td>
+                  <td style={{ padding: '8px 10px', borderBottom: '1px solid #2a2a3d', wordBreak: 'break-word' }}>{issue.developer ?? '—'}</td>
                 </tr>
               ))}
               {issues.length === 0 && (
                 <tr>
-                  <td colSpan={6} style={{ padding: '10px', color: '#94a3b8' }}>
+                  <td colSpan={7} style={{ padding: '10px', color: '#94a3b8' }}>
                     暂无数据
                   </td>
                 </tr>

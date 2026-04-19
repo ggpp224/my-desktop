@@ -40,6 +40,10 @@ export const config = {
     /** Jira 8.8 场景使用账号密码 Basic 认证（非 token） */
     username: process.env.JIRA_USERNAME || '',
     password: process.env.JIRA_PASSWORD || '',
+    /** 周报「本周」按该 IANA 时区从周一开始算（默认上海）；与 Jira Look and feel 的周起始解耦 */
+    weeklyReportTimeZone: process.env.JIRA_WEEKLY_REPORT_TZ || 'Asia/Shanghai',
+    /** 开发人员自定义字段 id（如 customfield_10001）；留空则启动时向 Jira 拉取 /rest/api/2/field 按名称「开发人员」解析 */
+    developerFieldId: process.env.JIRA_DEVELOPER_FIELD_ID || '',
   },
   cursor: {
     usageApiUrl:
