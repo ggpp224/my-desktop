@@ -43,6 +43,16 @@ type WeeklyReportPayload = {
   reportHtml?: string;
   reportWiki?: string;
 };
+type WeeklyTeamSummaryPayload = {
+  success?: boolean;
+  reportHtml?: string;
+  reportWiki?: string;
+  wikiQuarter?: string;
+  wikiWeekRange?: string;
+  wikiTargetUrl?: string;
+  wikiPageId?: string;
+  sourceHtmlChars?: number;
+};
 type FetchWeeklyReportInfoPayload = {
   success?: boolean;
   error?: string;
@@ -96,6 +106,7 @@ const QUICK_ACTIONS: Array<{ label: string; message: string }> = [
   { label: '我的bug', message: '我的bug' },
   { label: '本周经我手的bug', message: '本周经我手的bug' },
   { label: '抓取周报信息', message: '抓取周报信息' },
+  { label: '本周组内总结', message: '本周组内总结' },
   { label: '线上bug', message: '线上bug' },
   { label: 'cursor用量', message: 'cursor用量' },
   { label: 'cursor今日用量', message: 'cursor今日用量' },
@@ -153,6 +164,7 @@ function buildCommandHints(projects: ProjectInfo[], inputHistory: string[]): str
     '本周经我手的bug',
     '写周报',
     '抓取周报信息',
+    '本周组内总结',
     'cursor用量',
     '同步cursor登录态',
     'cursor今日用量',
@@ -222,6 +234,17 @@ function extractWeeklyReportResult(toolResults?: unknown[]): WeeklyReportPayload
   ) as ToolResultItem | undefined;
   if (!row || typeof row.result !== 'object' || row.result == null) return null;
   return row.result as WeeklyReportPayload;
+}
+
+function extractWeeklyTeamSummaryResult(toolResults?: unknown[]): WeeklyTeamSummaryPayload | null {
+  if (!Array.isArray(toolResults)) return null;
+  const row = toolResults.find(
+    (item) =>
+      (item as ToolResultItem | undefined)?.tool === 'generate_weekly_team_summary' &&
+      (item as ToolResultItem | undefined)?.result
+  ) as ToolResultItem | undefined;
+  if (!row || typeof row.result !== 'object' || row.result == null) return null;
+  return row.result as WeeklyTeamSummaryPayload;
 }
 
 function extractFetchWeeklyReportInfoResult(toolResults?: unknown[]): FetchWeeklyReportInfoPayload | null {
@@ -613,6 +636,82 @@ function renderToolResults(toolResults: unknown[] | undefined, onTip: (message: 
           </>
         ) : (
           <div style={{ whiteSpace: 'pre-wrap', color: '#e2e8f0', fontSize: 13, lineHeight: 1.7 }}>{reportWiki}</div>
+        )}
+      </div>
+    );
+  }
+  const teamSummary = extractWeeklyTeamSummaryResult(toolResults);
+  const teamReportHtml = teamSummary?.reportHtml;
+  const teamReportWiki = teamSummary?.reportWiki;
+  if (teamSummary && teamSummary.success === true && (teamReportHtml || teamReportWiki)) {
+    const meta = [teamSummary.wikiQuarter, teamSummary.wikiWeekRange].filter(Boolean).join(' · ');
+    const reportHeader = `本周组内总结${meta ? `（${meta}）` : ''} · 来源 HTML 约 ${teamSummary.sourceHtmlChars ?? 0} 字符`;
+    return (
+      <div style={{ marginTop: 8, background: '#1a1a2e', borderRadius: 6, border: '1px solid #2a2a3d', padding: 10 }}>
+        <div style={{ fontSize: 12, color: '#94a3b8', marginBottom: 8, display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8 }}>
+          <span>
+            {reportHeader}
+            {teamReportHtml ? <span style={{ color: '#64748b', marginLeft: 8 }}>（复制带富文本）</span> : null}
+          </span>
+          <button
+            type="button"
+            onClick={async () => {
+              try {
+                if (teamReportHtml) {
+                  await copyWeeklyReportToClipboard(reportHeader, teamReportHtml, teamReportWiki ?? '');
+                  onTip('已复制：富文本 HTML + 纯文本（Wiki）');
+                } else {
+                  await navigator.clipboard.writeText(`${reportHeader}\n\n${teamReportWiki ?? ''}`.trim());
+                  onTip('组内总结已复制到剪贴板');
+                }
+              } catch {
+                onTip('复制失败，请手动复制');
+              }
+            }}
+            style={{
+              padding: '4px 10px',
+              borderRadius: 4,
+              border: '1px solid #475569',
+              background: '#0f3460',
+              color: '#e2e8f0',
+              cursor: 'pointer',
+              fontSize: 12,
+            }}
+          >
+            复制组内总结
+          </button>
+        </div>
+        {teamSummary.wikiTargetUrl ? (
+          <div style={{ fontSize: 11, color: '#64748b', marginBottom: 8 }}>
+            <a href={teamSummary.wikiTargetUrl} target="_blank" rel="noreferrer" style={{ color: '#93c5fd' }}>
+              打开 wiki 源页
+            </a>
+          </div>
+        ) : null}
+        {teamReportHtml ? (
+          <>
+            <style>
+              {`
+              .weekly-report-html { font-size: 13px; line-height: 1.55; color: #e2e8f0; }
+              .weekly-report-html h1 { font-size: 1.2rem; margin: 0.35em 0 0.15em; font-weight: 700; color: #f8fafc; }
+              .weekly-report-html h2 { font-size: 1.05rem; margin: 0.3em 0 0.12em; font-weight: 600; color: #e2e8f0; }
+              .weekly-report-html h3 { font-size: 1rem; margin: 0.25em 0 0.1em; color: #cbd5e1; }
+              .weekly-report-html ul, .weekly-report-html ol { margin: 0.2em 0 0.3em 1em; padding: 0; }
+              .weekly-report-html li { margin: 0.1em 0; }
+              .weekly-report-html p { margin: 0.15em 0; }
+              .weekly-report-html pre { background: #111827; padding: 8px; border-radius: 4px; overflow: auto; font-size: 12px; }
+              .weekly-report-html a { color: #93c5fd; }
+            `}
+            </style>
+            <div
+              className="weekly-report-html"
+              style={{ maxHeight: 480, overflow: 'auto' }}
+              // eslint-disable-next-line react/no-danger -- 内容由本地工具链从 Markdown 生成
+              dangerouslySetInnerHTML={{ __html: teamReportHtml }}
+            />
+          </>
+        ) : (
+          <div style={{ whiteSpace: 'pre-wrap', color: '#e2e8f0', fontSize: 13, lineHeight: 1.7 }}>{teamReportWiki}</div>
         )}
       </div>
     );
@@ -1065,7 +1164,7 @@ export function ChatPanel({ apiBase, addLog, onStartWorkEmbedded }: ChatPanelPro
             flushToolStreamLive();
             return;
           }
-          if (e.phase === 'start' && e.tool === 'write_weekly_report') {
+          if (e.phase === 'start' && (e.tool === 'write_weekly_report' || e.tool === 'generate_weekly_team_summary')) {
             toolStreamAccumRef.current = { thinking: '', content: '' };
             setToolStreamLive({ thinking: '', content: '' });
           }
@@ -1266,7 +1365,7 @@ export function ChatPanel({ apiBase, addLog, onStartWorkEmbedded }: ChatPanelPro
               fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace',
             }}
           >
-            <div style={{ fontSize: 12, color: '#a78bfa', marginBottom: 8, fontWeight: 600 }}>工具内输出（周报生成）</div>
+            <div style={{ fontSize: 12, color: '#a78bfa', marginBottom: 8, fontWeight: 600 }}>工具内输出（周报 / 组内总结）</div>
             {toolStreamLive.thinking ? (
               <>
                 <div style={{ fontSize: 11, color: '#c4b5fd', marginBottom: 4 }}>Thinking</div>
@@ -1334,7 +1433,7 @@ export function ChatPanel({ apiBase, addLog, onStartWorkEmbedded }: ChatPanelPro
         {loading && (
           <p style={{ color: '#888' }}>
             {toolStreamLive && (toolStreamLive.thinking || toolStreamLive.content)
-              ? '周报由本地模型流式生成中（见上方「工具内输出」）…'
+              ? '周报或组内总结由本地模型流式生成中（见上方「工具内输出」）…'
               : toolProgressLines.length > 0
                 ? toolProgressLines[toolProgressLines.length - 1]
                 : streamLive && (streamLive.thinking || streamLive.content)

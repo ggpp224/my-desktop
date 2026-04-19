@@ -217,6 +217,18 @@ export const toolsSchema = [
   {
     type: 'function' as const,
     function: {
+      name: 'generate_weekly_team_summary',
+      description:
+        '本周组内总结：与「抓取周报信息」相同规则拉取当前 wiki 周报页 HTML，再按固定提示词调用本地大模型清洗并生成五段式 Markdown 组内总结，产出 reportHtml/reportWiki；用户说「本周组内总结」「组内总结」时调用，无参数',
+      parameters: {
+        type: 'object',
+        properties: {},
+      },
+    },
+  },
+  {
+    type: 'function' as const,
+    function: {
       name: 'open_terminal',
       description:
         '打开内嵌终端工作区（我的工作），新建一个终端页签，不执行开始工作流。用户说「终端打开 react18」「终端打开 cc-web」等 → 必传 code=项目代号，cwd 为该代号在 config/projects 中的路径；仅「打开终端/新建终端」不传 code，cwd 为用户主目录。代号示例：react18、cc-web、cc-web2、biz-solution、biz-guide、uikit、shared、scm、scm18、nova、nova-next、base、base18、ai-import、uikit-compat、cc-node、app-service、biz-framework、front-entity、front-pub、evoui、chanjet-grid、nova-form、nova-grid、nova-server、nova-ui、chanjet-nova、h5-biz-common、cc-web-hkj',

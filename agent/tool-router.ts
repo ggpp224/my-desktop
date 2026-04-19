@@ -25,6 +25,7 @@ import { getCursorTodayUsage, getCursorUsage } from '../tools/cursor-usage-tool.
 import { syncCursorCookieFromChrome } from '../tools/cursor-cookie-sync-tool.js';
 import { fetchWeeklyReportPageInfo, openWeeklyReportPage } from '../tools/wiki-tool.js';
 import { writeWeeklyReport } from '../tools/weekly-report-tool.js';
+import { generateWeeklyTeamSummary } from '../tools/weekly-team-summary-tool.js';
 import type { ToolCall } from './ollama-client.js';
 import type { RouteExecuteContext } from './tool-progress.js';
 
@@ -157,6 +158,18 @@ export async function routeAndExecute(call: ToolCall, ctx?: RouteExecuteContext)
           }),
       });
     }
+    case 'generate_weekly_team_summary':
+      return generateWeeklyTeamSummary({
+        onProgress: (message) =>
+          ctx?.onToolProgress?.({ phase: 'progress', tool: 'generate_weekly_team_summary', message }),
+        onStreamDelta: (d) =>
+          ctx?.onToolProgress?.({
+            phase: 'stream_delta',
+            tool: 'generate_weekly_team_summary',
+            thinkingDelta: d.thinkingDelta,
+            contentDelta: d.contentDelta,
+          }),
+      });
     case 'run_workflow_step': {
       const workflow = (args?.workflow as string) ?? 'start-work';
       const taskKey = (args?.taskKey as string) ?? '';
