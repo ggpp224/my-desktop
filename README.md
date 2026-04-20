@@ -1,129 +1,120 @@
 # AI Dev Control Center
 
-桌面应用：通过自然语言或按钮操作，由本地 LLM（Ollama）驱动执行开发流程（启动环境、打开页面、Jenkins 部署、工作流等）。  
-项目根目录为 **my-desktop**。
+<!-- AI 生成 By Peng.Guo -->
+
+桌面开发中控应用：通过自然语言驱动本地工具链，统一完成工作流启动、终端操作、Jenkins 部署、仓库合并、Jira/Wiki 查询与周报生成。  
+项目根目录：`my-desktop`。
+
+## 当前能力概览（与代码实现一致）
+
+- **Agent 对话执行**：支持普通请求与 SSE 流式请求（含首轮模型增量输出、工具执行进度、结果汇总）。
+- **模型能力**：默认本地 Ollama；也支持外部 Gemini（API Key 可请求体传入或读取环境变量）。
+- **工作流能力**：支持完整工作流执行、单步执行、内嵌终端会话（可新增/关闭子终端并轮询输出）。
+- **开发工具能力**：Shell 执行、浏览器打开、Jenkins 触发部署与状态查询、项目在 IDE 中打开/关闭。
+- **协同能力**：Jira 固定查询（我的 bug / 线上 bug / 本周完成 / 本周经我手 bug）、Wiki 周报定位/抓取、周报自动编写、组内总结生成。
+- **工程辅助能力**：Cursor 用量查询与 Cookie 自动同步；命令历史持久化（`runtime/command-history.json`）。
 
 ## 环境要求
 
-- **Node.js** 18.x / 20.x（LTS）
-- **Ollama**：已安装并拉取模型，例如 `ollama pull qwen2.5`
-- **系统**：macOS（优先）、Windows（browser 使用 `start`）
+- Node.js `>=18`
+- macOS（主流程优先；部分能力依赖本机客户端与 `open -a`）
+- Ollama（本地模式）
+- 可选：Gemini API Key（外部模型模式）
 
 ## 快速开始
 
-### 1. 安装依赖
+### 1) 安装依赖
 
 ```bash
 npm install
 ```
 
-（在仓库根目录执行，会通过 `postinstall` 安装 UI 依赖。）
+> 根目录安装会自动触发 `postinstall` 安装 `ui` 子项目依赖。
 
-### 2. 验证 Ollama 与 Tool Calling（可选）
+### 2) （可选）验证 Ollama Tool Calling
 
 ```bash
 npm run verify-ollama
 ```
 
-需先启动 Ollama（`ollama serve` 或直接运行 `ollama run qwen2.5`）。若返回 `OK: Ollama returned structured tool_calls` 表示支持 tool calling。
-
-### 3. 启动 Ollama
-
-确保本机已启动 Ollama，并拉取模型：
-
-```bash
-ollama pull qwen2.5
-ollama run qwen2.5   # 或后台运行 ollama serve
-```
-
-### 4. 开发模式
+### 3) 启动开发模式
 
 ```bash
 npm run dev
 ```
 
-会先编译 TS，然后同时启动：Vite UI（5173）、后端 API（3000），并在两者就绪后启动 Electron 窗口。  
-若只跑后端与 Electron、UI 自己起，可分别执行：
+该命令会并行启动：
+
+- `ui`（Vite，默认 `5173`）
+- `server`（Express API，默认 `3000`，端口冲突会自动递增）
+- Electron 主进程（等待 UI/API 可用后启动）
+
+### 4) 生产运行
 
 ```bash
-npm run dev:ui        # 终端 1
-npm run dev:server    # 终端 2
-npm run dev:electron  # 终端 3（需先 tsc）
-```
-
-### 5. 生产构建与运行
-
-```bash
-npm run build
 npm run start
 ```
 
-Electron 主进程内会启动 Express，并加载打包后的 UI。
-
-### 6. 打包成 Mac 应用程序
-
-在项目根目录执行：
+### 5) 构建与打包（macOS）
 
 ```bash
-npm install
+npm run build
 npm run pack
 ```
 
-或直接：
+产物目录：`release/`。
 
-```bash
-npm run pack:mac
-```
+## 配置说明
 
-会先执行 `npm run build`（编译 TS + 构建 UI），再使用 **electron-builder** 打出 Mac 安装包，输出在 **`release/`** 目录：
+建议先复制 `.env.example` 为 `.env`，再按本机环境配置。
 
-- **AI Dev Control Center-0.1.0.dmg**：可拖到「应用程序」安装的镜像
-- **AI Dev Control Center-0.1.0-mac.zip**：解压即用的 .app 包
+核心配置（节选）：
 
-首次打包需安装 `electron-builder`（已在 devDependencies 中）。若需自定义图标，在项目根目录放 `build/icon.icns`，并在 `package.json` 的 `build.mac.icon` 中指定路径。
+- **模型**
+  - `OLLAMA_BASE`、`OLLAMA_MODEL`
+  - `GEMINI_API_KEY` 或 `GOOGLE_API_KEY`
+- **服务**
+  - `PORT`、`SHELL_CWD`
+- **Jenkins**
+  - `JENKINS_BASE_URL`、`JENKINS_USERNAME`、`JENKINS_TOKEN`
+  - 以及各项目 `JENKINS_JOB_*` / 默认分支变量
+- **Jira**
+  - `JIRA_BASE_URL`、`JIRA_USERNAME`、`JIRA_PASSWORD`
+- **Wiki 周报**
+  - `WIKI_BASE_URL`、`WIKI_TOKEN`、`WIKI_WEEKLY_SPACE_NAME`、`WIKI_WEEKLY_ROOT_PAGE_ID`
+- **Cursor 用量**
+  - `CURSOR_API_TOKEN` 或 `CURSOR_COOKIE`（未配置时可尝试自动同步 Chrome 登录态）
 
-## 配置
+完整环境变量说明见：`.cursor/rules/env-constants.mdc`。
 
-- **Ollama**：`OLLAMA_BASE`（默认 `http://localhost:11434`）、`OLLAMA_MODEL`（默认 `qwen2.5`）
-- **Jenkins**：`JENKINS_BASE_URL`、`JENKINS_TOKEN`（勿提交到代码库，使用环境变量或本地配置）
-- **Jira（8.8，非 token）**：`JIRA_BASE_URL`、`JIRA_USERNAME`、`JIRA_PASSWORD`
-- **Cursor 用量**：`CURSOR_API_TOKEN` 或 `CURSOR_COOKIE`（接口默认 `https://cursor.com/api/dashboard/get-aggregated-usage-events`）
-- **Shell 工作目录**：`SHELL_CWD`（默认当前工作目录）
+## 常用能力入口
 
-敏感信息请使用环境变量，不要硬编码。
+- **自然语言能力清单**：`docs/可用指令.md`
+- **工作流定义**：`workflows/start-work.json`、`workflows/standalone.json`、`workflows/upgrade-*.json`
+- **工具路由**：`agent/tool-router.ts`
+- **服务接口**：`server/api.ts`
 
-## 可用指令（自然语言）
+## 典型使用示例
 
-在 Chat 输入自然语言即可，完整说明见 **[docs/可用指令.md](docs/可用指令.md)**。
+- 启动工作环境：`开始工作`
+- 打开内嵌终端并定位项目：`终端打开 react18`
+- 执行单步任务：`启动 scm`
+- 部署：`部署 nova 分支是 sprint-260326`
+- 合并：`合并 biz-solution`
+- 查询：`我的bug`、`本周已完成任务`
+- 周报：`周报`、`写周报`、`组内总结`
+- Cursor：`cursor用量`、`cursor今日用量`
 
-| 类型 | 示例 |
-|------|------|
-| 工作流 | 开始工作、启动 cpxy、启动 react18、启动 scm、升级集测react18的nova版本、升级集测cc-web的nova版本 |
-| 部署 | 部署 nova、部署 base、部署 cc-web、部署 scm |
-| 合并 | 合并 nova、合并 biz-solution、合并 scm |
-| IDE 打开/关闭 | ws打开base、cursor打开scm、关闭ws的nova、关闭cursor的base |
-| 浏览器 / Shell | 打开 Jenkins、执行 xxx 命令 |
-| Jira | 我的bug、查询我的bug |
-| Cursor | cursor用量、查询cursor用量、cursor今日用量、查询cursor今日用量、同步cursor登录态 |
+## 主要目录
 
-项目代号与 `config/projects` 一致，可扩展。
-
-## 成功标准示例
-
-- 输入「开始工作」：可执行简化版（如打开 Jenkins、启动 docker 等 1～2 步），完整流程见工作流 `start-work`。
-- 输入「部署 order-service」：触发 Jenkins 对应 Job（需配置 Jenkins）。
-- 输入「打开开发环境」：可打开常用页面（GitHub、Jenkins、Confluence、Grafana 等，URL 可在 config 或 workflow 中配置）。
-
-## 项目结构（根目录 my-desktop）
-
-```
-agent/          # Agent、Tool Router、Ollama 封装
-tools/          # shell、browser、jenkins、workflow
-workflows/      # start-work.json 等
-server/         # Express API
-desktop/        # Electron 主进程
-config/         # 配置
-ui/             # React + Vite 前端
-scripts/        # 如 verify-ollama-tools.js
-docs/           # 文档（如 ai-coding-prompt.md）
+```text
+agent/       Agent 编排、工具 schema、模型调用
+server/      Express API（含 SSE、终端会话、部署/合并接口）
+tools/       Shell/Jenkins/Jira/Wiki/Cursor/Workflow 等工具实现
+workflows/   工作流配置（start-work/standalone/upgrade-*）
+desktop/     Electron 主进程与 preload
+ui/          React + Vite 前端
+config/      项目映射、Jenkins 预设、默认配置
+runtime/     运行时数据（如命令历史）
+docs/        使用文档（自然语言指令等）
 ```

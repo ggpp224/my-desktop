@@ -2,6 +2,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Terminal } from 'xterm';
 import { FitAddon } from 'xterm-addon-fit';
+import { WebglAddon } from 'xterm-addon-webgl';
 import 'xterm/css/xterm.css';
 
 type TerminalStatus = 'running' | 'success' | 'error';
@@ -38,6 +39,7 @@ export function MyWorkPanel({ apiBase, sessionId, initialTerminals }: MyWorkPane
   const terminalMountRef = useRef<HTMLDivElement>(null);
   const xtermRef = useRef<Terminal | null>(null);
   const fitAddonRef = useRef<FitAddon | null>(null);
+  const webglAddonRef = useRef<WebglAddon | null>(null);
   const activePtySeqRef = useRef(0);
   const activePtyIdRef = useRef('');
   const renderedTerminalIdRef = useRef('');
@@ -137,6 +139,17 @@ export function MyWorkPanel({ apiBase, sessionId, initialTerminals }: MyWorkPane
     const fitAddon = new FitAddon();
     terminal.loadAddon(fitAddon);
     terminal.open(terminalMountRef.current);
+    try {
+      const webglAddon = new WebglAddon();
+      terminal.loadAddon(webglAddon);
+      webglAddon.onContextLoss(() => {
+        webglAddon.dispose();
+        if (webglAddonRef.current === webglAddon) webglAddonRef.current = null;
+      });
+      webglAddonRef.current = webglAddon;
+    } catch {
+      webglAddonRef.current = null;
+    }
     fitAddon.fit();
     xtermRef.current = terminal;
     fitAddonRef.current = fitAddon;
@@ -166,6 +179,8 @@ export function MyWorkPanel({ apiBase, sessionId, initialTerminals }: MyWorkPane
     return () => {
       onDataDispose.dispose();
       window.removeEventListener('resize', onResize);
+      webglAddonRef.current?.dispose();
+      webglAddonRef.current = null;
       terminal.dispose();
       xtermRef.current = null;
       fitAddonRef.current = null;
