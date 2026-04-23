@@ -1,6 +1,7 @@
 /* AI 生成 By Peng.Guo */
 import 'dotenv/config';
 import { app, BrowserWindow, Menu, shell } from 'electron';
+import { existsSync } from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import { openExternalUrlPreferChrome } from './open-external-chrome.js';
@@ -18,12 +19,30 @@ app.commandLine.appendSwitch('enable-accelerated-2d-canvas');
 
 let mainWindow: BrowserWindow | null = null;
 
+function resolveAppIconPath(): string | null {
+  const candidates = app.isPackaged
+    ? [
+        path.join(process.resourcesPath, 'build', 'icon.png'),
+        path.join(process.resourcesPath, 'icon.png'),
+      ]
+    : [path.join(app.getAppPath(), 'build', 'icon.png')];
+
+  for (const iconPath of candidates) {
+    if (iconPath && existsSync(iconPath)) {
+      return iconPath;
+    }
+  }
+  return null;
+}
+
 function createWindow(apiPort: number): void {
   const preloadPath = path.join(__dirname, 'preload.js');
+  const appIconPath = resolveAppIconPath() ?? undefined;
   mainWindow = new BrowserWindow({
     width: 1200,
     height: 800,
     show: false,
+    icon: appIconPath,
     webPreferences: {
       nodeIntegration: false,
       contextIsolation: true,
@@ -100,6 +119,13 @@ function createWindow(apiPort: number): void {
 }
 
 app.whenReady().then(async () => {
+  // AI 生成 By Peng.Guo
+  // macOS 下开发态不会自动套用 electron-builder 的 icon，主动设置 Dock 图标确保可见。
+  const appIconPath = resolveAppIconPath();
+  if (process.platform === 'darwin' && appIconPath) {
+    app.dock.setIcon(appIconPath);
+  }
+
   const apiPort = isDev ? 3000 : await startServer();
   createWindow(apiPort);
   app.on('activate', () => {
