@@ -26,7 +26,7 @@ import { syncCursorCookieFromChrome } from '../tools/cursor-cookie-sync-tool.js'
 import { fetchWeeklyReportPageInfo, openWeeklyReportPage } from '../tools/wiki-tool.js';
 import { writeWeeklyReport } from '../tools/weekly-report-tool.js';
 import { generateWeeklyTeamSummary } from '../tools/weekly-team-summary-tool.js';
-import { queryKnowledgeBase, rebuildKnowledgeBaseIndex } from './knowledge/knowledge-service.js';
+import { queryKnowledgeBase, rebuildKnowledgeBaseIndex, listKnowledgeDocs } from './knowledge/knowledge-service.js';
 import type { ToolCall } from './ollama-client.js';
 import type { RouteExecuteContext } from './tool-progress.js';
 
@@ -68,6 +68,13 @@ export async function routeAndExecute(call: ToolCall, ctx?: RouteExecuteContext)
         message: '正在清理并重建知识库索引...',
       });
       return rebuildKnowledgeBaseIndex();
+    case 'list_knowledge_docs':
+      ctx?.onToolProgress?.({
+        phase: 'progress',
+        tool: 'list_knowledge_docs',
+        message: '正在扫描知识库文档...',
+      });
+      return listKnowledgeDocs();
     case 'run_shell':
       return shellRun((args?.command as string) ?? '', { requireConfirmation: false });
     case 'open_browser':

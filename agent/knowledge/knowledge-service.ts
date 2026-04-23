@@ -95,3 +95,35 @@ export async function rebuildKnowledgeBaseIndex(): Promise<{ success: boolean; d
     return { success: false, error: err instanceof Error ? err.message : String(err) };
   }
 }
+
+// AI 生成 By Peng.Guo
+export async function listKnowledgeDocs(): Promise<{
+  success: boolean;
+  docs?: Array<{ id: string; filePath: string; relativePath: string; size: number; modifiedAt: string }>;
+  totalCount?: number;
+  error?: string;
+}> {
+  try {
+    const { loadMarkdownKnowledgeDocs } = await import('./markdown-data-source.js');
+    const docs = await loadMarkdownKnowledgeDocs(process.cwd(), config.knowledgeBase.docDirs);
+
+    const docList = docs.map((doc) => ({
+      id: doc.id,
+      filePath: doc.filePath,
+      relativePath: doc.id,
+      size: Buffer.byteLength(doc.text, 'utf-8'),
+      modifiedAt: new Date(doc.mtimeMs).toISOString(),
+    }));
+
+    return {
+      success: true,
+      docs: docList,
+      totalCount: docList.length,
+    };
+  } catch (err) {
+    return {
+      success: false,
+      error: err instanceof Error ? err.message : String(err),
+    };
+  }
+}

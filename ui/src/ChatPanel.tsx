@@ -118,6 +118,20 @@ type RebuildKnowledgeBasePayload = {
   docsCount?: number;
   error?: string;
 };
+// AI 生成 By Peng.Guo
+type KnowledgeDocItem = {
+  id?: string;
+  filePath?: string;
+  relativePath?: string;
+  size?: number;
+  modifiedAt?: string;
+};
+type ListKnowledgeDocsPayload = {
+  success?: boolean;
+  docs?: KnowledgeDocItem[];
+  totalCount?: number;
+  error?: string;
+};
 
 interface ChatPanelProps {
   apiBase: string;
@@ -197,6 +211,8 @@ function buildCommandHints(projects: ProjectInfo[], inputHistory: string[]): str
     'cursor今日用量',
     '添加私人知识库',
     '重建知识库索引',
+    '已添加到知识库的文档',
+    '知识库有哪些文档',
   ];
   const allCodes = Array.from(new Set(projects.flatMap((p) => p.codes)));
   const jenkinsCodes = Array.from(new Set(projects.filter((p) => p.jenkins).flatMap((p) => p.codes)));
@@ -319,6 +335,18 @@ function extractRebuildKnowledgeBaseResult(toolResults?: unknown[]): RebuildKnow
   ) as ToolResultItem | undefined;
   if (!row || typeof row.result !== 'object' || row.result == null) return null;
   return row.result as RebuildKnowledgeBasePayload;
+}
+
+// AI 生成 By Peng.Guo
+function extractListKnowledgeDocsResult(toolResults?: unknown[]): ListKnowledgeDocsPayload | null {
+  if (!Array.isArray(toolResults)) return null;
+  const row = toolResults.find(
+    (item) =>
+      (item as ToolResultItem | undefined)?.tool === 'list_knowledge_docs' &&
+      (item as ToolResultItem | undefined)?.result
+  ) as ToolResultItem | undefined;
+  if (!row || typeof row.result !== 'object' || row.result == null) return null;
+  return row.result as ListKnowledgeDocsPayload;
 }
 
 function pickString(obj: Record<string, unknown>, keys: string[]): string {
@@ -627,6 +655,53 @@ function renderToolResults(
   onTip: (message: string) => void,
   copyCtx: ReportCopyLlmContext,
 ) {
+  // AI 生成 By Peng.Guo：列出知识库文档
+  const listDocsResult = extractListKnowledgeDocsResult(toolResults);
+  if (listDocsResult) {
+    const docs = Array.isArray(listDocsResult.docs) ? listDocsResult.docs : [];
+    return (
+      <div style={{ marginTop: 8, background: '#1a1a2e', borderRadius: 6, border: '1px solid #2a2a3d', padding: 10 }}>
+        <div style={{ fontSize: 12, color: listDocsResult.success ? '#86efac' : '#fca5a5', marginBottom: 8 }}>
+          {listDocsResult.success ? '知识库文档列表' : '获取文档列表失败'}
+          {typeof listDocsResult.totalCount === 'number' ? (
+            <span style={{ color: '#94a3b8', marginLeft: 8 }}>共 {listDocsResult.totalCount} 个文档</span>
+          ) : null}
+        </div>
+        {listDocsResult.error ? (
+          <div style={{ fontSize: 12, color: '#fecaca', marginBottom: 8 }}>{listDocsResult.error}</div>
+        ) : null}
+        {docs.length > 0 ? (
+          <div style={{ maxHeight: 400, overflow: 'auto' }}>
+            {docs.map((doc, idx) => (
+              <div
+                key={doc.id || idx}
+                style={{
+                  marginBottom: 8,
+                  padding: 8,
+                  borderRadius: 4,
+                  background: '#0f172a',
+                  border: '1px solid #1f2937',
+                }}
+              >
+                <div style={{ fontSize: 12, color: '#93c5fd', marginBottom: 4 }}>
+                  {doc.relativePath || doc.filePath || '未知路径'}
+                </div>
+                <div style={{ fontSize: 11, color: '#64748b', display: 'flex', gap: 12 }}>
+                  {typeof doc.size === 'number' ? (
+                    <span>大小: {(doc.size / 1024).toFixed(2)} KB</span>
+                  ) : null}
+                  {doc.modifiedAt ? (
+                    <span>修改时间: {new Date(doc.modifiedAt).toLocaleString('zh-CN')}</span>
+                  ) : null}
+                </div>
+              </div>
+            ))}
+          </div>
+        ) : null}
+      </div>
+    );
+  }
+
   const rebuildKb = extractRebuildKnowledgeBaseResult(toolResults);
   if (rebuildKb) {
     return (

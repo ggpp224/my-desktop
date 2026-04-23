@@ -27,6 +27,18 @@ export const toolsSchema = [
   {
     type: 'function' as const,
     function: {
+      name: 'list_knowledge_docs',
+      description:
+        '列出所有已添加到知识库的文档。用户说「已添加到知识库的文档」「知识库有哪些文档」「查看知识库文档列表」时调用，无参数',
+      parameters: {
+        type: 'object',
+        properties: {},
+      },
+    },
+  },
+  {
+    type: 'function' as const,
+    function: {
       name: 'query_knowledge_base',
       description:
         '查询本地知识库（doc/docs 下 Markdown 文档）并返回可引用答案。用户问「如何使用」「文档里怎么配置」等说明类问题时调用',
