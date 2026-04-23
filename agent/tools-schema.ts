@@ -3,6 +3,45 @@ export const toolsSchema = [
   {
     type: 'function' as const,
     function: {
+      name: 'open_knowledge_base_manager',
+      description:
+        '打开私人知识库管理页签。用户说「添加私人知识库」时调用，无参数',
+      parameters: {
+        type: 'object',
+        properties: {},
+      },
+    },
+  },
+  {
+    type: 'function' as const,
+    function: {
+      name: 'rebuild_knowledge_base_index',
+      description:
+        '重建私人知识库索引。用户说「重建知识库索引」时调用，无参数',
+      parameters: {
+        type: 'object',
+        properties: {},
+      },
+    },
+  },
+  {
+    type: 'function' as const,
+    function: {
+      name: 'query_knowledge_base',
+      description:
+        '查询本地知识库（doc/docs 下 Markdown 文档）并返回可引用答案。用户问「如何使用」「文档里怎么配置」等说明类问题时调用',
+      parameters: {
+        type: 'object',
+        required: ['question'],
+        properties: {
+          question: { type: 'string', description: '用户的知识库问题原文' },
+        },
+      },
+    },
+  },
+  {
+    type: 'function' as const,
+    function: {
       name: 'run_shell',
       description: '在本地执行 shell 命令，例如启动 docker、启动前端/后端项目',
       parameters: {

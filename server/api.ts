@@ -32,7 +32,7 @@ if (typeof dns.setDefaultResultOrder === 'function') {
 
 const app = express();
 app.use(cors());
-app.use(express.json());
+app.use(express.json({ limit: '30mb' }));
 
 /** 进行中的 /agent/chat 可中止：切换模型或新请求时取消与 Ollama 的连接 */
 let agentChatAbort: AbortController | null = null;
@@ -44,6 +44,7 @@ function abortAgentChat(): void {
 
 const COMMAND_HISTORY_MAX = 30;
 const COMMAND_HISTORY_FILE = path.resolve(process.cwd(), 'runtime', 'command-history.json');
+const PRIVATE_KB_BASE_DIR = path.resolve(process.cwd(), 'runtime', 'private-kb');
 
 type CommandHistoryStore = { items: string[] };
 
@@ -72,6 +73,19 @@ async function writeCommandHistory(items: string[]): Promise<void> {
     JSON.stringify({ items: normalized }, null, 2),
     'utf-8'
   );
+}
+
+type KnowledgeImportFile = { path?: string; content?: string };
+
+function sanitizeRelativePath(input: string): string {
+  const normalized = input.replace(/\\/g, '/').trim();
+  const parts = normalized
+    .split('/')
+    .map((part) => part.trim())
+    .filter(Boolean)
+    .filter((part) => part !== '.' && part !== '..')
+    .map((part) => part.replace(/[^a-zA-Z0-9._-]/g, '_'));
+  return parts.join('/');
 }
 
 app.get('/', (_req, res) => res.status(200).json({ ok: true, service: 'ai-dev-control-center' }));
@@ -201,6 +215,43 @@ app.post('/agent/history', async (req, res) => {
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
     res.status(500).json({ success: false, error: msg });
+  }
+});
+
+/** 私人知识库：导入目录中的 Markdown 文档（前端选择目录后传文件列表） */
+app.post('/knowledge-base/import', async (req, res) => {
+  const sourceNameRaw = String(req.body?.sourceName ?? '').trim() || `import-${Date.now()}`;
+  const files = Array.isArray(req.body?.files) ? (req.body.files as KnowledgeImportFile[]) : [];
+  if (!files.length) {
+    res.status(400).json({ success: false, error: '缺少 files' });
+    return;
+  }
+  const sourceName = sourceNameRaw.replace(/[^a-zA-Z0-9._-]/g, '_').slice(0, 80) || `import-${Date.now()}`;
+  const targetRoot = path.join(PRIVATE_KB_BASE_DIR, sourceName);
+  let imported = 0;
+  try {
+    await fs.mkdir(targetRoot, { recursive: true });
+    for (const file of files) {
+      const rawPath = String(file.path ?? '').trim();
+      const content = String(file.content ?? '');
+      if (!rawPath || !rawPath.toLowerCase().endsWith('.md')) continue;
+      const rel = sanitizeRelativePath(rawPath);
+      if (!rel || !rel.toLowerCase().endsWith('.md')) continue;
+      const abs = path.join(targetRoot, rel);
+      if (!abs.startsWith(targetRoot)) continue;
+      await fs.mkdir(path.dirname(abs), { recursive: true });
+      await fs.writeFile(abs, content, 'utf-8');
+      imported += 1;
+    }
+    res.json({
+      success: true,
+      imported,
+      sourceName,
+      targetDir: path.relative(process.cwd(), targetRoot).split(path.sep).join('/'),
+    });
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    res.status(500).json({ success: false, error: msg, imported });
   }
 });
 

@@ -100,11 +100,30 @@ type CursorTodayUsageEvent = {
     cacheWriteTokens?: number;
   };
 };
+type KnowledgeCitation = {
+  path?: string;
+  score?: number;
+  snippet?: string;
+};
+type KnowledgeBasePayload = {
+  success?: boolean;
+  answer?: string;
+  citations?: KnowledgeCitation[];
+  docsCount?: number;
+  model?: { chat?: string; embed?: string };
+  error?: string;
+};
+type RebuildKnowledgeBasePayload = {
+  success?: boolean;
+  docsCount?: number;
+  error?: string;
+};
 
 interface ChatPanelProps {
   apiBase: string;
   addLog: (line: string) => void;
   onStartWorkEmbedded: (payload: { sessionId: string; terminals: WorkTerminal[] }) => void;
+  onOpenKnowledgeBase: () => void;
   /** 本地 Ollama / 外部 Gemini */
   llmRuntimeMode: LlmRuntimeMode;
   /** 外部模式且已填 Key 时传入，随请求发往本机后端 */
@@ -176,6 +195,8 @@ function buildCommandHints(projects: ProjectInfo[], inputHistory: string[]): str
     'cursor用量',
     '同步cursor登录态',
     'cursor今日用量',
+    '添加私人知识库',
+    '重建知识库索引',
   ];
   const allCodes = Array.from(new Set(projects.flatMap((p) => p.codes)));
   const jenkinsCodes = Array.from(new Set(projects.filter((p) => p.jenkins).flatMap((p) => p.codes)));
@@ -276,6 +297,28 @@ function extractCursorUsageResult(toolResults?: unknown[]): CursorUsageToolResul
   ) as ToolResultItem | undefined;
   if (!row || typeof row.result !== 'object' || row.result == null) return null;
   return row.result as CursorUsageToolResult;
+}
+
+function extractKnowledgeBaseResult(toolResults?: unknown[]): KnowledgeBasePayload | null {
+  if (!Array.isArray(toolResults)) return null;
+  const row = toolResults.find(
+    (item) =>
+      (item as ToolResultItem | undefined)?.tool === 'query_knowledge_base' &&
+      (item as ToolResultItem | undefined)?.result
+  ) as ToolResultItem | undefined;
+  if (!row || typeof row.result !== 'object' || row.result == null) return null;
+  return row.result as KnowledgeBasePayload;
+}
+
+function extractRebuildKnowledgeBaseResult(toolResults?: unknown[]): RebuildKnowledgeBasePayload | null {
+  if (!Array.isArray(toolResults)) return null;
+  const row = toolResults.find(
+    (item) =>
+      (item as ToolResultItem | undefined)?.tool === 'rebuild_knowledge_base_index' &&
+      (item as ToolResultItem | undefined)?.result
+  ) as ToolResultItem | undefined;
+  if (!row || typeof row.result !== 'object' || row.result == null) return null;
+  return row.result as RebuildKnowledgeBasePayload;
 }
 
 function pickString(obj: Record<string, unknown>, keys: string[]): string {
@@ -584,6 +627,58 @@ function renderToolResults(
   onTip: (message: string) => void,
   copyCtx: ReportCopyLlmContext,
 ) {
+  const rebuildKb = extractRebuildKnowledgeBaseResult(toolResults);
+  if (rebuildKb) {
+    return (
+      <div style={{ marginTop: 8, background: '#1a1a2e', borderRadius: 6, border: '1px solid #2a2a3d', padding: 10 }}>
+        <div style={{ fontSize: 12, color: rebuildKb.success ? '#86efac' : '#fca5a5', marginBottom: 8 }}>
+          {rebuildKb.success ? '知识库索引重建完成' : '知识库索引重建失败'}
+        </div>
+        {typeof rebuildKb.docsCount === 'number' ? (
+          <div style={{ fontSize: 12, color: '#cbd5e1' }}>纳入文档数：{rebuildKb.docsCount}</div>
+        ) : null}
+        {rebuildKb.error ? <div style={{ fontSize: 12, color: '#fecaca', marginTop: 6 }}>{rebuildKb.error}</div> : null}
+      </div>
+    );
+  }
+  const kbResult = extractKnowledgeBaseResult(toolResults);
+  if (kbResult) {
+    const citations = Array.isArray(kbResult.citations) ? kbResult.citations : [];
+    const hasAnswer = typeof kbResult.answer === 'string' && kbResult.answer.trim().length > 0;
+    return (
+      <div style={{ marginTop: 8, background: '#1a1a2e', borderRadius: 6, border: '1px solid #2a2a3d', padding: 10 }}>
+        <div style={{ fontSize: 12, color: kbResult.success ? '#86efac' : '#fca5a5', marginBottom: 8 }}>
+          {kbResult.success ? '知识库命中' : '知识库查询失败'}
+          {typeof kbResult.docsCount === 'number' ? <span style={{ color: '#94a3b8', marginLeft: 8 }}>文档数：{kbResult.docsCount}</span> : null}
+          {kbResult.model?.chat ? (
+            <span style={{ color: '#64748b', marginLeft: 8 }}>
+              chat={kbResult.model.chat} / embed={kbResult.model.embed ?? '--'}
+            </span>
+          ) : null}
+        </div>
+        {kbResult.error ? <div style={{ fontSize: 12, color: '#fecaca', marginBottom: 8 }}>{kbResult.error}</div> : null}
+        {hasAnswer ? (
+          <div style={{ whiteSpace: 'pre-wrap', color: '#e2e8f0', fontSize: 13, lineHeight: 1.65, marginBottom: citations.length ? 10 : 0 }}>
+            {kbResult.answer}
+          </div>
+        ) : null}
+        {citations.length > 0 ? (
+          <div>
+            <div style={{ fontSize: 12, color: '#94a3b8', marginBottom: 6 }}>引用来源</div>
+            {citations.slice(0, 4).map((item, idx) => (
+              <div key={`${item.path ?? 'source'}-${idx}`} style={{ marginBottom: 8, padding: 8, borderRadius: 4, background: '#0f172a', border: '1px solid #1f2937' }}>
+                <div style={{ fontSize: 12, color: '#93c5fd', marginBottom: 4 }}>
+                  {item.path || '未知来源'}
+                  {typeof item.score === 'number' ? <span style={{ color: '#64748b', marginLeft: 6 }}>score={item.score.toFixed(3)}</span> : null}
+                </div>
+                <div style={{ whiteSpace: 'pre-wrap', color: '#cbd5e1', fontSize: 12, lineHeight: 1.55 }}>{item.snippet || '--'}</div>
+              </div>
+            ))}
+          </div>
+        ) : null}
+      </div>
+    );
+  }
   const weeklyReport = extractWeeklyReportResult(toolResults);
   const reportHtml = weeklyReport?.reportHtml;
   const reportWiki = weeklyReport?.reportWiki ?? weeklyReport?.report;
@@ -863,7 +958,7 @@ function formatToolProgressLogLine(e: AgentToolProgressEvent): string {
   return e.ok ? `[工具] ${e.tool} 完成` : `[工具] ${e.tool} 失败${e.message ? `: ${e.message}` : ''}`;
 }
 
-export function ChatPanel({ apiBase, addLog, onStartWorkEmbedded, llmRuntimeMode, agentChatLlmBody }: ChatPanelProps) {
+export function ChatPanel({ apiBase, addLog, onStartWorkEmbedded, onOpenKnowledgeBase, llmRuntimeMode, agentChatLlmBody }: ChatPanelProps) {
   const [input, setInput] = useState('');
   const [inputHistory, setInputHistory] = useState<string[]>([]);
   const [loading, setLoading] = useState(false);
@@ -1110,6 +1205,15 @@ export function ChatPanel({ apiBase, addLog, onStartWorkEmbedded, llmRuntimeMode
       });
       addLog('已切换到内嵌终端（我的工作）');
     }
+    const openKbToolResult = data.toolResults?.find(
+      (t): t is { tool: string; result?: { openKnowledgeBaseManager?: boolean } } =>
+        (t as { tool?: string }).tool === 'open_knowledge_base_manager' &&
+        (t as { result?: { openKnowledgeBaseManager?: boolean } }).result?.openKnowledgeBaseManager === true
+    );
+    if (openKbToolResult) {
+      onOpenKnowledgeBase();
+      addLog('已打开私人知识库页签');
+    }
     const mergeSteps = (mergeResult?.result?.steps as string[] | undefined);
     appendToolResultsToLogs(data.toolResults, addLog);
     if (Array.isArray(mergeSteps) && mergeSteps.length > 0) mergeSteps.forEach((step) => addLog(step));
@@ -1133,6 +1237,13 @@ export function ChatPanel({ apiBase, addLog, onStartWorkEmbedded, llmRuntimeMode
     if (mergeTask) {
       setLoading(false);
       await executeMerge(mergeTask.path, mergeTask.label);
+      return;
+    }
+    if (msg === '添加私人知识库') {
+      setLoading(false);
+      onOpenKnowledgeBase();
+      addLog('已打开私人知识库页签');
+      setMessages((prev) => [...prev, { role: 'assistant', content: '已打开私人知识库页签，请选择目录并导入 Markdown 文档。' }]);
       return;
     }
     chatAbortRef.current?.abort();

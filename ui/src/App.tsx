@@ -5,6 +5,7 @@ import { WorkflowPanel } from './WorkflowPanel';
 import { ToolPanel } from './ToolPanel';
 import { LogsPanel } from './LogsPanel';
 import { MyWorkPanel, type WorkTerminal } from './MyWorkPanel';
+import { KnowledgeBasePanel } from './KnowledgeBasePanel';
 import { LlmSettingsModal } from './view/LlmSettingsModal';
 import { loadLlmSettings, saveLlmSettings } from './infrastructure/llm/llmSettingsRepository';
 import { buildAgentChatLlmBody } from './domain/llm/agentLlmRequest';
@@ -46,6 +47,7 @@ const HELP_COMMANDS: HelpItem[] = [
   { section: 'IDE 打开', command: 'ws打开base / cursor打开scm / 用 WebStorm 打开 nova', description: '用指定应用打开项目目录（ws=WebStorm，cursor=Cursor，code=VS Code）；项目代号与 config/projects 一致' },
   { section: 'IDE 关闭', command: '关闭ws的nova / 关闭cursor的base / 关闭 WebStorm 的 scm', description: '关闭该 IDE 中已打开的项目窗口（WebStorm 走菜单关闭项目，Cursor 走 Cmd+W）' },
   { section: '其他', command: '打开 https://… / 执行 xxx 命令', description: '由 AI Agent 理解并调用工具（如 open_browser、run_shell）' },
+  { section: '知识库', command: '添加私人知识库', description: '打开“私人知识库”页签，选择本地目录并将其中 Markdown 文档导入知识库' },
 ];
 
 /** 代号速查：便于查找指令（与 config/projects 一致） */
@@ -176,6 +178,14 @@ export default function App() {
       return [...prev, { key: 'my-work', label: '终端' }];
     });
     setActiveHeaderTab('my-work');
+  };
+
+  const openKnowledgeBaseTab = () => {
+    setHeaderTabs((prev) => {
+      if (prev.some((tab) => tab.key === 'knowledge-base')) return prev;
+      return [...prev, { key: 'knowledge-base', label: '私人知识库' }];
+    });
+    setActiveHeaderTab('knowledge-base');
   };
 
   const closeHeaderTab = async (tabKey: string) => {
@@ -516,13 +526,16 @@ export default function App() {
           )}
         </aside>
         <main style={{ flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0, borderRight: '1px solid #333' }}>
-          {activeHeaderTab === 'my-work' && myWorkSessionId ? (
+          {activeHeaderTab === 'knowledge-base' ? (
+            <KnowledgeBasePanel apiBase={apiBase} addLog={addLog} />
+          ) : activeHeaderTab === 'my-work' && myWorkSessionId ? (
             <MyWorkPanel apiBase={apiBase} sessionId={myWorkSessionId} initialTerminals={myWorkTerminals} />
           ) : (
             <ChatPanel
               apiBase={apiBase}
               addLog={addLog}
               onStartWorkEmbedded={onStartWorkEmbedded}
+              onOpenKnowledgeBase={openKnowledgeBaseTab}
               llmRuntimeMode={llmMode}
               agentChatLlmBody={agentChatLlmBody}
             />

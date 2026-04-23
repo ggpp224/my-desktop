@@ -26,6 +26,7 @@ import { syncCursorCookieFromChrome } from '../tools/cursor-cookie-sync-tool.js'
 import { fetchWeeklyReportPageInfo, openWeeklyReportPage } from '../tools/wiki-tool.js';
 import { writeWeeklyReport } from '../tools/weekly-report-tool.js';
 import { generateWeeklyTeamSummary } from '../tools/weekly-team-summary-tool.js';
+import { queryKnowledgeBase, rebuildKnowledgeBaseIndex } from './knowledge/knowledge-service.js';
 import type { ToolCall } from './ollama-client.js';
 import type { RouteExecuteContext } from './tool-progress.js';
 
@@ -48,6 +49,25 @@ async function withCursorAutoSync<T extends object>(executor: () => Promise<T>):
 export async function routeAndExecute(call: ToolCall, ctx?: RouteExecuteContext): Promise<unknown> {
   const { name, arguments: args } = call;
   switch (name) {
+    case 'open_knowledge_base_manager':
+      return { openKnowledgeBaseManager: true };
+    case 'query_knowledge_base': {
+      const question = ((args?.question as string) ?? '').trim();
+      if (!question) throw new Error('query_knowledge_base 缺少 question');
+      ctx?.onToolProgress?.({
+        phase: 'progress',
+        tool: 'query_knowledge_base',
+        message: '正在检查知识库模型与索引...',
+      });
+      return queryKnowledgeBase(question);
+    }
+    case 'rebuild_knowledge_base_index':
+      ctx?.onToolProgress?.({
+        phase: 'progress',
+        tool: 'rebuild_knowledge_base_index',
+        message: '正在清理并重建知识库索引...',
+      });
+      return rebuildKnowledgeBaseIndex();
     case 'run_shell':
       return shellRun((args?.command as string) ?? '', { requireConfirmation: false });
     case 'open_browser':

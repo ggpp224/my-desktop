@@ -67,4 +67,21 @@ export const config = {
   shell: {
     allowedCwd: process.env.SHELL_CWD || process.cwd(),
   },
+  knowledgeBase: {
+    /** // AI 生成 By Peng.Guo：知识库文档根目录（逗号分隔，默认 doc,docs） */
+    docDirs: (process.env.KB_DOC_DIRS || 'doc,docs,runtime/private-kb')
+      .split(',')
+      .map((item) => item.trim())
+      .filter(Boolean),
+    /** 问答模型（Ollama） */
+    chatModel: process.env.KB_CHAT_MODEL || 'qwen3.6:35b',
+    /** 嵌入模型（Ollama） */
+    embedModel: process.env.KB_EMBED_MODEL || 'bge-m3',
+    /** 检索召回条数 */
+    topK: Math.max(1, Number(process.env.KB_TOP_K) || 5),
+    /** 引用片段最大字符数 */
+    maxSnippetChars: Math.max(80, Number(process.env.KB_MAX_SNIPPET_CHARS) || 280),
+    /** 单次知识库查询超时（毫秒），避免工具阶段长时间无响应 */
+    queryTimeoutMs: Math.max(5000, Number(process.env.KB_QUERY_TIMEOUT_MS) || 45000),
+  },
 };
