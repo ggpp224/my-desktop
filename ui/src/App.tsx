@@ -11,6 +11,7 @@ import { buildAgentChatLlmBody } from './domain/llm/agentLlmRequest';
 import type { GeminiUserSettings, LlmRuntimeMode } from './domain/llm/agentLlmRequest';
 
 const DEFAULT_API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:3000';
+const MY_WORK_SESSION_STORAGE_KEY = 'ai-dev-control-center:my-work-session-id';
 type HeaderTab = { key: string; label: string };
 const HEADER_TABS: HeaderTab[] = [
   { key: 'workspace', label: 'AI Dev Control Center' },
@@ -78,6 +79,7 @@ export default function App() {
   const [leftCollapsed, setLeftCollapsed] = useState(true);
   const [rightWidth, setRightWidth] = useState(400);
   const [resizing, setResizing] = useState(false);
+  const [resumeTick, setResumeTick] = useState(0);
   const helpRef = useRef<HTMLDivElement>(null);
   const settingsRef = useRef<HTMLDivElement>(null);
   const contentRef = useRef<HTMLDivElement>(null);
@@ -131,6 +133,16 @@ export default function App() {
   }, [settingsOpen]);
 
   useEffect(() => {
+    const tryResume = () => setResumeTick((prev) => prev + 1);
+    window.addEventListener('focus', tryResume);
+    document.addEventListener('visibilitychange', tryResume);
+    return () => {
+      window.removeEventListener('focus', tryResume);
+      document.removeEventListener('visibilitychange', tryResume);
+    };
+  }, []);
+
+  useEffect(() => {
     if (apiBase === null && window.electronAPI) {
       window.electronAPI.getApiBase().then(setApiBase);
     }
@@ -158,6 +170,7 @@ export default function App() {
   const onStartWorkEmbedded = (payload: { sessionId: string; terminals: WorkTerminal[] }) => {
     setMyWorkSessionId(payload.sessionId);
     setMyWorkTerminals(payload.terminals);
+    localStorage.setItem(MY_WORK_SESSION_STORAGE_KEY, payload.sessionId);
     setHeaderTabs((prev) => {
       if (prev.some((tab) => tab.key === 'my-work')) return prev;
       return [...prev, { key: 'my-work', label: '终端' }];
@@ -175,10 +188,49 @@ export default function App() {
       }
       setMyWorkSessionId('');
       setMyWorkTerminals([]);
+      localStorage.removeItem(MY_WORK_SESSION_STORAGE_KEY);
     }
     setHeaderTabs((prev) => prev.filter((tab) => tab.key !== tabKey));
     setActiveHeaderTab((prev) => (prev === tabKey ? 'workspace' : prev));
   };
+
+  useEffect(() => {
+    if (!apiBase) return;
+    const storedSessionId = localStorage.getItem(MY_WORK_SESSION_STORAGE_KEY)?.trim();
+    if (!storedSessionId || storedSessionId === myWorkSessionId) return;
+    const restoreMyWorkSession = async () => {
+      try {
+        const response = await fetch(`${apiBase}/workflow/sessions/${encodeURIComponent(storedSessionId)}`);
+        if (!response.ok) {
+          localStorage.removeItem(MY_WORK_SESSION_STORAGE_KEY);
+          return;
+        }
+        const payload = (await response.json()) as { success?: boolean; terminals?: WorkTerminal[] };
+        if (!payload.success || !Array.isArray(payload.terminals)) {
+          localStorage.removeItem(MY_WORK_SESSION_STORAGE_KEY);
+          return;
+        }
+        setMyWorkSessionId(storedSessionId);
+        setMyWorkTerminals(payload.terminals);
+        setHeaderTabs((prev) => {
+          if (prev.some((tab) => tab.key === 'my-work')) return prev;
+          return [...prev, { key: 'my-work', label: '终端' }];
+        });
+      } catch {
+        // 保留本地会话标记，下次聚焦窗口时继续尝试恢复。
+      }
+    };
+    void restoreMyWorkSession();
+  }, [apiBase, myWorkSessionId, resumeTick]);
+
+  useEffect(() => {
+    if (!myWorkSessionId) return;
+    localStorage.setItem(MY_WORK_SESSION_STORAGE_KEY, myWorkSessionId);
+    setHeaderTabs((prev) => {
+      if (prev.some((tab) => tab.key === 'my-work')) return prev;
+      return [...prev, { key: 'my-work', label: '终端' }];
+    });
+  }, [myWorkSessionId]);
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100vh' }}>
