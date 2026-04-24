@@ -57,13 +57,15 @@ async function ensureKnowledgeModelsInstalled(): Promise<void> {
   }
 }
 
-export async function queryKnowledgeBase(question: string): Promise<KnowledgeAnswerPayload> {
+export async function queryKnowledgeBase(question: string, chatModel?: string): Promise<KnowledgeAnswerPayload> {
   try {
+    // AI 生成 By Peng.Guo：优先使用传入的模型，否则使用配置的默认模型
+    const modelToUse = chatModel?.trim() || config.knowledgeBase.chatModel;
     await ensureKnowledgeModelsInstalled();
     const data = await withTimeout(
-      queryKnowledgeIndex(question),
+      queryKnowledgeIndex(question, modelToUse),
       config.knowledgeBase.queryTimeoutMs,
-      `知识库查询超时（>${config.knowledgeBase.queryTimeoutMs}ms），请稍后重试或调大 KB_QUERY_TIMEOUT_MS`
+      `知识库查询超时（>${config.knowledgeBase.queryTimeoutMs}ms）。建议：1) 调大 KB_QUERY_TIMEOUT_MS（如 120000）；2) 使用更快的模型（如 qwen2.5:7b）；3) 减少 KB_TOP_K（如 3）`
     );
     return {
       success: true,
@@ -71,7 +73,7 @@ export async function queryKnowledgeBase(question: string): Promise<KnowledgeAns
       citations: data.citations,
       docsCount: data.docsCount,
       model: {
-        chat: config.knowledgeBase.chatModel,
+        chat: modelToUse,
         embed: config.knowledgeBase.embedModel,
       },
     };
@@ -80,16 +82,20 @@ export async function queryKnowledgeBase(question: string): Promise<KnowledgeAns
       success: false,
       error: err instanceof Error ? err.message : String(err),
       model: {
-        chat: config.knowledgeBase.chatModel,
+        chat: chatModel?.trim() || config.knowledgeBase.chatModel,
         embed: config.knowledgeBase.embedModel,
       },
     };
   }
 }
 
-export async function rebuildKnowledgeBaseIndex(): Promise<{ success: boolean; docsCount?: number; error?: string }> {
+// AI 生成 By Peng.Guo
+export type RebuildProgressCallback = (message: string) => void;
+
+export async function rebuildKnowledgeBaseIndex(onProgress?: RebuildProgressCallback): Promise<{ success: boolean; docsCount?: number; error?: string }> {
   try {
-    const result = await rebuildKnowledgeIndex();
+    onProgress?.('正在扫描知识库文档目录...');
+    const result = await rebuildKnowledgeIndex(onProgress);
     return { success: true, docsCount: result.docsCount };
   } catch (err) {
     return { success: false, error: err instanceof Error ? err.message : String(err) };

@@ -11,6 +11,7 @@ import type { RouteExecuteContext, ToolProgressCallback } from './tool-progress.
 import { routeAndExecute } from './tool-router.js';
 import { toolsSchema } from './tools-schema.js';
 import { getAllProjects } from '../config/projects.js';
+import { getOllamaActiveModel } from './ollama-runtime.js';
 
 /** 各阶段耗时（毫秒）与 token 统计，用于在 Logs 中展示 */
 export type AgentTiming = {
@@ -180,7 +181,11 @@ export async function runAgent(userMessage: string, options?: RunAgentOptions): 
     }
 
     const toolResults: unknown[] = [];
-    const routeCtx: RouteExecuteContext = { onToolProgress: options?.onToolProgress };
+    const routeCtx: RouteExecuteContext = {
+      onToolProgress: options?.onToolProgress,
+      // AI 生成 By Peng.Guo：传递当前模型给工具路由（Gemini 用传入的，Ollama 从 runtime 获取）
+      currentModel: useGemini ? llm.model : getOllamaActiveModel(),
+    };
     for (const call of calls) {
       throwIfAborted(signal);
       options?.onToolProgress?.({ phase: 'start', tool: call.name });

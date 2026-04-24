@@ -59,7 +59,8 @@ export async function routeAndExecute(call: ToolCall, ctx?: RouteExecuteContext)
         tool: 'query_knowledge_base',
         message: '正在检查知识库模型与索引...',
       });
-      return queryKnowledgeBase(question);
+      // AI 生成 By Peng.Guo：传递当前模型给知识库查询
+      return queryKnowledgeBase(question, ctx?.currentModel);
     }
     case 'rebuild_knowledge_base_index':
       ctx?.onToolProgress?.({
@@ -67,7 +68,14 @@ export async function routeAndExecute(call: ToolCall, ctx?: RouteExecuteContext)
         tool: 'rebuild_knowledge_base_index',
         message: '正在清理并重建知识库索引...',
       });
-      return rebuildKnowledgeBaseIndex();
+      // AI 生成 By Peng.Guo：传递进度回调
+      return rebuildKnowledgeBaseIndex((message) => {
+        ctx?.onToolProgress?.({
+          phase: 'progress',
+          tool: 'rebuild_knowledge_base_index',
+          message,
+        });
+      });
     case 'list_knowledge_docs':
       ctx?.onToolProgress?.({
         phase: 'progress',

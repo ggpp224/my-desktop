@@ -12,4 +12,6 @@ export type ToolProgressCallback = (e: ToolProgressEvent) => void;
 
 export type RouteExecuteContext = {
   onToolProgress?: ToolProgressCallback;
+  /** AI 生成 By Peng.Guo：当前 Agent 使用的模型名称，用于知识库查询 */
+  currentModel?: string;
 };

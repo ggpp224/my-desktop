@@ -10,3 +10,4 @@ node_modules
 /ui/dist/
 /runtime/knowledge-index/
 /runtime/private-kb/
+storage/
