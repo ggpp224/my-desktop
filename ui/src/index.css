@@ -12,3 +12,84 @@ body {
 #root {
   min-height: 100vh;
 }
+
+/* AI 生成 By Peng.Guo */
+.gitlab-markdown-body {
+  background: #fff;
+  color: #24292f;
+  border: 1px solid #d8dee4;
+  border-radius: 8px;
+  padding: 12px;
+  font-size: 13px;
+  line-height: 1.7;
+}
+
+.gitlab-markdown-body.markdown-body h1,
+.gitlab-markdown-body.markdown-body h2,
+.gitlab-markdown-body.markdown-body h3,
+.gitlab-markdown-body.markdown-body h4,
+.gitlab-markdown-body.markdown-body h5,
+.gitlab-markdown-body.markdown-body h6 {
+  color: #24292f;
+  border-bottom-color: #d0d7de;
+}
+
+.gitlab-markdown-body.markdown-body p,
+.gitlab-markdown-body.markdown-body li,
+.gitlab-markdown-body.markdown-body blockquote {
+  color: #24292f;
+}
+
+.gitlab-markdown-body.markdown-body a {
+  color: #0969da;
+}
+
+.gitlab-markdown-body.markdown-body table th,
+.gitlab-markdown-body.markdown-body table td {
+  border-color: #d0d7de;
+}
+
+.gitlab-markdown-body.markdown-body table tr {
+  background: transparent;
+}
+
+.gitlab-md-code-block {
+  border: 1px solid #d8dee4;
+  border-radius: 6px;
+  margin: 8px 0;
+  overflow: hidden;
+  background: #f6f8fa;
+}
+
+.gitlab-md-code-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 6px 10px;
+  background: #f6f8fa;
+  color: #6b7280;
+  font-size: 12px;
+  border-bottom: 1px solid #d8dee4;
+}
+
+.gitlab-md-code-toolbar button {
+  border: 1px solid #d8dee4;
+  background: #fff;
+  color: #24292f;
+  border-radius: 4px;
+  padding: 2px 8px;
+  cursor: pointer;
+  font-size: 12px;
+}
+
+.gitlab-md-code-block pre {
+  margin: 0;
+  padding: 10px 12px;
+  overflow-x: auto;
+  background: #f6f8fa;
+}
+
+.gitlab-md-code-block pre code.hljs {
+  padding: 0;
+  background: transparent;
+}

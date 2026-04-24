@@ -11,3 +11,4 @@ node_modules
 /runtime/knowledge-index/
 /runtime/private-kb/
 storage/
+/ui/.npm-cache/

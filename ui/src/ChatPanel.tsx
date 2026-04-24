@@ -4,6 +4,7 @@ import { appendToolResultsToLogs } from './log-tools';
 import { withJenkinsMarkdownLink } from './domain/deploy/jenkinsDeployDisplay';
 import type { DeployPollingTarget } from './domain/deploy/models';
 import { LinkifiedText } from './view/LinkifiedText';
+import { isLikelyMarkdown, MarkdownRenderer } from './view/MarkdownRenderer';
 import { startDeployPolling } from './viewmodel/deploy/useDeployPolling';
 import type { WorkTerminal } from './MyWorkPanel';
 import {
@@ -734,8 +735,12 @@ function renderToolResults(
         </div>
         {kbResult.error ? <div style={{ fontSize: 12, color: '#fecaca', marginBottom: 8 }}>{kbResult.error}</div> : null}
         {hasAnswer ? (
-          <div style={{ whiteSpace: 'pre-wrap', color: '#e2e8f0', fontSize: 13, lineHeight: 1.65, marginBottom: citations.length ? 10 : 0 }}>
-            {kbResult.answer}
+          <div style={{ marginBottom: citations.length ? 10 : 0 }}>
+            {isLikelyMarkdown(kbResult.answer ?? '') ? (
+              <MarkdownRenderer markdown={kbResult.answer ?? ''} />
+            ) : (
+              <div style={{ whiteSpace: 'pre-wrap', color: '#e2e8f0', fontSize: 13, lineHeight: 1.65 }}>{kbResult.answer}</div>
+            )}
           </div>
         ) : null}
         {citations.length > 0 ? (
@@ -747,7 +752,11 @@ function renderToolResults(
                   {item.path || '未知来源'}
                   {typeof item.score === 'number' ? <span style={{ color: '#64748b', marginLeft: 6 }}>score={item.score.toFixed(3)}</span> : null}
                 </div>
-                <div style={{ whiteSpace: 'pre-wrap', color: '#cbd5e1', fontSize: 12, lineHeight: 1.55 }}>{item.snippet || '--'}</div>
+                {item.snippet ? (
+                  <MarkdownRenderer markdown={item.snippet} />
+                ) : (
+                  <div style={{ color: '#cbd5e1', fontSize: 12, lineHeight: 1.55 }}>--</div>
+                )}
               </div>
             ))}
           </div>
