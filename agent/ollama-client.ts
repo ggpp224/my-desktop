@@ -222,22 +222,70 @@ export async function healthCheck(): Promise<boolean> {
   }
 }
 
+function normalizeToolCallCandidate(input: unknown): ToolCall | null {
+  if (!input || typeof input !== 'object' || Array.isArray(input)) return null;
+  const row = input as Record<string, unknown>;
+  const name = typeof row.name === 'string' ? row.name.trim() : '';
+  if (!name) return null;
+  let args = row.arguments;
+  if (typeof args === 'string') {
+    try {
+      args = JSON.parse(args) as Record<string, unknown>;
+    } catch {
+      args = {};
+    }
+  }
+  if (!args || typeof args !== 'object' || Array.isArray(args)) args = {};
+  return { name, arguments: args as Record<string, unknown> };
+}
+
+function parseToolCallsFromContent(content: string | undefined): ToolCall[] {
+  const text = (content ?? '').trim();
+  if (!text) return [];
+  const candidates: string[] = [text];
+  const codeBlockMatches = text.match(/```(?:json)?\s*([\s\S]*?)```/gi) ?? [];
+  for (const block of codeBlockMatches) {
+    const inner = block.replace(/^```(?:json)?\s*/i, '').replace(/```$/i, '').trim();
+    if (inner) candidates.push(inner);
+  }
+  for (const raw of candidates) {
+    try {
+      const parsed = JSON.parse(raw) as unknown;
+      if (Array.isArray(parsed)) {
+        const calls = parsed.map((item) => normalizeToolCallCandidate(item)).filter((item): item is ToolCall => !!item);
+        if (calls.length > 0) return calls;
+      } else {
+        const single = normalizeToolCallCandidate(parsed);
+        if (single) return [single];
+      }
+    } catch {
+      // ignore invalid JSON
+    }
+  }
+  return [];
+}
+
 export function parseToolCalls(message: ChatMessage): ToolCall[] {
   const out: ToolCall[] = [];
   const raw = message.tool_calls;
-  if (!Array.isArray(raw)) return out;
-  for (const c of raw) {
-    const fn = c.function ?? (c as { function?: { name: string; arguments?: string | Record<string, unknown> } }).function;
-    if (!fn?.name) continue;
-    let args = fn.arguments;
-    if (typeof args === 'string') {
-      try {
-        args = JSON.parse(args) as Record<string, unknown>;
-      } catch {
-        args = {};
+  if (Array.isArray(raw)) {
+    for (const c of raw) {
+      const fn = c.function ?? (c as { function?: { name: string; arguments?: string | Record<string, unknown> } }).function;
+      if (!fn?.name) continue;
+      let args = fn.arguments;
+      if (typeof args === 'string') {
+        try {
+          args = JSON.parse(args) as Record<string, unknown>;
+        } catch {
+          args = {};
+        }
       }
+      out.push({ name: fn.name, arguments: (args as Record<string, unknown>) ?? {} });
     }
-    out.push({ name: fn.name, arguments: (args as Record<string, unknown>) ?? {} });
+  }
+  // AI 生成 By Peng.Guo：兼容部分模型把函数调用以 JSON 文本写在 content 中
+  if (out.length === 0) {
+    return parseToolCallsFromContent(message.content);
   }
   return out;
 }

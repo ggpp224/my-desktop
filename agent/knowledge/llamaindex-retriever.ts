@@ -31,6 +31,12 @@ export type KnowledgeQueryResult = {
   docsCount: number;
 };
 
+// AI 生成 By Peng.Guo
+export type KnowledgeQueryStreamCallbacks = {
+  onProgress?: (message: string) => void;
+  onAnswerDelta?: (delta: string) => void;
+};
+
 let cachedState: CachedIndexState | null = null;
 let rebuildingPromise: Promise<CachedIndexState> | null = null;
 const KB_PERSIST_DIR = path.resolve(process.cwd(), 'runtime', 'knowledge-index');
@@ -56,10 +62,24 @@ function normalizeSnippet(raw: unknown, maxChars: number): string {
   return `${text.slice(0, maxChars)}...`;
 }
 
+function mergeStreamFragment(previous: string, fragment: string): { next: string; delta: string } {
+  if (!fragment) return { next: previous, delta: '' };
+  if (previous && fragment.startsWith(previous)) {
+    return { next: fragment, delta: fragment.slice(previous.length) };
+  }
+  return { next: previous + fragment, delta: fragment };
+}
+
 function safeRelPath(absPath: string): string {
   const rel = path.relative(process.cwd(), absPath).split(path.sep).join('/');
   return rel || absPath;
 }
+
+// AI 生成 By Peng.Guo：自定义知识库查询的 System Prompt
+const KNOWLEDGE_SYSTEM_PROMPT = `你是一位技术架构师。请根据以下参考资料回答问题：
+1. 严禁直接全文搬运参考资料中的 Markdown 内容。
+2. 先用简练的中文总结核心逻辑，再给出关键的代码片段。
+3. 如果参考资料中没有直接答案，请根据已有信息推理并告知风险。`;
 
 // AI 生成 By Peng.Guo
 export type RebuildProgressCallback = (message: string) => void;
@@ -107,6 +127,7 @@ async function createIndexState(onProgress?: RebuildProgressCallback): Promise<C
   const llm = new Ollama({
     model: config.knowledgeBase.chatModel,
     config: { host: config.ollama.baseUrl },
+    options: { num_ctx: config.knowledgeBase.numCtx },
   });
   const embedModel = new OllamaEmbedding({
     model: config.knowledgeBase.embedModel,
@@ -233,7 +254,19 @@ async function ensureIndexState(): Promise<CachedIndexState> {
     const storageContext = await storageContextFromDefaults({ persistDir: KB_PERSIST_DIR });
     const documents = docs.map((doc) => new Document({ id_: doc.id, text: doc.text, metadata: { filePath: safeRelPath(doc.filePath) } }));
     const index = await VectorStoreIndex.fromDocuments(documents, { storageContext });
-    await persistStorageContext(storageContext, KB_PERSIST_DIR);
+
+    // AI 生成 By Peng.Guo：手动持久化各个 store，传入完整的文件路径
+    const docStorePath = path.join(KB_PERSIST_DIR, 'doc_store.json');
+    const indexStorePath = path.join(KB_PERSIST_DIR, 'index_store.json');
+    const vectorStorePath = path.join(KB_PERSIST_DIR, 'vector_store.json');
+
+    await (storageContext as any).docStore?.persist?.(docStorePath);
+    await (storageContext as any).indexStore?.persist?.(indexStorePath);
+    const vectorStores = Object.values((storageContext as any).vectorStores ?? {});
+    for (const store of vectorStores) {
+      await (store as any).persist?.(vectorStorePath);
+    }
+
     const state = { signature: nextSignature, index, docsCount: docs.length };
     await writePersistMeta({ signature: state.signature, docsCount: state.docsCount, updatedAt: new Date().toISOString() });
     cachedState = state;
@@ -254,7 +287,11 @@ export async function rebuildKnowledgeIndex(onProgress?: RebuildProgressCallback
   return { docsCount: state.docsCount };
 }
 
-export async function queryKnowledgeIndex(question: string, chatModel?: string): Promise<KnowledgeQueryResult> {
+export async function queryKnowledgeIndex(
+  question: string,
+  chatModel?: string,
+  callbacks?: KnowledgeQueryStreamCallbacks
+): Promise<KnowledgeQueryResult> {
   const q = question.trim();
   if (!q) throw new Error('知识库查询问题不能为空');
   const state = await ensureIndexState();
@@ -264,17 +301,57 @@ export async function queryKnowledgeIndex(question: string, chatModel?: string):
   const llm = new Ollama({
     model: modelToUse,
     config: { host: config.ollama.baseUrl },
+    options: { num_ctx: config.knowledgeBase.numCtx },
   });
   Settings.llm = llm;
 
   const retriever = state.index.asRetriever({ similarityTopK: config.knowledgeBase.topK });
   const queryEngine = state.index.asQueryEngine({ retriever });
-  const response = (await queryEngine.query({ query: q })) as {
+  callbacks?.onProgress?.('正在检索知识库并生成回答...');
+  const streamOrResponse = (await queryEngine.query({ query: q, stream: true })) as {
     response?: string;
     toString?: () => string;
     sourceNodes?: Array<{ score?: number; metadata?: Record<string, unknown>; node?: { text?: string; metadata?: Record<string, unknown> } }>;
+    [Symbol.asyncIterator]?: () => AsyncIterator<unknown>;
   };
-  const sourceNodes = Array.isArray(response.sourceNodes) ? response.sourceNodes : [];
+  let accumulatedAnswer = '';
+  let finalResponse:
+    | {
+        response?: string;
+        toString?: () => string;
+        sourceNodes?: Array<{ score?: number; metadata?: Record<string, unknown>; node?: { text?: string; metadata?: Record<string, unknown> } }>;
+      }
+    | undefined;
+  let streamSourceNodes:
+    | Array<{ score?: number; metadata?: Record<string, unknown>; node?: { text?: string; metadata?: Record<string, unknown> } }>
+    | undefined;
+  if (streamOrResponse && typeof streamOrResponse[Symbol.asyncIterator] === 'function') {
+    for await (const chunk of streamOrResponse as AsyncIterable<unknown>) {
+      const row = chunk as {
+        response?: string;
+        toString?: () => string;
+        sourceNodes?: Array<{ score?: number; metadata?: Record<string, unknown>; node?: { text?: string; metadata?: Record<string, unknown> } }>;
+      };
+      if (Array.isArray(row.sourceNodes) && row.sourceNodes.length > 0) {
+        streamSourceNodes = row.sourceNodes;
+      }
+      const piece =
+        (typeof row.response === 'string' && row.response) ||
+        (typeof row.toString === 'function' ? row.toString() : '');
+      const { next, delta } = mergeStreamFragment(accumulatedAnswer, piece);
+      accumulatedAnswer = next;
+      if (delta) callbacks?.onAnswerDelta?.(delta);
+      finalResponse = row;
+    }
+  } else {
+    finalResponse = streamOrResponse;
+  }
+  const response = finalResponse ?? streamOrResponse;
+  const sourceNodes = Array.isArray(streamSourceNodes)
+    ? streamSourceNodes
+    : Array.isArray(response.sourceNodes)
+      ? response.sourceNodes
+      : [];
   const citations: KnowledgeCitation[] = sourceNodes
     .map((item) => {
       const metadata = item.node?.metadata ?? item.metadata ?? {};
@@ -284,6 +361,10 @@ export async function queryKnowledgeIndex(question: string, chatModel?: string):
       return { path: sourcePath, score: item.score, snippet };
     })
     .filter((item) => !!item.snippet);
-  const answer = (typeof response.response === 'string' && response.response.trim()) || response.toString?.().trim() || '未生成答案';
+  const answer =
+    accumulatedAnswer.trim() ||
+    (typeof response.response === 'string' && response.response.trim()) ||
+    response.toString?.().trim() ||
+    '未生成答案';
   return { answer, citations, docsCount: state.docsCount };
 }

@@ -1,14 +1,14 @@
 {
   "items": [
-    "部署cc-web",
-    "开始工作",
-    "某组件在文档里怎么接入？",
     "AdvanceGrid的主从合并如何使用",
     "已添加到知识库的文档",
     "AdvanceGrid的主从合并如何使用",
     "重建知识库索引",
     "已添加到知识库的文档",
     "AdvanceGrid的主从合并如何使用",
-    "以后回答我问题时，先口语化总结逻辑，代码只给关键部分，不要直接把整个文档贴给我。"
+    "以后回答我问题时，先口语化总结逻辑，代码只给关键部分，不要直接把整个文档贴给我。",
+    "AdvanceGrid的主从合并如何使用",
+    "让 Ollama 像 ChatGPT 一样“流式”吐字\n最有效的反馈其实是流式传输（Streaming）。如果不用流式，你得等 Ollama 把几百个字全部写完才能看到结果；开启后，你能看到它一个字一个字地蹦出来。\n\nTypeScript\nconst queryEngine = index.asQueryEngine();\nconst stream = await queryEngine.query({\n  query: \"项目如何配置？\",\n  stream: true, // 开启流式\n});\n\nconsole.log(\"回答内容：\");\nfor await (const chunk of stream) {\n  process.stdout.write(chunk.response); // 实时打印每个字\n} 将检索过程实时反馈",
+    "AdvanceGrid的主从合并如何使用"
   ]
 }

@@ -175,6 +175,7 @@ const DEPLOY_OPTIONS = [
 
 /** 指令输入历史最多条数，支持 ↑↓ 切换 */
 const INPUT_HISTORY_MAX = 10;
+const STREAM_FLUSH_INTERVAL_MS = 80;
 
 type ProjectInfo = {
   codes: string[];
@@ -1058,6 +1059,12 @@ export function ChatPanel({ apiBase, addLog, onStartWorkEmbedded, onOpenKnowledg
   /** 工具内流式 Thinking/正文各自有 maxHeight+overflow，与外层聊天滚动分离，需单独跟到底 */
   const toolStreamThinkingPreRef = useRef<HTMLPreElement>(null);
   const toolStreamContentPreRef = useRef<HTMLPreElement>(null);
+  const shouldStickToBottomRef = useRef(true);
+  const shouldStickToolThinkingBottomRef = useRef(true);
+  const shouldStickToolContentBottomRef = useRef(true);
+  const streamFlushTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const toolStreamFlushTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const toolStreamVisibleRef = useRef(false);
   const historyIndexRef = useRef(-1);
   const savedInputRef = useRef('');
 
@@ -1083,6 +1090,8 @@ export function ChatPanel({ apiBase, addLog, onStartWorkEmbedded, onOpenKnowledg
   useEffect(
     () => () => {
       chatAbortRef.current?.abort();
+      if (streamFlushTimerRef.current) clearTimeout(streamFlushTimerRef.current);
+      if (toolStreamFlushTimerRef.current) clearTimeout(toolStreamFlushTimerRef.current);
     },
     []
   );
@@ -1130,18 +1139,32 @@ export function ChatPanel({ apiBase, addLog, onStartWorkEmbedded, onOpenKnowledg
   useEffect(() => {
     const el = feedbackListRef.current;
     if (!el) return;
+    const onScroll = () => {
+      const distanceToBottom = el.scrollHeight - (el.scrollTop + el.clientHeight);
+      shouldStickToBottomRef.current = distanceToBottom < 80;
+    };
+    onScroll();
+    el.addEventListener('scroll', onScroll);
+    return () => el.removeEventListener('scroll', onScroll);
+  }, []);
+
+  useEffect(() => {
+    const el = feedbackListRef.current;
+    if (!el) return;
+    if (!shouldStickToBottomRef.current) return;
     el.scrollTop = el.scrollHeight;
-  }, [messages, loading, streamLive, toolStreamLive, toolProgressLines]);
+  }, [messages.length]);
 
   /* AI 生成 By Peng.Guo：内层 pre 在布局提交后滚到底，避免流式增量时滚动条停在顶部 */
   useLayoutEffect(() => {
     if (!toolStreamLive) return;
-    const scrollElBottom = (node: HTMLElement | null) => {
+    const scrollElBottom = (node: HTMLElement | null, shouldStick: boolean) => {
       if (!node) return;
+      if (!shouldStick) return;
       node.scrollTop = node.scrollHeight;
     };
-    scrollElBottom(toolStreamThinkingPreRef.current);
-    scrollElBottom(toolStreamContentPreRef.current);
+    scrollElBottom(toolStreamThinkingPreRef.current, shouldStickToolThinkingBottomRef.current);
+    scrollElBottom(toolStreamContentPreRef.current, shouldStickToolContentBottomRef.current);
   }, [toolStreamLive?.thinking, toolStreamLive?.content]);
 
   useEffect(() => {
@@ -1327,29 +1350,28 @@ export function ChatPanel({ apiBase, addLog, onStartWorkEmbedded, onOpenKnowledg
     streamAccumRef.current = { thinking: '', content: '' };
     setStreamLive({ thinking: '', content: '' });
     setToolStreamLive(null);
+    toolStreamVisibleRef.current = false;
     toolStreamAccumRef.current = { thinking: '', content: '' };
     setToolProgressLines([]);
-    let streamFlushRaf: number | null = null;
-    let toolStreamFlushRaf: number | null = null;
     const flushStreamLive = () => {
-      if (streamFlushRaf != null) cancelAnimationFrame(streamFlushRaf);
-      streamFlushRaf = requestAnimationFrame(() => {
-        streamFlushRaf = null;
+      if (streamFlushTimerRef.current) return;
+      streamFlushTimerRef.current = setTimeout(() => {
+        streamFlushTimerRef.current = null;
         setStreamLive({
           thinking: streamAccumRef.current.thinking,
           content: streamAccumRef.current.content,
         });
-      });
+      }, STREAM_FLUSH_INTERVAL_MS);
     };
     const flushToolStreamLive = () => {
-      if (toolStreamFlushRaf != null) cancelAnimationFrame(toolStreamFlushRaf);
-      toolStreamFlushRaf = requestAnimationFrame(() => {
-        toolStreamFlushRaf = null;
+      if (toolStreamFlushTimerRef.current) return;
+      toolStreamFlushTimerRef.current = setTimeout(() => {
+        toolStreamFlushTimerRef.current = null;
         setToolStreamLive({
           thinking: toolStreamAccumRef.current.thinking,
           content: toolStreamAccumRef.current.content,
         });
-      });
+      }, STREAM_FLUSH_INTERVAL_MS);
     };
     try {
       await postAgentChatStream(
@@ -1364,13 +1386,21 @@ export function ChatPanel({ apiBase, addLog, onStartWorkEmbedded, onOpenKnowledg
         },
         onToolProgress: (e) => {
           if (e.phase === 'stream_delta') {
+            if (!toolStreamVisibleRef.current) {
+              toolStreamVisibleRef.current = true;
+              setToolStreamLive({ thinking: '', content: '' });
+            }
             toolStreamAccumRef.current.thinking += e.thinkingDelta ?? '';
             toolStreamAccumRef.current.content += e.contentDelta ?? '';
             flushToolStreamLive();
             return;
           }
-          if (e.phase === 'start' && (e.tool === 'write_weekly_report' || e.tool === 'generate_weekly_team_summary')) {
+          if (
+            e.phase === 'start' &&
+            (e.tool === 'write_weekly_report' || e.tool === 'generate_weekly_team_summary' || e.tool === 'query_knowledge_base')
+          ) {
             toolStreamAccumRef.current = { thinking: '', content: '' };
+            toolStreamVisibleRef.current = true;
             setToolStreamLive({ thinking: '', content: '' });
           }
           const line = formatToolProgressLogLine(e);
@@ -1378,23 +1408,25 @@ export function ChatPanel({ apiBase, addLog, onStartWorkEmbedded, onOpenKnowledg
           setToolProgressLines((prev) => [...prev.slice(-40), line]);
         },
         onResult: (raw) => {
-          if (streamFlushRaf != null) {
-            cancelAnimationFrame(streamFlushRaf);
-            streamFlushRaf = null;
-          }
-          if (toolStreamFlushRaf != null) {
-            cancelAnimationFrame(toolStreamFlushRaf);
-            toolStreamFlushRaf = null;
-          }
+          if (streamFlushTimerRef.current) clearTimeout(streamFlushTimerRef.current);
+          if (toolStreamFlushTimerRef.current) clearTimeout(toolStreamFlushTimerRef.current);
+          streamFlushTimerRef.current = null;
+          toolStreamFlushTimerRef.current = null;
           setStreamLive(null);
           setToolStreamLive(null);
+          toolStreamVisibleRef.current = false;
           setToolProgressLines([]);
           const data = raw as AgentResult;
           handleAgentResponse(data, true);
         },
         onError: (errMsg) => {
+          if (streamFlushTimerRef.current) clearTimeout(streamFlushTimerRef.current);
+          if (toolStreamFlushTimerRef.current) clearTimeout(toolStreamFlushTimerRef.current);
+          streamFlushTimerRef.current = null;
+          toolStreamFlushTimerRef.current = null;
           setStreamLive(null);
           setToolStreamLive(null);
+          toolStreamVisibleRef.current = false;
           setToolProgressLines([]);
           setLoading(false);
           if (errMsg.trim()) {
@@ -1406,8 +1438,13 @@ export function ChatPanel({ apiBase, addLog, onStartWorkEmbedded, onOpenKnowledg
         agentChatLlmBody ? { llm: agentChatLlmBody } : undefined
       );
     } catch (e) {
+      if (streamFlushTimerRef.current) clearTimeout(streamFlushTimerRef.current);
+      if (toolStreamFlushTimerRef.current) clearTimeout(toolStreamFlushTimerRef.current);
+      streamFlushTimerRef.current = null;
+      toolStreamFlushTimerRef.current = null;
       setStreamLive(null);
       setToolStreamLive(null);
+      toolStreamVisibleRef.current = false;
       setToolProgressLines([]);
       if (e instanceof Error && e.name === 'AbortError') {
         addLog('请求已取消（本地中断）');
@@ -1487,7 +1524,18 @@ export function ChatPanel({ apiBase, addLog, onStartWorkEmbedded, onOpenKnowledg
           ⊗
         </button>
       </div>
-      <div ref={feedbackListRef} style={{ flex: 1, overflow: 'auto', marginBottom: 12, background: '#0d0d1a', borderRadius: 8, padding: 12 }}>
+      <div
+        ref={feedbackListRef}
+        style={{
+          flex: 1,
+          overflow: 'auto',
+          marginBottom: 12,
+          background: '#0d0d1a',
+          borderRadius: 8,
+          padding: 12,
+          overflowAnchor: 'none',
+        }}
+      >
         {messages.length === 0 && (
           <p style={{ color: '#888' }}>
             [Chat] 输入指令或点击上方快捷按钮，例如：开始工作、终端打开 react18、升级集测react18的nova版本、启动 react18、打开 Jenkins、部署order-service
@@ -1576,12 +1624,17 @@ export function ChatPanel({ apiBase, addLog, onStartWorkEmbedded, onOpenKnowledg
               fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace',
             }}
           >
-            <div style={{ fontSize: 12, color: '#a78bfa', marginBottom: 8, fontWeight: 600 }}>工具内输出（周报 / 组内总结）</div>
+            <div style={{ fontSize: 12, color: '#a78bfa', marginBottom: 8, fontWeight: 600 }}>工具内流式输出（知识库 / 周报 / 组内总结）</div>
             {toolStreamLive.thinking ? (
               <>
                 <div style={{ fontSize: 11, color: '#c4b5fd', marginBottom: 4 }}>Thinking</div>
                 <pre
                   ref={toolStreamThinkingPreRef}
+                  onScroll={(e) => {
+                    const el = e.currentTarget;
+                    const distanceToBottom = el.scrollHeight - (el.scrollTop + el.clientHeight);
+                    shouldStickToolThinkingBottomRef.current = distanceToBottom < 24;
+                  }}
                   style={{
                     margin: '0 0 10px',
                     whiteSpace: 'pre-wrap',
@@ -1602,6 +1655,11 @@ export function ChatPanel({ apiBase, addLog, onStartWorkEmbedded, onOpenKnowledg
                 <div style={{ fontSize: 11, color: '#94a3b8', marginBottom: 4 }}>正文</div>
                 <pre
                   ref={toolStreamContentPreRef}
+                  onScroll={(e) => {
+                    const el = e.currentTarget;
+                    const distanceToBottom = el.scrollHeight - (el.scrollTop + el.clientHeight);
+                    shouldStickToolContentBottomRef.current = distanceToBottom < 24;
+                  }}
                   style={{
                     margin: 0,
                     whiteSpace: 'pre-wrap',
@@ -1644,14 +1702,10 @@ export function ChatPanel({ apiBase, addLog, onStartWorkEmbedded, onOpenKnowledg
         {loading && (
           <p style={{ color: '#888' }}>
             {toolStreamLive && (toolStreamLive.thinking || toolStreamLive.content)
-              ? '周报或组内总结由本地模型流式生成中（见上方「工具内输出」）…'
-              : toolProgressLines.length > 0
-                ? toolProgressLines[toolProgressLines.length - 1]
-                : streamLive && (streamLive.thinking || streamLive.content)
-                  ? '工具执行或收尾中…'
-                  : streamLive
-                    ? '连接模型…'
-                    : '处理中…'}
+              ? '流式输出中（见上方「工具内流式输出」）…'
+              : streamLive
+                ? '连接模型并处理中…'
+                : '处理中…'}
           </p>
         )}
         {tipMessage && (

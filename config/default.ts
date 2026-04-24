@@ -77,6 +77,8 @@ export const config = {
     chatModel: process.env.KB_CHAT_MODEL || 'qwen3.6:35b',
     /** 嵌入模型（Ollama） */
     embedModel: process.env.KB_EMBED_MODEL || 'bge-m3',
+    /** 上下文窗口大小（num_ctx），默认 16384 */
+    numCtx: Math.max(2048, Number(process.env.KB_NUM_CTX) || 16384),
     /** 检索召回条数 */
     topK: Math.max(1, Number(process.env.KB_TOP_K) || 5),
     /** 引用片段最大字符数 */

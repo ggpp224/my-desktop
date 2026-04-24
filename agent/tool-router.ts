@@ -54,13 +54,21 @@ export async function routeAndExecute(call: ToolCall, ctx?: RouteExecuteContext)
     case 'query_knowledge_base': {
       const question = ((args?.question as string) ?? '').trim();
       if (!question) throw new Error('query_knowledge_base 缺少 question');
-      ctx?.onToolProgress?.({
-        phase: 'progress',
-        tool: 'query_knowledge_base',
-        message: '正在检查知识库模型与索引...',
-      });
       // AI 生成 By Peng.Guo：传递当前模型给知识库查询
-      return queryKnowledgeBase(question, ctx?.currentModel);
+      return queryKnowledgeBase(question, ctx?.currentModel, {
+        onProgress: (message) =>
+          ctx?.onToolProgress?.({
+            phase: 'progress',
+            tool: 'query_knowledge_base',
+            message,
+          }),
+        onAnswerDelta: (contentDelta) =>
+          ctx?.onToolProgress?.({
+            phase: 'stream_delta',
+            tool: 'query_knowledge_base',
+            contentDelta,
+          }),
+      });
     }
     case 'rebuild_knowledge_base_index':
       ctx?.onToolProgress?.({

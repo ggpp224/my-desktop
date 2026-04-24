@@ -15,6 +15,12 @@ type OllamaTagsResponse = {
   models?: Array<{ name?: string; model?: string }>;
 };
 
+// AI 生成 By Peng.Guo
+export type KnowledgeQueryCallbacks = {
+  onProgress?: (message: string) => void;
+  onAnswerDelta?: (delta: string) => void;
+};
+
 function isModelInstalled(installedNames: Set<string>, expectedModel: string): boolean {
   const target = expectedModel.trim().toLowerCase();
   if (!target) return false;
@@ -57,13 +63,22 @@ async function ensureKnowledgeModelsInstalled(): Promise<void> {
   }
 }
 
-export async function queryKnowledgeBase(question: string, chatModel?: string): Promise<KnowledgeAnswerPayload> {
+export async function queryKnowledgeBase(
+  question: string,
+  chatModel?: string,
+  callbacks?: KnowledgeQueryCallbacks
+): Promise<KnowledgeAnswerPayload> {
   try {
     // AI 生成 By Peng.Guo：优先使用传入的模型，否则使用配置的默认模型
     const modelToUse = chatModel?.trim() || config.knowledgeBase.chatModel;
+    callbacks?.onProgress?.('正在检查知识库依赖模型...');
     await ensureKnowledgeModelsInstalled();
+    callbacks?.onProgress?.('模型检查完成，开始查询知识库...');
     const data = await withTimeout(
-      queryKnowledgeIndex(question, modelToUse),
+      queryKnowledgeIndex(question, modelToUse, {
+        onProgress: callbacks?.onProgress,
+        onAnswerDelta: callbacks?.onAnswerDelta,
+      }),
       config.knowledgeBase.queryTimeoutMs,
       `知识库查询超时（>${config.knowledgeBase.queryTimeoutMs}ms）。建议：1) 调大 KB_QUERY_TIMEOUT_MS（如 120000）；2) 使用更快的模型（如 qwen2.5:7b）；3) 减少 KB_TOP_K（如 3）`
     );

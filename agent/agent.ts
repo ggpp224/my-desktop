@@ -111,6 +111,29 @@ export type RunAgentOptions = {
   llm?: AgentLlmOptions;
 };
 
+// AI 生成 By Peng.Guo：工具执行心跳，避免长任务期间 UI 无反馈
+type ToolHeartbeatControl = { stop: () => void };
+
+function startToolHeartbeat(
+  onToolProgress: ToolProgressCallback | undefined,
+  tool: string,
+  startedAtMs: number,
+  intervalMs = 5000
+): ToolHeartbeatControl {
+  if (!onToolProgress) return { stop: () => {} };
+  const timer = setInterval(() => {
+    const elapsedSec = Math.max(1, Math.floor((Date.now() - startedAtMs) / 1000));
+    onToolProgress({
+      phase: 'progress',
+      tool,
+      message: `仍在执行中（已等待 ${elapsedSec}s）`,
+    });
+  }, intervalMs);
+  return {
+    stop: () => clearInterval(timer),
+  };
+}
+
 function throwIfAborted(signal: AbortSignal | undefined): void {
   if (signal?.aborted) {
     const err = new Error('Aborted');
@@ -190,8 +213,10 @@ export async function runAgent(userMessage: string, options?: RunAgentOptions): 
       throwIfAborted(signal);
       options?.onToolProgress?.({ phase: 'start', tool: call.name });
       const tTool = Date.now();
+      const heartbeat = startToolHeartbeat(options?.onToolProgress, call.name, tTool);
       try {
         const result = await routeAndExecute(call, routeCtx);
+        heartbeat.stop();
         if (timing.tools) timing.tools.push({ name: call.name, ms: Date.now() - tTool });
         toolResults.push({ tool: call.name, result });
         options?.onToolProgress?.({ phase: 'done', tool: call.name, ok: true });
@@ -202,6 +227,7 @@ export async function runAgent(userMessage: string, options?: RunAgentOptions): 
           content: typeof result === 'object' ? JSON.stringify(result) : String(result),
         } as ChatMessage);
       } catch (err) {
+        heartbeat.stop();
         if (timing.tools) timing.tools.push({ name: call.name, ms: Date.now() - tTool });
         const msg = err instanceof Error ? err.message : String(err);
         toolResults.push({ tool: call.name, error: msg });
