@@ -13,10 +13,10 @@ interface WorkflowPanelProps {
 }
 
 export function WorkflowPanel({ apiBase, addLog, onStartWorkEmbedded, themeTokens }: WorkflowPanelProps) {
-  const [workflows] = useState<Array<{ name: string; label: string }>>([
-    { name: 'start-work', label: '开始工作' },
-    { name: 'upgrade-react18-nova', label: '升级集测 react18 的 nova 版本' },
-    { name: 'upgrade-cc-web-nova', label: '升级集测 cc-web 的 nova 版本' },
+  const [workflows] = useState<Array<{ name: string; label: string; desc: string }>>([
+    { name: 'start-work', label: '开始工作', desc: '一键启动常用研发环境（内嵌终端）' },
+    { name: 'upgrade-react18-nova', label: '升级集测 react18 的 nova 版本', desc: '自动切 sprint、更新依赖并提交推送' },
+    { name: 'upgrade-cc-web-nova', label: '升级集测 cc-web 的 nova 版本', desc: '自动切 sprint、更新依赖并提交推送' },
   ]);
   const [running, setRunning] = useState(false);
 
@@ -58,7 +58,7 @@ export function WorkflowPanel({ apiBase, addLog, onStartWorkEmbedded, themeToken
     <section style={{ padding: 16, borderBottom: `1px solid ${themeTokens.panelBorder}` }}>
       <h3 style={{ margin: '0 0 12px', fontSize: 14, color: themeTokens.textSecondary }}>Workflow</h3>
       <ul style={{ listStyle: 'none', padding: 0, margin: 0 }}>
-        {workflows.map(({ name, label }) => (
+        {workflows.map(({ name, label, desc }) => (
           <li key={name} style={{ marginBottom: 8 }}>
             <Button
               themeTokens={themeTokens}
@@ -72,6 +72,7 @@ export function WorkflowPanel({ apiBase, addLog, onStartWorkEmbedded, themeToken
             >
               {label}
             </Button>
+            <div style={{ fontSize: 12, color: themeTokens.textSecondary, marginTop: 4, paddingLeft: 4 }}>{desc}</div>
           </li>
         ))}
       </ul>
