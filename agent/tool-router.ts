@@ -26,7 +26,7 @@ import { syncCursorCookieFromChrome } from '../tools/cursor-cookie-sync-tool.js'
 import { fetchWeeklyReportPageInfo, openWeeklyReportPage } from '../tools/wiki-tool.js';
 import { writeWeeklyReport } from '../tools/weekly-report-tool.js';
 import { generateWeeklyTeamSummary } from '../tools/weekly-team-summary-tool.js';
-import { queryKnowledgeBase, rebuildKnowledgeBaseIndex, listKnowledgeDocs } from './knowledge/knowledge-service.js';
+import { clearPrivateKnowledgeBase, incrementalRebuildKnowledgeBaseIndex, queryKnowledgeBase, rebuildKnowledgeBaseIndex, listKnowledgeDocs } from './knowledge/knowledge-service.js';
 import type { ToolCall } from './ollama-client.js';
 import type { RouteExecuteContext } from './tool-progress.js';
 
@@ -51,24 +51,46 @@ export async function routeAndExecute(call: ToolCall, ctx?: RouteExecuteContext)
   switch (name) {
     case 'open_knowledge_base_manager':
       return { openKnowledgeBaseManager: true };
+    case 'clear_private_knowledge_base':
+      ctx?.onToolProgress?.({
+        phase: 'progress',
+        tool: 'clear_private_knowledge_base',
+        message: '正在清除私人知识库文档与索引...',
+      });
+      return clearPrivateKnowledgeBase((message) => {
+        ctx?.onToolProgress?.({
+          phase: 'progress',
+          tool: 'clear_private_knowledge_base',
+          message,
+        });
+      });
     case 'query_knowledge_base': {
       const question = ((args?.question as string) ?? '').trim();
       if (!question) throw new Error('query_knowledge_base 缺少 question');
       // AI 生成 By Peng.Guo：传递当前模型给知识库查询
-      return queryKnowledgeBase(question, ctx?.currentModel, {
-        onProgress: (message) =>
-          ctx?.onToolProgress?.({
-            phase: 'progress',
-            tool: 'query_knowledge_base',
-            message,
-          }),
-        onAnswerDelta: (contentDelta) =>
-          ctx?.onToolProgress?.({
-            phase: 'stream_delta',
-            tool: 'query_knowledge_base',
-            contentDelta,
-          }),
-      });
+      return queryKnowledgeBase(
+        question,
+        ctx?.currentModel,
+        {
+          provider: ctx?.currentLlm?.provider,
+          apiKey: ctx?.currentLlm?.apiKey,
+          baseUrl: ctx?.currentLlm?.baseUrl,
+        },
+        {
+          onProgress: (message) =>
+            ctx?.onToolProgress?.({
+              phase: 'progress',
+              tool: 'query_knowledge_base',
+              message,
+            }),
+          onAnswerDelta: (contentDelta) =>
+            ctx?.onToolProgress?.({
+              phase: 'stream_delta',
+              tool: 'query_knowledge_base',
+              contentDelta,
+            }),
+        }
+      );
     }
     case 'rebuild_knowledge_base_index':
       ctx?.onToolProgress?.({
@@ -77,13 +99,32 @@ export async function routeAndExecute(call: ToolCall, ctx?: RouteExecuteContext)
         message: '正在清理并重建知识库索引...',
       });
       // AI 生成 By Peng.Guo：传递进度回调
-      return rebuildKnowledgeBaseIndex((message) => {
-        ctx?.onToolProgress?.({
-          phase: 'progress',
-          tool: 'rebuild_knowledge_base_index',
-          message,
-        });
+      return rebuildKnowledgeBaseIndex(
+        (message) => {
+          ctx?.onToolProgress?.({
+            phase: 'progress',
+            tool: 'rebuild_knowledge_base_index',
+            message,
+          });
+        },
+        ctx?.currentModel
+      );
+    case 'incremental_rebuild_knowledge_base_index':
+      ctx?.onToolProgress?.({
+        phase: 'progress',
+        tool: 'incremental_rebuild_knowledge_base_index',
+        message: '正在增量重建知识库索引...',
       });
+      return incrementalRebuildKnowledgeBaseIndex(
+        (message) => {
+          ctx?.onToolProgress?.({
+            phase: 'progress',
+            tool: 'incremental_rebuild_knowledge_base_index',
+            message,
+          });
+        },
+        ctx?.currentModel
+      );
     case 'list_knowledge_docs':
       ctx?.onToolProgress?.({
         phase: 'progress',

@@ -66,4 +66,5 @@ alwaysApply: false
 ## 使用约定
 
 - 修改或新增项目时：在 `config/projects.ts` 增加/调整条目，并在 `.env.example` 与本文档中同步变量名与说明。
+- 修改 `.env.example` 时，必须同步修改 `.env` 对应项，确保示例配置与本地运行配置不漂移。
 - 代码中仅通过 `process.env.XXX` 或 `config/default.ts` 的 `config` 读取，不写死路径/网址/任务名。

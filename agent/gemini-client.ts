@@ -36,6 +36,11 @@ export type GeminiClientConfig = {
   baseUrl?: string;
 };
 
+export type GeminiTextStreamOptions = {
+  signal?: AbortSignal;
+  onDelta: (textDelta: string) => void;
+};
+
 function parseGeminiConnectTimeoutMs(): number {
   const n = Number(process.env.GEMINI_CONNECT_TIMEOUT_MS);
   if (!Number.isFinite(n) || n < 15_000) return 120_000;
@@ -232,6 +237,66 @@ export async function testGeminiConnection(cfg: GeminiClientConfig): Promise<Gem
     } catch (err) {
       return { ok: false, error: formatNodeFetchError('请求失败', err) };
     }
+  });
+}
+
+// AI 生成 By Peng.Guo：纯文本流式生成（不含工具调用），供知识库回答阶段复用
+export async function streamGeminiText(
+  messages: ChatMessage[],
+  cfg: GeminiClientConfig,
+  options: GeminiTextStreamOptions
+): Promise<{ text: string; tokenUsage?: GeminiTokenUsage }> {
+  const apiKey = resolveGeminiApiKey(cfg);
+  if (!apiKey) {
+    throw new Error(
+      '缺少 Gemini API Key：请在运行 API 的 shell 中执行 `export GEMINI_API_KEY=...`（与 A2UI 一致），或在界面「设置」中填写并保存。'
+    );
+  }
+  const model = (cfg.model ?? '').trim() || 'gemini-2.0-flash';
+  const base = (cfg.baseUrl ?? '').trim().replace(/\/$/, '');
+  return withPatchedGlobalFetch(async () => {
+    const ai = new GoogleGenAI({
+      apiKey,
+      httpOptions: {
+        timeout: GEMINI_HTTP_TIMEOUT_MS,
+        ...(base ? { baseUrl: base } : {}),
+      },
+    });
+    const { systemInstruction, userText } = splitSystemAndUserText(messages);
+    let stream: AsyncGenerator<unknown, void, unknown>;
+    try {
+      stream = await ai.models.generateContentStream({
+        model,
+        contents: userText,
+        config: {
+          ...(systemInstruction ? { systemInstruction } : {}),
+          ...(options.signal ? { abortSignal: options.signal } : {}),
+        },
+      });
+    } catch (err) {
+      throw new Error(formatNodeFetchError('Gemini 纯文本流式生成失败', err));
+    }
+    const accumText = { prev: '', full: '' };
+    let tokenUsage: GeminiTokenUsage | undefined;
+    for await (const chunk of stream) {
+      const c = chunk as {
+        text?: string;
+        usageMetadata?: { promptTokenCount?: number; candidatesTokenCount?: number };
+      };
+      if (typeof c.text === 'string' && c.text.length > 0) {
+        const { next, delta } = mergeStreamFragment(accumText.prev, c.text);
+        accumText.prev = next;
+        accumText.full = next;
+        if (delta) options.onDelta(delta);
+      }
+      if (c.usageMetadata) {
+        tokenUsage = {
+          promptTokens: c.usageMetadata.promptTokenCount,
+          completionTokens: c.usageMetadata.candidatesTokenCount,
+        };
+      }
+    }
+    return { text: accumText.full.trim(), tokenUsage };
   });
 }
 

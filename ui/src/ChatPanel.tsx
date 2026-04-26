@@ -120,6 +120,13 @@ type RebuildKnowledgeBasePayload = {
   error?: string;
 };
 // AI 生成 By Peng.Guo
+type ClearPrivateKnowledgeBasePayload = {
+  success?: boolean;
+  removedDocsDir?: string;
+  removedIndexDir?: string;
+  error?: string;
+};
+// AI 生成 By Peng.Guo
 type KnowledgeDocItem = {
   id?: string;
   filePath?: string;
@@ -212,7 +219,9 @@ function buildCommandHints(projects: ProjectInfo[], inputHistory: string[]): str
     '同步cursor登录态',
     'cursor今日用量',
     '添加私人知识库',
+    '清除私人知识库',
     '重建知识库索引',
+    '增量重建知识库索引',
     '已添加到知识库的文档',
     '知识库有哪些文档',
   ];
@@ -332,11 +341,24 @@ function extractRebuildKnowledgeBaseResult(toolResults?: unknown[]): RebuildKnow
   if (!Array.isArray(toolResults)) return null;
   const row = toolResults.find(
     (item) =>
-      (item as ToolResultItem | undefined)?.tool === 'rebuild_knowledge_base_index' &&
+      ((item as ToolResultItem | undefined)?.tool === 'rebuild_knowledge_base_index' ||
+        (item as ToolResultItem | undefined)?.tool === 'incremental_rebuild_knowledge_base_index') &&
       (item as ToolResultItem | undefined)?.result
   ) as ToolResultItem | undefined;
   if (!row || typeof row.result !== 'object' || row.result == null) return null;
   return row.result as RebuildKnowledgeBasePayload;
+}
+
+// AI 生成 By Peng.Guo
+function extractClearPrivateKnowledgeBaseResult(toolResults?: unknown[]): ClearPrivateKnowledgeBasePayload | null {
+  if (!Array.isArray(toolResults)) return null;
+  const row = toolResults.find(
+    (item) =>
+      (item as ToolResultItem | undefined)?.tool === 'clear_private_knowledge_base' &&
+      (item as ToolResultItem | undefined)?.result
+  ) as ToolResultItem | undefined;
+  if (!row || typeof row.result !== 'object' || row.result == null) return null;
+  return row.result as ClearPrivateKnowledgeBasePayload;
 }
 
 // AI 生成 By Peng.Guo
@@ -715,6 +737,23 @@ function renderToolResults(
           <div style={{ fontSize: 12, color: '#cbd5e1' }}>纳入文档数：{rebuildKb.docsCount}</div>
         ) : null}
         {rebuildKb.error ? <div style={{ fontSize: 12, color: '#fecaca', marginTop: 6 }}>{rebuildKb.error}</div> : null}
+      </div>
+    );
+  }
+  const clearKb = extractClearPrivateKnowledgeBaseResult(toolResults);
+  if (clearKb) {
+    return (
+      <div style={{ marginTop: 8, background: '#1a1a2e', borderRadius: 6, border: '1px solid #2a2a3d', padding: 10 }}>
+        <div style={{ fontSize: 12, color: clearKb.success ? '#86efac' : '#fca5a5', marginBottom: 8 }}>
+          {clearKb.success ? '私人知识库已清除' : '清除私人知识库失败'}
+        </div>
+        {clearKb.removedDocsDir ? (
+          <div style={{ fontSize: 12, color: '#cbd5e1' }}>文档目录：{clearKb.removedDocsDir}</div>
+        ) : null}
+        {clearKb.removedIndexDir ? (
+          <div style={{ fontSize: 12, color: '#cbd5e1', marginTop: 4 }}>索引目录：{clearKb.removedIndexDir}</div>
+        ) : null}
+        {clearKb.error ? <div style={{ fontSize: 12, color: '#fecaca', marginTop: 6 }}>{clearKb.error}</div> : null}
       </div>
     );
   }
@@ -1352,6 +1391,15 @@ export function ChatPanel({ apiBase, addLog, onStartWorkEmbedded, onOpenKnowledg
       addLog('已打开私人知识库页签');
       setMessages((prev) => [...prev, { role: 'assistant', content: '已打开私人知识库页签，请选择目录并导入 Markdown 文档。' }]);
       return;
+    }
+    if (/清除私人知识库|清空私人知识库/.test(msg)) {
+      const ok = window.confirm('确认清除私人知识库吗？将删除已导入文档，并清理已有知识库索引，且不可恢复。');
+      if (!ok) {
+        setLoading(false);
+        addLog('已取消清除私人知识库');
+        setMessages((prev) => [...prev, { role: 'assistant', content: '已取消清除私人知识库。' }]);
+        return;
+      }
     }
     chatAbortRef.current?.abort();
     chatAbortRef.current = new AbortController();

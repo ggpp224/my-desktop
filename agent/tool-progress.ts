@@ -14,4 +14,10 @@ export type RouteExecuteContext = {
   onToolProgress?: ToolProgressCallback;
   /** AI 生成 By Peng.Guo：当前 Agent 使用的模型名称，用于知识库查询 */
   currentModel?: string;
+  /** AI 生成 By Peng.Guo：当前 Agent LLM 供应商配置（用于知识库生成阶段复用） */
+  currentLlm?: {
+    provider?: 'gemini';
+    apiKey?: string;
+    baseUrl?: string;
+  };
 };

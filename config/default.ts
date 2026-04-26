@@ -68,19 +68,32 @@ export const config = {
     allowedCwd: process.env.SHELL_CWD || process.cwd(),
   },
   knowledgeBase: {
-    /** // AI 生成 By Peng.Guo：知识库文档根目录（逗号分隔，默认 doc,docs） */
-    docDirs: (process.env.KB_DOC_DIRS || 'doc,docs,runtime/private-kb')
-      .split(',')
-      .map((item) => item.trim())
-      .filter(Boolean),
     /** 问答模型（Ollama） */
-    chatModel: process.env.KB_CHAT_MODEL || 'qwen3.6:35b',
+    chatModel: process.env.KB_CHAT_MODEL || 'qwen2.5-coder:14b',
+    /** 预处理模型（用于 metadata extraction，速度/质量平衡默认 14B） */
+    ingestModel: process.env.KB_INGEST_MODEL || 'qwen2.5-coder:14b',
     /** 嵌入模型（Ollama） */
     embedModel: process.env.KB_EMBED_MODEL || 'bge-m3',
-    /** 上下文窗口大小（num_ctx），默认 16384 */
-    numCtx: Math.max(2048, Number(process.env.KB_NUM_CTX) || 16384),
+    /** 索引持久化目录（绝对路径优先） */
+    persistDir: process.env.KB_PERSIST_DIR || 'runtime/knowledge-index',
+    /** Parent 节点大小（近似 token） */
+    parentChunkTokens: Math.max(256, Number(process.env.KB_PARENT_CHUNK_TOKENS) || 1536),
+    /** Child 节点大小（近似 token） */
+    childChunkTokens: Math.max(64, Number(process.env.KB_CHILD_CHUNK_TOKENS) || 512),
+    /** Child 切片重叠大小（近似 token） */
+    chunkOverlapTokens: Math.max(16, Number(process.env.KB_CHUNK_OVERLAP_TOKENS) || 32),
+    /** 上下文窗口大小（num_ctx），默认 3072 */
+    numCtx: Math.max(2048, Number(process.env.KB_NUM_CTX) || 3072),
+    /** Query 阶段的最大上下文窗口，防止长文档撑爆显存 */
+    contextWindow: Math.max(2048, Number(process.env.KB_CONTEXT_WINDOW) || 4096),
+    /** 是否启用 Flash Attention */
+    flashAttention: ['1', 'true', 'yes', 'on'].includes(String(process.env.KB_FLASH_ATTENTION || '1').toLowerCase()),
     /** 检索召回条数 */
-    topK: Math.max(1, Number(process.env.KB_TOP_K) || 5),
+    topK: Math.max(1, Number(process.env.KB_TOP_K) || 4),
+    /** 混合检索候选数量 */
+    hybridTopK: Math.max(2, Number(process.env.KB_HYBRID_TOP_K) || 6),
+    /** RRF 融合参数（越大越平滑） */
+    rrfK: Math.max(10, Number(process.env.KB_RRF_K) || 50),
     /** 引用片段最大字符数 */
     maxSnippetChars: Math.max(80, Number(process.env.KB_MAX_SNIPPET_CHARS) || 280),
     /** 单次知识库查询超时（毫秒），避免工具阶段长时间无响应 */

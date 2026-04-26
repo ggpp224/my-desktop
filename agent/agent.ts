@@ -40,9 +40,11 @@ export type AgentResult = {
 const AGENT_SYSTEM_PROMPT = `你是开发流程助手，根据用户意图选择工具并填对参数。项目代号见 config/projects，常用：base、base18、nova、scm、react18、cc-web、cc-node、biz-solution、biz-guide、uikit、shared 等。
 
 知识库管理：用户说「添加私人知识库」时，调用 open_knowledge_base_manager()，打开知识库管理页签，供用户选择目录导入 Markdown 文档。
+用户说「清除私人知识库」「清空私人知识库」时，调用 clear_private_knowledge_base()，删除已导入私人文档并清理索引。
 用户说「重建知识库索引」时，调用 rebuild_knowledge_base_index()，执行索引清理与重建。
+用户说「增量重建知识库索引」时，调用 incremental_rebuild_knowledge_base_index()，仅对变更文档执行增量预处理后重建索引。
 
-知识库：当用户询问「如何使用」「怎么配置」「文档中怎么说」「某组件怎么接入」等说明类问题时，优先调用 query_knowledge_base(question=用户原问题) 从本地 Markdown（doc/docs）检索答案，再基于检索结果回答。若 query_knowledge_base 返回 success=false，要明确给出失败原因并提示检查模型/文档目录。
+知识库：当用户询问「如何使用」「怎么配置」「文档中怎么说」「某组件怎么接入」等说明类问题时，优先调用 query_knowledge_base(question=用户原问题) 从本地 Markdown（仅 runtime/private-kb，即显式导入内容）检索答案，再基于检索结果回答。若 query_knowledge_base 返回 success=false，要明确给出失败原因并提示检查模型/文档目录。
 
 工作流：开始工作/执行 start-work → run_workflow(name=start-work)。打开终端/新建终端（不执行开始工作）→ open_terminal()；终端打开某项目目录（内嵌新页签）→ open_terminal(code=项目代号)，如终端打开 react18、终端打开 cc-web2。standalone → run_workflow(name=standalone)。启动 cpxy/react18/scm/cc-web/biz-solution/uikit/shared → run_workflow_step(workflow=start-work 或 standalone，taskKey=对应 key)；start-work 不含 base18，需启动 base18 时用 run_shell 进入项目目录执行。升级集测react18的nova版本 → run_workflow(name=upgrade-react18-nova)。升级集测cc-web的nova版本 → run_workflow(name=upgrade-cc-web-nova)。
 部署：部署 xxx → deploy_jenkins(job=…)。可指定分支，如「部署nova 分支是sprint-260326」→ deploy_jenkins(job=nova, branch=sprint-260326)。合并 xxx → merge_repo(repo=nova|biz-solution|scm)。
@@ -208,6 +210,13 @@ export async function runAgent(userMessage: string, options?: RunAgentOptions): 
       onToolProgress: options?.onToolProgress,
       // AI 生成 By Peng.Guo：传递当前模型给工具路由（Gemini 用传入的，Ollama 从 runtime 获取）
       currentModel: useGemini ? llm.model : getOllamaActiveModel(),
+      currentLlm: useGemini
+        ? {
+            provider: 'gemini',
+            apiKey: llm.apiKey,
+            baseUrl: llm.baseUrl,
+          }
+        : undefined,
     };
     for (const call of calls) {
       throwIfAborted(signal);

@@ -15,9 +15,33 @@ export const toolsSchema = [
   {
     type: 'function' as const,
     function: {
+      name: 'clear_private_knowledge_base',
+      description:
+        '清除私人知识库。用户说「清除私人知识库」「清空私人知识库」时调用；删除 runtime/private-kb 下已导入文档并清理知识库索引',
+      parameters: {
+        type: 'object',
+        properties: {},
+      },
+    },
+  },
+  {
+    type: 'function' as const,
+    function: {
       name: 'rebuild_knowledge_base_index',
       description:
         '重建私人知识库索引。用户说「重建知识库索引」时调用，无参数',
+      parameters: {
+        type: 'object',
+        properties: {},
+      },
+    },
+  },
+  {
+    type: 'function' as const,
+    function: {
+      name: 'incremental_rebuild_knowledge_base_index',
+      description:
+        '增量重建私人知识库索引。用户说「增量重建知识库索引」时调用，无参数；仅重算变更文档预处理并重建索引',
       parameters: {
         type: 'object',
         properties: {},
@@ -41,7 +65,7 @@ export const toolsSchema = [
     function: {
       name: 'query_knowledge_base',
       description:
-        '查询本地知识库（doc/docs 下 Markdown 文档）并返回可引用答案。用户问「如何使用」「文档里怎么配置」等说明类问题时调用',
+        '查询本地知识库（默认 runtime/private-kb 下 Markdown 文档）并返回可引用答案。用户问「如何使用」「文档里怎么配置」等说明类问题时调用',
       parameters: {
         type: 'object',
         required: ['question'],

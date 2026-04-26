@@ -73,6 +73,7 @@ npm run pack
 - **模型**
   - `OLLAMA_BASE`、`OLLAMA_MODEL`
   - `GEMINI_API_KEY` 或 `GOOGLE_API_KEY`
+  - 知识库：`KB_CHAT_MODEL`、`KB_INGEST_MODEL`、`KB_EMBED_MODEL`、`KB_CONTEXT_WINDOW`、`KB_FLASH_ATTENTION`
 - **服务**
   - `PORT`、`SHELL_CWD`
 - **Jenkins**
@@ -86,6 +87,13 @@ npm run pack
   - `CURSOR_API_TOKEN` 或 `CURSOR_COOKIE`（未配置时可尝试自动同步 Chrome 登录态）
 
 完整环境变量说明见：`.cursor/rules/env-constants.mdc`。
+
+## RAG 性能优化建议
+
+- **14B 模型建议**：在启动应用前设置 `OLLAMA_KV_CACHE_TYPE=q8_0`（显存更充裕时可选 `q4_0`），降低 KV Cache 显存压力。
+- **Flash Attention**：知识库链路默认读取 `KB_FLASH_ATTENTION=1`，建议保持开启。
+- **上下文窗口保护**：通过 `KB_CONTEXT_WINDOW` 控制 query 阶段窗口，避免长文档导致显存溢出并回退 CPU。
+- **索引重建脚本**：`node --loader tsx agent/knowledge/rebuild-index.ts`，强制重建可加 `--force`。
 
 ## 常用能力入口
 
@@ -101,6 +109,7 @@ npm run pack
 - 执行单步任务：`启动 scm`
 - 部署：`部署 nova 分支是 sprint-260326`
 - 合并：`合并 biz-solution`
+- 知识库：`增量重建知识库索引`、`重建知识库索引`
 - 查询：`我的bug`、`本周已完成任务`
 - 周报：`周报`、`写周报`、`组内总结`
 - Cursor：`cursor用量`、`cursor今日用量`

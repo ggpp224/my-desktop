@@ -9,6 +9,15 @@ export type KnowledgeDoc = {
   mtimeMs: number;
 };
 
+// AI 生成 By Peng.Guo
+export const PRIVATE_KB_DOC_DIR = 'runtime/private-kb';
+
+// AI 生成 By Peng.Guo
+export function getKnowledgeDocDirs(): string[] {
+  // 仅允许显式导入的私人知识库目录参与检索，避免项目 doc/docs 被默认纳入
+  return [PRIVATE_KB_DOC_DIR];
+}
+
 async function walkMarkdownFiles(dirAbs: string): Promise<string[]> {
   const files: string[] = [];
   let entries: Array<{ name: string; isDirectory: () => boolean; isFile: () => boolean }> = [];
