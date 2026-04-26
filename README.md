@@ -8,11 +8,20 @@
 ## 当前能力概览（与代码实现一致）
 
 - **Agent 对话执行**：支持普通请求与 SSE 流式请求（含首轮模型增量输出、工具执行进度、结果汇总）。
-- **模型能力**：默认本地 Ollama；也支持外部 Gemini（API Key 可请求体传入或读取环境变量）。
+- **模型能力**：支持本地 Ollama 与外部 Gemini 双模式；支持运行时切换本地模型、测试 Gemini 连通性。
 - **工作流能力**：支持完整工作流执行、单步执行、内嵌终端会话（可新增/关闭子终端并轮询输出）。
 - **开发工具能力**：Shell 执行、浏览器打开、Jenkins 触发部署与状态查询、项目在 IDE 中打开/关闭。
+- **知识库能力**：支持私人知识库目录导入、索引重建、来源文档打开与文档内相对链接跳转。
 - **协同能力**：Jira 固定查询（我的 bug / 线上 bug / 本周完成 / 本周经我手 bug）、Wiki 周报定位/抓取、周报自动编写、组内总结生成。
-- **工程辅助能力**：Cursor 用量查询与 Cookie 自动同步；命令历史持久化（`runtime/command-history.json`）。
+- **工程辅助能力**：Cursor 用量查询与 Cookie 自动同步；命令历史持久化（`runtime/command-history.json`）；主题持久化。
+
+## 近期新增能力（2026-04）
+
+- **主题系统**：新增浅色/深色/高对比主题切换，前端会记忆上次主题。
+- **模型设置面板**：新增本地/外部模式切换；Gemini API Key、模型、Base URL 可视化配置与连通性测试。
+- **流式体验增强**：`/agent/chat/stream` 增加 `llm_delta`、`tool_progress`、`token_usage` 事件，聊天体验更平滑。
+- **知识库闭环**：新增 `POST /knowledge-base/import` 导入本地 Markdown，支持从引用直接打开原文 `GET /knowledge-base/document`。
+- **内嵌终端增强**：`/workflow/:workflowName/embedded` 启动会话，支持会话恢复、新增页签、输入/输出轮询、尺寸同步与关闭回收。
 
 ## 环境要求
 
@@ -98,6 +107,8 @@ npm run pack
 ## 常用能力入口
 
 - **自然语言能力清单**：`docs/可用指令.md`
+- **使用说明（操作手册）**：`docs/使用文档.md`
+- **架构与接口设计**：`docs/设计文档.md`
 - **工作流定义**：`workflows/start-work.json`、`workflows/standalone.json`、`workflows/upgrade-*.json`
 - **工具路由**：`agent/tool-router.ts`
 - **服务接口**：`server/api.ts`
