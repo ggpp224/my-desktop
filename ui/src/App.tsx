@@ -6,6 +6,7 @@ import { ToolPanel } from './ToolPanel';
 import { LogsPanel } from './LogsPanel';
 import { MyWorkPanel, type WorkTerminal } from './MyWorkPanel';
 import { KnowledgeBasePanel } from './KnowledgeBasePanel';
+import { KnowledgeDocPanel } from './KnowledgeDocPanel';
 import { LlmSettingsModal } from './view/LlmSettingsModal';
 import { loadLlmSettings, saveLlmSettings } from './infrastructure/llm/llmSettingsRepository';
 import { buildAgentChatLlmBody } from './domain/llm/agentLlmRequest';
@@ -13,7 +14,7 @@ import type { GeminiUserSettings, LlmRuntimeMode } from './domain/llm/agentLlmRe
 
 const DEFAULT_API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:3000';
 const MY_WORK_SESSION_STORAGE_KEY = 'ai-dev-control-center:my-work-session-id';
-type HeaderTab = { key: string; label: string };
+type HeaderTab = { key: string; label: string; docPath?: string };
 const HEADER_TABS: HeaderTab[] = [
   { key: 'workspace', label: 'AI Dev Control Center' },
 ];
@@ -186,6 +187,18 @@ export default function App() {
       return [...prev, { key: 'knowledge-base', label: '私人知识库' }];
     });
     setActiveHeaderTab('knowledge-base');
+  };
+
+  const openKnowledgeDocTab = (docPath: string) => {
+    const normalized = docPath.trim();
+    if (!normalized) return;
+    const tabKey = `knowledge-doc:${normalized}`;
+    const tabLabel = `文档：${normalized.split('/').filter(Boolean).pop() ?? '详情'}`;
+    setHeaderTabs((prev) => {
+      if (prev.some((tab) => tab.key === tabKey)) return prev;
+      return [...prev, { key: tabKey, label: tabLabel, docPath: normalized }];
+    });
+    setActiveHeaderTab(tabKey);
   };
 
   const closeHeaderTab = async (tabKey: string) => {
@@ -528,6 +541,12 @@ export default function App() {
         <main style={{ flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0, borderRight: '1px solid #333' }}>
           {activeHeaderTab === 'knowledge-base' ? (
             <KnowledgeBasePanel apiBase={apiBase} addLog={addLog} />
+          ) : activeHeaderTab.startsWith('knowledge-doc:') ? (
+            <KnowledgeDocPanel
+              apiBase={apiBase}
+              sourcePath={headerTabs.find((tab) => tab.key === activeHeaderTab)?.docPath ?? ''}
+              onOpenKnowledgeDoc={openKnowledgeDocTab}
+            />
           ) : activeHeaderTab === 'my-work' && myWorkSessionId ? (
             <MyWorkPanel apiBase={apiBase} sessionId={myWorkSessionId} initialTerminals={myWorkTerminals} />
           ) : (
@@ -536,6 +555,7 @@ export default function App() {
               addLog={addLog}
               onStartWorkEmbedded={onStartWorkEmbedded}
               onOpenKnowledgeBase={openKnowledgeBaseTab}
+              onOpenKnowledgeDoc={openKnowledgeDocTab}
               llmRuntimeMode={llmMode}
               agentChatLlmBody={agentChatLlmBody}
             />

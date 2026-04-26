@@ -141,11 +141,31 @@ type ListKnowledgeDocsPayload = {
   error?: string;
 };
 
+// AI 生成 By Peng.Guo：将引用来源压缩展示，避免次要信息占据过多空间
+function getCitationLabel(sourcePath?: string): string {
+  const raw = (sourcePath ?? '').trim();
+  if (!raw) return '未知来源';
+  const normalized = raw.replace(/\\/g, '/');
+  const tail = normalized.split('/').filter(Boolean).slice(-2).join('/');
+  return tail || normalized;
+}
+
+// AI 生成 By Peng.Guo：摘要行仅保留可扫读的一行文本预览
+function getCitationPreview(snippet?: string): string {
+  const text = (snippet ?? '')
+    .replace(/[`#>*_\-\[\]\(\)!]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+  if (!text) return '--';
+  return text.length > 96 ? `${text.slice(0, 96)}...` : text;
+}
+
 interface ChatPanelProps {
   apiBase: string;
   addLog: (line: string) => void;
   onStartWorkEmbedded: (payload: { sessionId: string; terminals: WorkTerminal[] }) => void;
   onOpenKnowledgeBase: () => void;
+  onOpenKnowledgeDoc: (sourcePath: string) => void;
   /** 本地 Ollama / 外部 Gemini */
   llmRuntimeMode: LlmRuntimeMode;
   /** 外部模式且已填 Key 时传入，随请求发往本机后端 */
@@ -678,6 +698,7 @@ function renderToolResults(
   toolResults: unknown[] | undefined,
   onTip: (message: string) => void,
   copyCtx: ReportCopyLlmContext,
+  onOpenKnowledgeDoc?: (sourcePath: string) => void,
 ) {
   // AI 生成 By Peng.Guo：列出知识库文档
   const listDocsResult = extractListKnowledgeDocsResult(toolResults);
@@ -784,18 +805,45 @@ function renderToolResults(
         ) : null}
         {citations.length > 0 ? (
           <div>
-            <div style={{ fontSize: 12, color: '#94a3b8', marginBottom: 6 }}>引用来源</div>
+            <div style={{ fontSize: 12, color: '#94a3b8', marginBottom: 6 }}>
+              引用来源 <span style={{ color: '#64748b' }}>（次要信息，默认折叠）</span>
+            </div>
             {citations.slice(0, 4).map((item, idx) => (
-              <div key={`${item.path ?? 'source'}-${idx}`} style={{ marginBottom: 8, padding: 8, borderRadius: 4, background: '#0f172a', border: '1px solid #1f2937' }}>
-                <div style={{ fontSize: 12, color: '#93c5fd', marginBottom: 4 }}>
-                  {item.path || '未知来源'}
+              <div
+                key={`${item.path ?? 'source'}-${idx}`}
+                style={{ marginBottom: 6, padding: '6px 8px', borderRadius: 4, background: '#0f172a', border: '1px solid #1f2937' }}
+              >
+                <div style={{ fontSize: 12, color: '#93c5fd', marginBottom: 2 }} title={item.path || '未知来源'}>
+                  {item.path ? (
+                    <button
+                      type="button"
+                      onClick={() => onOpenKnowledgeDoc?.(item.path ?? '')}
+                      style={{
+                        border: 'none',
+                        background: 'transparent',
+                        color: '#93c5fd',
+                        cursor: 'pointer',
+                        padding: 0,
+                        fontSize: 12,
+                        textDecoration: 'underline',
+                      }}
+                    >
+                      {getCitationLabel(item.path)}
+                    </button>
+                  ) : (
+                    getCitationLabel(item.path)
+                  )}
                   {typeof item.score === 'number' ? <span style={{ color: '#64748b', marginLeft: 6 }}>score={item.score.toFixed(3)}</span> : null}
                 </div>
+                <div style={{ color: '#94a3b8', fontSize: 12, lineHeight: 1.45 }}>{getCitationPreview(item.snippet)}</div>
                 {item.snippet ? (
-                  <MarkdownRenderer markdown={item.snippet} />
-                ) : (
-                  <div style={{ color: '#cbd5e1', fontSize: 12, lineHeight: 1.55 }}>--</div>
-                )}
+                  <details style={{ marginTop: 4 }}>
+                    <summary style={{ fontSize: 12, color: '#64748b', cursor: 'pointer', userSelect: 'none' }}>展开片段</summary>
+                    <div style={{ marginTop: 6 }}>
+                      <MarkdownRenderer markdown={item.snippet} />
+                    </div>
+                  </details>
+                ) : null}
               </div>
             ))}
           </div>
@@ -1082,7 +1130,7 @@ function formatToolProgressLogLine(e: AgentToolProgressEvent): string {
   return e.ok ? `[工具] ${e.tool} 完成` : `[工具] ${e.tool} 失败${e.message ? `: ${e.message}` : ''}`;
 }
 
-export function ChatPanel({ apiBase, addLog, onStartWorkEmbedded, onOpenKnowledgeBase, llmRuntimeMode, agentChatLlmBody }: ChatPanelProps) {
+export function ChatPanel({ apiBase, addLog, onStartWorkEmbedded, onOpenKnowledgeBase, onOpenKnowledgeDoc, llmRuntimeMode, agentChatLlmBody }: ChatPanelProps) {
   const [input, setInput] = useState('');
   const [inputHistory, setInputHistory] = useState<string[]>([]);
   const [loading, setLoading] = useState(false);
@@ -1602,11 +1650,16 @@ export function ChatPanel({ apiBase, addLog, onStartWorkEmbedded, onOpenKnowledg
           <div key={i} style={{ marginBottom: 12 }}>
             <strong style={{ color: m.role === 'user' ? '#7f9cf5' : '#68d391' }}>{m.role === 'user' ? 'You' : 'AI'}:</strong>{' '}
             <LinkifiedText text={m.content} />
-            {renderToolResults(m.toolResults, setTipMessage, {
-              llmRuntimeMode,
-              ollamaModelName: currentModel,
-              agentChatLlmBody,
-            })}
+            {renderToolResults(
+              m.toolResults,
+              setTipMessage,
+              {
+                llmRuntimeMode,
+                ollamaModelName: currentModel,
+                agentChatLlmBody,
+              },
+              onOpenKnowledgeDoc
+            )}
           </div>
         ))}
         {streamLive && (

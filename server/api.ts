@@ -88,7 +88,81 @@ function sanitizeRelativePath(input: string): string {
   return parts.join('/');
 }
 
+function resolveWorkspaceFilePath(inputPath: string): string {
+  const normalized = inputPath.replace(/\\/g, '/').trim();
+  if (!normalized) throw new Error('缺少 path');
+  if (path.isAbsolute(normalized)) throw new Error('不支持绝对路径');
+  if (normalized.includes('..')) throw new Error('路径不合法');
+  const abs = path.resolve(process.cwd(), normalized);
+  const cwd = process.cwd();
+  if (!abs.startsWith(cwd)) throw new Error('越界路径');
+  return abs;
+}
+
+function buildKnowledgeDocPathCandidates(inputPath: string): string[] {
+  const normalized = inputPath.replace(/\\/g, '/').trim().replace(/^\/+/, '');
+  const candidates = new Set<string>([normalized]);
+  const stripDocsPrefix = (p: string): string | null => {
+    if (p.startsWith('docs/')) return p.slice('docs/'.length);
+    if (p.startsWith('doc/')) return p.slice('doc/'.length);
+    return null;
+  };
+  const directStripped = stripDocsPrefix(normalized);
+  if (directStripped) candidates.add(directStripped);
+  const importMarker = '/import-';
+  const markerIdx = normalized.indexOf(importMarker);
+  if (markerIdx >= 0) {
+    const slashAfterImport = normalized.indexOf('/', markerIdx + importMarker.length);
+    if (slashAfterImport > 0) {
+      const prefix = normalized.slice(0, slashAfterImport + 1);
+      const rest = normalized.slice(slashAfterImport + 1);
+      const restStripped = stripDocsPrefix(rest);
+      if (restStripped) candidates.add(prefix + restStripped);
+    }
+  }
+  return Array.from(candidates);
+}
+
 app.get('/', (_req, res) => res.status(200).json({ ok: true, service: 'ai-dev-control-center' }));
+
+// AI 生成 By Peng.Guo：读取知识库引用来源文档全文，供 UI 新页签查看
+app.get('/knowledge-base/document', async (req, res) => {
+  try {
+    const relPath = String(req.query?.path ?? '').trim();
+    const pathCandidates = buildKnowledgeDocPathCandidates(relPath).map((item) => ({
+      rel: item,
+      abs: resolveWorkspaceFilePath(item),
+    }));
+    let resolved: { rel: string; abs: string } | null = null;
+    let stat: Awaited<ReturnType<typeof fs.stat>> | null = null;
+    for (const candidate of pathCandidates) {
+      try {
+        const nextStat = await fs.stat(candidate.abs);
+        if (!nextStat.isFile()) continue;
+        resolved = candidate;
+        stat = nextStat;
+        break;
+      } catch {
+        // try next candidate
+      }
+    }
+    if (!resolved || !stat) {
+      res.status(404).json({ success: false, error: `未找到文档：${relPath}` });
+      return;
+    }
+    const content = await fs.readFile(resolved.abs, 'utf8');
+    res.json({
+      success: true,
+      path: resolved.rel,
+      size: stat.size,
+      modifiedAt: new Date(stat.mtimeMs).toISOString(),
+      content,
+    });
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    res.status(400).json({ success: false, error: msg });
+  }
+});
 
 function parseAgentLlmFromBody(body: unknown): AgentLlmOptions | undefined {
   if (!body || typeof body !== 'object') return undefined;

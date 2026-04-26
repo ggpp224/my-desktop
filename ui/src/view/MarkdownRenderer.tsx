@@ -6,6 +6,7 @@ import remarkGfm from 'remark-gfm';
 
 type MarkdownRendererProps = {
   markdown: string;
+  onLinkClick?: (href: string) => boolean;
 };
 
 const MARKDOWN_SYNTAX_REG = /(^|\n)\s{0,3}(#{1,6}\s|[-*+]\s|\d+\.\s|>\s|```)|\[[^\]]+\]\([^)]+\)|\|.+\|/m;
@@ -73,13 +74,30 @@ function CodeBlock({
   );
 }
 
-export function MarkdownRenderer({ markdown }: MarkdownRendererProps) {
+export function MarkdownRenderer({ markdown, onLinkClick }: MarkdownRendererProps) {
   return (
     <div className="markdown-body gitlab-markdown-body">
       <ReactMarkdown
         remarkPlugins={[remarkGfm]}
         rehypePlugins={[rehypeHighlight]}
         components={{
+          a({ href, children }) {
+            const target = (href ?? '').trim();
+            if (!target) return <span>{children}</span>;
+            return (
+              <a
+                href={target}
+                onClick={(event) => {
+                  const handled = onLinkClick?.(target) ?? false;
+                  if (handled) event.preventDefault();
+                }}
+                target="_blank"
+                rel="noreferrer"
+              >
+                {children}
+              </a>
+            );
+          },
           code({ className, children }) {
             const plainText = extractTextFromNode(children);
             const isBlock = Boolean(className) || plainText.includes('\n');
