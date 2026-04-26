@@ -2,14 +2,17 @@
 import { useState } from 'react';
 import { appendToolResultsToLogs } from './log-tools';
 import type { WorkTerminal } from './MyWorkPanel';
+import type { AppThemeTokens } from './domain/theme/appTheme';
+import { Button } from './view/Button';
 
 interface WorkflowPanelProps {
   apiBase: string;
   addLog: (line: string) => void;
   onStartWorkEmbedded: (payload: { sessionId: string; terminals: WorkTerminal[] }) => void;
+  themeTokens: AppThemeTokens;
 }
 
-export function WorkflowPanel({ apiBase, addLog, onStartWorkEmbedded }: WorkflowPanelProps) {
+export function WorkflowPanel({ apiBase, addLog, onStartWorkEmbedded, themeTokens }: WorkflowPanelProps) {
   const [workflows] = useState<Array<{ name: string; label: string }>>([
     { name: 'start-work', label: '开始工作' },
     { name: 'upgrade-react18-nova', label: '升级集测 react18 的 nova 版本' },
@@ -52,27 +55,23 @@ export function WorkflowPanel({ apiBase, addLog, onStartWorkEmbedded }: Workflow
   };
 
   return (
-    <section style={{ padding: 16, borderBottom: '1px solid #333' }}>
-      <h3 style={{ margin: '0 0 12px', fontSize: 14 }}>Workflow</h3>
+    <section style={{ padding: 16, borderBottom: `1px solid ${themeTokens.panelBorder}` }}>
+      <h3 style={{ margin: '0 0 12px', fontSize: 14, color: themeTokens.textSecondary }}>Workflow</h3>
       <ul style={{ listStyle: 'none', padding: 0, margin: 0 }}>
         {workflows.map(({ name, label }) => (
           <li key={name} style={{ marginBottom: 8 }}>
-            <button
-              type="button"
+            <Button
+              themeTokens={themeTokens}
               onClick={() => runWorkflow(name, label)}
-              style={{
-                width: '100%',
-                padding: '8px 12px',
-                background: '#0f3460',
-                color: '#eaeaea',
-                border: '1px solid #333',
-                borderRadius: 6,
-                cursor: 'pointer',
-                textAlign: 'left',
-              }}
+              loading={running}
+              disabled={running}
+              variant="ghost"
+              size="md"
+              fullWidth
+              style={{ justifyContent: 'flex-start' }}
             >
               {label}
-            </button>
+            </Button>
           </li>
         ))}
       </ul>

@@ -4,7 +4,7 @@ import type { AppThemeId } from '../../domain/theme/appTheme';
 const THEME_STORAGE_KEY = 'ai-dev-control-center:theme';
 
 function isThemeId(value: string): value is AppThemeId {
-  return value === 'blue' || value === 'emerald';
+  return value === 'blue' || value === 'emerald' || value === 'mint-light';
 }
 
 export function loadThemeId(): AppThemeId {

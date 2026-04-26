@@ -1,6 +1,8 @@
 /* AI 生成 By Peng.Guo */
 import { useEffect, useRef, useState } from 'react';
 import { APP_THEME_LABELS, type AppThemeId, type AppThemeTokens } from '../domain/theme/appTheme';
+import { Button } from './Button';
+import { IconButton } from './IconButton';
 
 type ThemeSwitcherProps = {
   value: AppThemeId;
@@ -8,7 +10,7 @@ type ThemeSwitcherProps = {
   onChange: (themeId: AppThemeId) => void;
 };
 
-const THEME_OPTIONS: AppThemeId[] = ['blue', 'emerald'];
+const THEME_OPTIONS: AppThemeId[] = ['blue', 'emerald', 'mint-light'];
 
 export function ThemeSwitcher({ value, tokens, onChange }: ThemeSwitcherProps) {
   const [open, setOpen] = useState(false);
@@ -32,28 +34,15 @@ export function ThemeSwitcher({ value, tokens, onChange }: ThemeSwitcherProps) {
         position: 'relative',
       }}
     >
-      <button
-        type="button"
-        aria-label="换肤"
+      <IconButton
+        themeTokens={tokens}
+        icon="🎨"
+        ariaLabel="换肤"
         title={`当前皮肤：${APP_THEME_LABELS[value]}`}
         onClick={() => setOpen((prev) => !prev)}
-        style={{
-          width: 28,
-          height: 28,
-          borderRadius: '50%',
-          border: `1px solid ${tokens.tabInactiveBorder}`,
-          background: open ? tokens.tabActiveBackground : tokens.tabInactiveBackground,
-          color: tokens.textPrimary,
-          cursor: 'pointer',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          fontSize: 14,
-          fontWeight: 700,
-        }}
-      >
-        🎨
-      </button>
+        variant={open ? 'solid' : 'soft'}
+        size="icon"
+      />
       {open ? (
         <div
           role="listbox"
@@ -75,28 +64,26 @@ export function ThemeSwitcher({ value, tokens, onChange }: ThemeSwitcherProps) {
           {THEME_OPTIONS.map((themeId) => {
             const active = value === themeId;
             return (
-              <button
+              <Button
                 key={themeId}
-                type="button"
+                themeTokens={tokens}
                 onClick={() => {
                   onChange(themeId);
                   setOpen(false);
                 }}
+                variant={active ? 'solid' : 'ghost'}
+                size="sm"
+                fullWidth
                 style={{
-                  width: '100%',
-                  textAlign: 'left',
-                  padding: '8px 10px',
-                  fontSize: 12,
-                  fontWeight: active ? 700 : 500,
+                  justifyContent: 'flex-start',
                   border: 'none',
                   borderBottom: themeId === THEME_OPTIONS[THEME_OPTIONS.length - 1] ? 'none' : `1px solid ${tokens.tabInactiveBorder}`,
-                  cursor: 'pointer',
-                  background: active ? tokens.tabActiveBackground : 'transparent',
-                  color: active ? tokens.textPrimary : tokens.textSecondary,
+                  borderRadius: 0,
+                  fontWeight: active ? 700 : 500,
                 }}
               >
                 {APP_THEME_LABELS[themeId]}
-              </button>
+              </Button>
             );
           })}
         </div>

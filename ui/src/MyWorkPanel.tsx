@@ -4,6 +4,9 @@ import { Terminal } from 'xterm';
 import { FitAddon } from 'xterm-addon-fit';
 import { WebglAddon } from 'xterm-addon-webgl';
 import 'xterm/css/xterm.css';
+import type { AppThemeTokens } from './domain/theme/appTheme';
+import { Button } from './view/Button';
+import { IconButton } from './view/IconButton';
 
 type TerminalStatus = 'running' | 'success' | 'error';
 
@@ -22,6 +25,7 @@ interface MyWorkPanelProps {
   apiBase: string;
   sessionId: string;
   initialTerminals: WorkTerminal[];
+  themeTokens: AppThemeTokens;
 }
 
 /** 新建页签时继承的目录：当前选中页签，若无则第一个页签 */
@@ -31,11 +35,12 @@ function resolveInheritCwdForNewTab(terminals: WorkTerminal[], activeTerminalId:
   return cwd || undefined;
 }
 
-export function MyWorkPanel({ apiBase, sessionId, initialTerminals }: MyWorkPanelProps) {
+export function MyWorkPanel({ apiBase, sessionId, initialTerminals, themeTokens }: MyWorkPanelProps) {
   const [terminals, setTerminals] = useState<WorkTerminal[]>(initialTerminals);
   const [activeTerminalId, setActiveTerminalId] = useState<string>(initialTerminals[0]?.id ?? '');
   const [creatingTerminal, setCreatingTerminal] = useState(false);
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number; path: string } | null>(null);
+  const [hoveredTerminalId, setHoveredTerminalId] = useState<string | null>(null);
   const terminalMountRef = useRef<HTMLDivElement>(null);
   const xtermRef = useRef<Terminal | null>(null);
   const fitAddonRef = useRef<FitAddon | null>(null);
@@ -132,7 +137,7 @@ export function MyWorkPanel({ apiBase, sessionId, initialTerminals }: MyWorkPane
     const terminal = new Terminal({
       cursorBlink: true,
       fontSize: 13,
-      theme: { background: '#020617', foreground: '#e2e8f0' },
+      theme: { background: themeTokens.workspacePanelBackground, foreground: themeTokens.textPrimary },
       convertEol: false,
       scrollback: 5000,
     });
@@ -185,7 +190,7 @@ export function MyWorkPanel({ apiBase, sessionId, initialTerminals }: MyWorkPane
       xtermRef.current = null;
       fitAddonRef.current = null;
     };
-  }, [apiBase]);
+  }, [apiBase, themeTokens.textPrimary, themeTokens.workspacePanelBackground]);
 
   useEffect(() => {
     const terminal = xtermRef.current;
@@ -238,29 +243,25 @@ export function MyWorkPanel({ apiBase, sessionId, initialTerminals }: MyWorkPane
 
   return (
     <section style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
-      <div style={{ display: 'flex', gap: 6, padding: '10px 12px', borderBottom: '1px solid #334155', overflowX: 'auto' }}>
-        <button
-          type="button"
+      <div style={{ display: 'flex', gap: 10, padding: '10px 12px', borderBottom: `1px solid ${themeTokens.inputBorder}`, overflowX: 'auto' }}>
+        <IconButton
+          themeTokens={themeTokens}
+          icon="+"
+          label="新建终端"
           onClick={createManualTerminal}
-          style={{
-            padding: '6px 12px',
-            borderRadius: 6,
-            border: '1px dashed #4f83ff',
-            background: '#0b1220',
-            color: '#93c5fd',
-            cursor: 'pointer',
-            whiteSpace: 'nowrap',
-            flexShrink: 0,
-          }}
+          variant="dashed"
+          size="md"
           title="手动创建空终端（目录与当前页签一致，⌘T / Ctrl+T 同）"
-        >
-          + 新建终端
-        </button>
+          style={{ whiteSpace: 'nowrap', flexShrink: 0 }}
+        />
         {terminals.map((terminal) => {
           const isActive = terminal.id === activeTerminal?.id;
+          const showClose = hoveredTerminalId === terminal.id;
           return (
             <div
               key={terminal.id}
+              onMouseEnter={() => setHoveredTerminalId(terminal.id)}
+              onMouseLeave={() => setHoveredTerminalId((prev) => (prev === terminal.id ? null : prev))}
               onContextMenu={(event) => {
                 event.preventDefault();
                 setContextMenu({ x: event.clientX, y: event.clientY, path: terminal.cwdAbs });
@@ -269,33 +270,34 @@ export function MyWorkPanel({ apiBase, sessionId, initialTerminals }: MyWorkPane
                 display: 'flex',
                 alignItems: 'center',
                 gap: 6,
-                padding: '6px 8px 6px 12px',
-                borderRadius: 6,
-                border: `1px solid ${isActive ? '#4f83ff' : '#334155'}`,
-                background: isActive ? '#1d4ed8' : '#0f172a',
-                color: '#e2e8f0',
+                padding: '0 2px',
+                borderBottom: isActive ? `2px solid ${themeTokens.tabActiveBorder}` : '2px solid transparent',
+                color: isActive ? themeTokens.tabActiveBorder : themeTokens.textSecondary,
                 whiteSpace: 'nowrap',
                 flexShrink: 0,
               }}
               title={`${terminal.cwdAbs} (${terminal.status})`}
             >
-              <button
-                type="button"
+              <Button
+                themeTokens={themeTokens}
                 onClick={() => setActiveTerminalId(terminal.id)}
+                variant="ghost"
+                size="sm"
                 style={{
                   border: 'none',
                   background: 'transparent',
                   color: 'inherit',
-                  cursor: 'pointer',
-                  padding: 0,
-                  font: 'inherit',
+                  padding: '8px 0 9px',
+                  fontSize: 13,
+                  fontWeight: isActive ? 600 : 500,
                 }}
                 title={`${terminal.cwdAbs} (${terminal.status})`}
               >
                 {terminal.title}
-              </button>
-              <button
-                type="button"
+              </Button>
+              <IconButton
+                themeTokens={themeTokens}
+                icon="×"
                 onClick={async () => {
                   try {
                     await fetch(
@@ -314,30 +316,29 @@ export function MyWorkPanel({ apiBase, sessionId, initialTerminals }: MyWorkPane
                   }
                 }}
                 title={`关闭 ${terminal.title}`}
+                variant="ghost"
+                size="icon"
                 style={{
                   border: 'none',
                   background: 'transparent',
-                  color: '#cbd5e1',
-                  cursor: 'pointer',
-                  width: 16,
-                  height: 16,
-                  lineHeight: '16px',
-                  textAlign: 'center',
-                  padding: 0,
+                  color: 'inherit',
+                  cursor: showClose ? 'pointer' : 'default',
+                  opacity: showClose ? 1 : 0,
+                  pointerEvents: showClose ? 'auto' : 'none',
+                  transition: 'opacity 0.12s ease',
+                  marginBottom: 1,
                 }}
-              >
-                ×
-              </button>
+              />
             </div>
           );
         })}
       </div>
-      <div style={{ padding: '8px 12px', color: '#94a3b8', fontSize: 12 }}>
+      <div style={{ padding: '8px 12px', color: themeTokens.textSecondary, fontSize: 12 }}>
         状态：{activeTerminal?.status ?? 'unknown'}
       </div>
       <div
         ref={terminalMountRef}
-        style={{ flex: 1, minHeight: 240, borderTop: '1px solid #1e293b', padding: 8, background: '#020617' }}
+        style={{ flex: 1, minHeight: 240, borderTop: `1px solid ${themeTokens.inputBorder}`, padding: 8, background: themeTokens.workspacePanelBackground }}
       />
       {contextMenu && (
         <div
@@ -345,8 +346,8 @@ export function MyWorkPanel({ apiBase, sessionId, initialTerminals }: MyWorkPane
             position: 'fixed',
             left: contextMenu.x,
             top: contextMenu.y,
-            background: '#0f172a',
-            border: '1px solid #334155',
+            background: themeTokens.tabInactiveBackground,
+            border: `1px solid ${themeTokens.inputBorder}`,
             borderRadius: 6,
             boxShadow: '0 8px 24px rgba(0,0,0,0.35)',
             zIndex: 999,
@@ -354,8 +355,10 @@ export function MyWorkPanel({ apiBase, sessionId, initialTerminals }: MyWorkPane
           }}
           onClick={(event) => event.stopPropagation()}
         >
-          <button
-            type="button"
+          <IconButton
+            themeTokens={themeTokens}
+            icon="⧉"
+            label="复制路径"
             onClick={async () => {
               try {
                 await navigator.clipboard.writeText(contextMenu.path);
@@ -364,18 +367,18 @@ export function MyWorkPanel({ apiBase, sessionId, initialTerminals }: MyWorkPane
               }
               setContextMenu(null);
             }}
+            variant="ghost"
+            size="sm"
+            fullWidth
             style={{
-              width: '100%',
               textAlign: 'left',
               border: 'none',
               background: 'transparent',
-              color: '#e2e8f0',
+              color: themeTokens.textPrimary,
               padding: '8px 12px',
-              cursor: 'pointer',
+              justifyContent: 'flex-start',
             }}
-          >
-            复制路径
-          </button>
+          />
         </div>
       )}
     </section>

@@ -1,10 +1,12 @@
 /* AI 生成 By Peng.Guo */
-import { useState, useRef, useEffect, useLayoutEffect } from 'react';
+import { useState, useRef, useEffect, useLayoutEffect, useMemo } from 'react';
 import { appendToolResultsToLogs } from './log-tools';
 import { withJenkinsMarkdownLink } from './domain/deploy/jenkinsDeployDisplay';
 import type { DeployPollingTarget } from './domain/deploy/models';
 import { LinkifiedText } from './view/LinkifiedText';
 import { isLikelyMarkdown, MarkdownRenderer } from './view/MarkdownRenderer';
+import { Button } from './view/Button';
+import { IconButton } from './view/IconButton';
 import { startDeployPolling } from './viewmodel/deploy/useDeployPolling';
 import type { WorkTerminal } from './MyWorkPanel';
 import {
@@ -213,6 +215,23 @@ const DEPLOY_OPTIONS = [
 /** 指令输入历史最多条数，支持 ↑↓ 切换 */
 const INPUT_HISTORY_MAX = 10;
 const STREAM_FLUSH_INTERVAL_MS = 80;
+
+// AI 生成 By Peng.Guo：仅在下拉中展示可对话模型，过滤 embedding / rerank 等非聊天模型。
+function isLikelyChatModelName(modelName: string): boolean {
+  const name = modelName.trim().toLowerCase();
+  if (!name) return false;
+  const nonChatKeywords = [
+    'embed',
+    'embedding',
+    'bge',
+    'e5-',
+    'mxbai',
+    'rerank',
+    'reranker',
+    'colbert',
+  ];
+  return !nonChatKeywords.some((keyword) => name.includes(keyword));
+}
 
 type ProjectInfo = {
   codes: string[];
@@ -557,7 +576,7 @@ function normalizeCursorRows(data: unknown): CursorUsageRow[] {
   return rows;
 }
 
-function renderCursorUsage(toolResults?: unknown[]) {
+function renderCursorUsage(toolResults: unknown[] | undefined, themeTokens: AppThemeTokens) {
   const payload = extractCursorUsageResult(toolResults);
   if (!payload) return null;
   const dataObj = payload.data && typeof payload.data === 'object' ? (payload.data as Record<string, unknown>) : {};
@@ -583,28 +602,28 @@ function renderCursorUsage(toolResults?: unknown[]) {
   const totalTokens = rows.reduce((sum, row) => sum + (row.tokensNumber ?? 0), 0);
   const totalCost = rows.reduce((sum, row) => sum + (row.costNumber ?? 0), 0);
   return (
-    <div style={{ marginTop: 8, background: '#f3f4f6', color: '#111827', borderRadius: 6, border: '1px solid #d1d5db', padding: 12 }}>
-      {rangeText && <div style={{ fontSize: 13, marginBottom: 10, color: '#374151' }}>{rangeText}</div>}
+    <div style={{ marginTop: 8, background: themeTokens.workspacePanelSubtleBackground, color: themeTokens.textPrimary, borderRadius: 6, border: `1px solid ${themeTokens.inputBorder}`, padding: 12 }}>
+      {rangeText && <div style={{ fontSize: 13, marginBottom: 10, color: themeTokens.textSecondary }}>{rangeText}</div>}
       <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 14 }}>
         <thead>
           <tr>
-            <th style={{ textAlign: 'left', padding: '8px 10px', borderBottom: '1px solid #d1d5db', color: '#4b5563' }}>Item</th>
-            <th style={{ textAlign: 'right', padding: '8px 10px', borderBottom: '1px solid #d1d5db', color: '#4b5563' }}>Tokens</th>
-            <th style={{ textAlign: 'right', padding: '8px 10px', borderBottom: '1px solid #d1d5db', color: '#4b5563' }}>Cost</th>
+            <th style={{ textAlign: 'left', padding: '8px 10px', borderBottom: `1px solid ${themeTokens.inputBorder}`, color: themeTokens.textSecondary }}>Item</th>
+            <th style={{ textAlign: 'right', padding: '8px 10px', borderBottom: `1px solid ${themeTokens.inputBorder}`, color: themeTokens.textSecondary }}>Tokens</th>
+            <th style={{ textAlign: 'right', padding: '8px 10px', borderBottom: `1px solid ${themeTokens.inputBorder}`, color: themeTokens.textSecondary }}>Cost</th>
           </tr>
         </thead>
         <tbody>
           <tr>
-            <td style={{ padding: '10px', borderBottom: '1px solid #d1d5db', fontWeight: 600 }}>Included in Pro</td>
-            <td style={{ borderBottom: '1px solid #d1d5db' }} />
-            <td style={{ borderBottom: '1px solid #d1d5db' }} />
+            <td style={{ padding: '10px', borderBottom: `1px solid ${themeTokens.inputBorder}`, fontWeight: 600 }}>Included in Pro</td>
+            <td style={{ borderBottom: `1px solid ${themeTokens.inputBorder}` }} />
+            <td style={{ borderBottom: `1px solid ${themeTokens.inputBorder}` }} />
           </tr>
           {rows.map((row, idx) => (
             <tr key={`${row.item}-${idx}`}>
-              <td style={{ padding: '9px 10px', borderBottom: '1px solid #e5e7eb' }}>{row.item}</td>
-              <td style={{ padding: '9px 10px', borderBottom: '1px solid #e5e7eb', textAlign: 'right', whiteSpace: 'nowrap' }}>{row.tokensText}</td>
-              <td style={{ padding: '9px 10px', borderBottom: '1px solid #e5e7eb', textAlign: 'right', whiteSpace: 'nowrap' }}>
-                {row.costText} <span style={{ color: '#6b7280' }}>{row.includedText}</span>
+              <td style={{ padding: '9px 10px', borderBottom: `1px solid ${themeTokens.inputBorder}` }}>{row.item}</td>
+              <td style={{ padding: '9px 10px', borderBottom: `1px solid ${themeTokens.inputBorder}`, textAlign: 'right', whiteSpace: 'nowrap' }}>{row.tokensText}</td>
+              <td style={{ padding: '9px 10px', borderBottom: `1px solid ${themeTokens.inputBorder}`, textAlign: 'right', whiteSpace: 'nowrap' }}>
+                {row.costText} <span style={{ color: themeTokens.textSecondary }}>{row.includedText}</span>
               </td>
             </tr>
           ))}
@@ -612,7 +631,7 @@ function renderCursorUsage(toolResults?: unknown[]) {
             <td style={{ padding: '10px', fontWeight: 600 }}>Total</td>
             <td style={{ padding: '10px', textAlign: 'right', fontWeight: 600, whiteSpace: 'nowrap' }}>{formatTokens(totalTokens, '--')}</td>
             <td style={{ padding: '10px', textAlign: 'right', fontWeight: 600, whiteSpace: 'nowrap' }}>
-              {formatCost(totalCost, '--')} <span style={{ color: '#6b7280', fontWeight: 400 }}>Included</span>
+              {formatCost(totalCost, '--')} <span style={{ color: themeTokens.textSecondary, fontWeight: 400 }}>Included</span>
             </td>
           </tr>
         </tbody>
@@ -621,7 +640,7 @@ function renderCursorUsage(toolResults?: unknown[]) {
   );
 }
 
-function renderCursorTodayUsage(toolResults?: unknown[]) {
+function renderCursorTodayUsage(toolResults: unknown[] | undefined, themeTokens: AppThemeTokens) {
   if (!Array.isArray(toolResults)) return null;
   const row = toolResults.find(
     (item) => (item as ToolResultItem | undefined)?.tool === 'get_cursor_today_usage' && (item as ToolResultItem | undefined)?.result
@@ -657,26 +676,26 @@ function renderCursorTodayUsage(toolResults?: unknown[]) {
   });
 
   return (
-    <div style={{ marginTop: 8, background: '#f3f4f6', color: '#111827', borderRadius: 10, border: '1px solid #d1d5db', padding: 10 }}>
+    <div style={{ marginTop: 8, background: themeTokens.workspacePanelSubtleBackground, color: themeTokens.textPrimary, borderRadius: 10, border: `1px solid ${themeTokens.inputBorder}`, padding: 10 }}>
       <div style={{ overflowX: 'auto' }}>
         <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 14 }}>
           <thead>
             <tr>
-              <th style={{ textAlign: 'left', padding: '8px 10px', borderBottom: '1px solid #d1d5db', color: '#6b7280' }}>Date</th>
-              <th style={{ textAlign: 'left', padding: '8px 10px', borderBottom: '1px solid #d1d5db', color: '#6b7280' }}>Type</th>
-              <th style={{ textAlign: 'left', padding: '8px 10px', borderBottom: '1px solid #d1d5db', color: '#6b7280' }}>Model</th>
-              <th style={{ textAlign: 'right', padding: '8px 10px', borderBottom: '1px solid #d1d5db', color: '#6b7280' }}>Tokens</th>
-              <th style={{ textAlign: 'right', padding: '8px 10px', borderBottom: '1px solid #d1d5db', color: '#6b7280' }}>Cost</th>
+              <th style={{ textAlign: 'left', padding: '8px 10px', borderBottom: `1px solid ${themeTokens.inputBorder}`, color: themeTokens.textSecondary }}>Date</th>
+              <th style={{ textAlign: 'left', padding: '8px 10px', borderBottom: `1px solid ${themeTokens.inputBorder}`, color: themeTokens.textSecondary }}>Type</th>
+              <th style={{ textAlign: 'left', padding: '8px 10px', borderBottom: `1px solid ${themeTokens.inputBorder}`, color: themeTokens.textSecondary }}>Model</th>
+              <th style={{ textAlign: 'right', padding: '8px 10px', borderBottom: `1px solid ${themeTokens.inputBorder}`, color: themeTokens.textSecondary }}>Tokens</th>
+              <th style={{ textAlign: 'right', padding: '8px 10px', borderBottom: `1px solid ${themeTokens.inputBorder}`, color: themeTokens.textSecondary }}>Cost</th>
             </tr>
           </thead>
           <tbody>
             {rows.map((item, idx) => (
               <tr key={`${item.date}-${idx}`}>
-                <td style={{ padding: '10px', borderBottom: '1px solid #e5e7eb' }}>{item.date}</td>
-                <td style={{ padding: '10px', borderBottom: '1px solid #e5e7eb' }}>{item.type}</td>
-                <td style={{ padding: '10px', borderBottom: '1px solid #e5e7eb' }}>{item.model}</td>
-                <td style={{ padding: '10px', borderBottom: '1px solid #e5e7eb', textAlign: 'right', whiteSpace: 'nowrap' }}>{item.tokensText}</td>
-                <td style={{ padding: '10px', borderBottom: '1px solid #e5e7eb', textAlign: 'right', whiteSpace: 'nowrap' }}>{item.costText}</td>
+                <td style={{ padding: '10px', borderBottom: `1px solid ${themeTokens.inputBorder}` }}>{item.date}</td>
+                <td style={{ padding: '10px', borderBottom: `1px solid ${themeTokens.inputBorder}` }}>{item.type}</td>
+                <td style={{ padding: '10px', borderBottom: `1px solid ${themeTokens.inputBorder}` }}>{item.model}</td>
+                <td style={{ padding: '10px', borderBottom: `1px solid ${themeTokens.inputBorder}`, textAlign: 'right', whiteSpace: 'nowrap' }}>{item.tokensText}</td>
+                <td style={{ padding: '10px', borderBottom: `1px solid ${themeTokens.inputBorder}`, textAlign: 'right', whiteSpace: 'nowrap' }}>{item.costText}</td>
               </tr>
             ))}
           </tbody>
@@ -687,8 +706,8 @@ function renderCursorTodayUsage(toolResults?: unknown[]) {
 }
 
 /* AI 生成 By Peng.Guo：Confluence 新版/表格粘贴优先写 text/html，纯文本槽位放 Wiki 作降级；HTML 顶部带与纯文本一致的首行说明 */
-async function copyWeeklyReportToClipboard(leadLine: string, htmlFragment: string, wikiPlain: string): Promise<void> {
-  const leadHtml = `<p style="margin:0 0 0.75em;font-size:13px;color:#cbd5e1;">${escapeHtmlForClipboard(leadLine)}</p>`;
+async function copyWeeklyReportToClipboard(leadLine: string, htmlFragment: string, wikiPlain: string, leadColor: string): Promise<void> {
+  const leadHtml = `<p style="margin:0 0 0.75em;font-size:13px;color:${leadColor};">${escapeHtmlForClipboard(leadLine)}</p>`;
   const fullHtml = `<!DOCTYPE html><html><head><meta charset="utf-8"></head><body>${leadHtml}${htmlFragment}</body></html>`;
   const plain = `${leadLine}\n\n${wikiPlain}`.trim();
   try {
@@ -707,6 +726,7 @@ function renderToolResults(
   toolResults: unknown[] | undefined,
   onTip: (message: string) => void,
   copyCtx: ReportCopyLlmContext,
+  themeTokens: AppThemeTokens,
   onOpenKnowledgeDoc?: (sourcePath: string) => void,
 ) {
   // AI 生成 By Peng.Guo：列出知识库文档
@@ -714,15 +734,15 @@ function renderToolResults(
   if (listDocsResult) {
     const docs = Array.isArray(listDocsResult.docs) ? listDocsResult.docs : [];
     return (
-      <div style={{ marginTop: 8, background: '#1a1a2e', borderRadius: 6, border: '1px solid #2a2a3d', padding: 10 }}>
-        <div style={{ fontSize: 12, color: listDocsResult.success ? '#86efac' : '#fca5a5', marginBottom: 8 }}>
+      <div style={{ marginTop: 8, background: themeTokens.workspacePanelSubtleBackground, borderRadius: 6, border: `1px solid ${themeTokens.inputBorder}`, padding: 10 }}>
+        <div style={{ fontSize: 12, color: listDocsResult.success ? themeTokens.statusSuccess : themeTokens.statusError, marginBottom: 8 }}>
           {listDocsResult.success ? '知识库文档列表' : '获取文档列表失败'}
           {typeof listDocsResult.totalCount === 'number' ? (
-            <span style={{ color: '#94a3b8', marginLeft: 8 }}>共 {listDocsResult.totalCount} 个文档</span>
+            <span style={{ color: themeTokens.textSecondary, marginLeft: 8 }}>共 {listDocsResult.totalCount} 个文档</span>
           ) : null}
         </div>
         {listDocsResult.error ? (
-          <div style={{ fontSize: 12, color: '#fecaca', marginBottom: 8 }}>{listDocsResult.error}</div>
+          <div style={{ fontSize: 12, color: themeTokens.statusError, marginBottom: 8 }}>{listDocsResult.error}</div>
         ) : null}
         {docs.length > 0 ? (
           <div style={{ maxHeight: 400, overflow: 'auto' }}>
@@ -733,14 +753,14 @@ function renderToolResults(
                   marginBottom: 8,
                   padding: 8,
                   borderRadius: 4,
-                  background: '#0f172a',
-                  border: '1px solid #1f2937',
+                  background: themeTokens.workspacePanelBackground,
+                  border: `1px solid ${themeTokens.inputBorder}`,
                 }}
               >
-                <div style={{ fontSize: 12, color: '#93c5fd', marginBottom: 4 }}>
+                <div style={{ fontSize: 12, color: themeTokens.tabActiveBorder, marginBottom: 4 }}>
                   {doc.relativePath || doc.filePath || '未知路径'}
                 </div>
-                <div style={{ fontSize: 11, color: '#64748b', display: 'flex', gap: 12 }}>
+                <div style={{ fontSize: 11, color: themeTokens.textSecondary, display: 'flex', gap: 12 }}>
                   {typeof doc.size === 'number' ? (
                     <span>大小: {(doc.size / 1024).toFixed(2)} KB</span>
                   ) : null}
@@ -759,31 +779,31 @@ function renderToolResults(
   const rebuildKb = extractRebuildKnowledgeBaseResult(toolResults);
   if (rebuildKb) {
     return (
-      <div style={{ marginTop: 8, background: '#1a1a2e', borderRadius: 6, border: '1px solid #2a2a3d', padding: 10 }}>
-        <div style={{ fontSize: 12, color: rebuildKb.success ? '#86efac' : '#fca5a5', marginBottom: 8 }}>
+      <div style={{ marginTop: 8, background: themeTokens.workspacePanelSubtleBackground, borderRadius: 6, border: `1px solid ${themeTokens.inputBorder}`, padding: 10 }}>
+        <div style={{ fontSize: 12, color: rebuildKb.success ? themeTokens.statusSuccess : themeTokens.statusError, marginBottom: 8 }}>
           {rebuildKb.success ? '知识库索引重建完成' : '知识库索引重建失败'}
         </div>
         {typeof rebuildKb.docsCount === 'number' ? (
-          <div style={{ fontSize: 12, color: '#cbd5e1' }}>纳入文档数：{rebuildKb.docsCount}</div>
+          <div style={{ fontSize: 12, color: themeTokens.textPrimary }}>纳入文档数：{rebuildKb.docsCount}</div>
         ) : null}
-        {rebuildKb.error ? <div style={{ fontSize: 12, color: '#fecaca', marginTop: 6 }}>{rebuildKb.error}</div> : null}
+        {rebuildKb.error ? <div style={{ fontSize: 12, color: themeTokens.statusError, marginTop: 6 }}>{rebuildKb.error}</div> : null}
       </div>
     );
   }
   const clearKb = extractClearPrivateKnowledgeBaseResult(toolResults);
   if (clearKb) {
     return (
-      <div style={{ marginTop: 8, background: '#1a1a2e', borderRadius: 6, border: '1px solid #2a2a3d', padding: 10 }}>
-        <div style={{ fontSize: 12, color: clearKb.success ? '#86efac' : '#fca5a5', marginBottom: 8 }}>
+      <div style={{ marginTop: 8, background: themeTokens.workspacePanelSubtleBackground, borderRadius: 6, border: `1px solid ${themeTokens.inputBorder}`, padding: 10 }}>
+        <div style={{ fontSize: 12, color: clearKb.success ? themeTokens.statusSuccess : themeTokens.statusError, marginBottom: 8 }}>
           {clearKb.success ? '私人知识库已清除' : '清除私人知识库失败'}
         </div>
         {clearKb.removedDocsDir ? (
-          <div style={{ fontSize: 12, color: '#cbd5e1' }}>文档目录：{clearKb.removedDocsDir}</div>
+          <div style={{ fontSize: 12, color: themeTokens.textPrimary }}>文档目录：{clearKb.removedDocsDir}</div>
         ) : null}
         {clearKb.removedIndexDir ? (
-          <div style={{ fontSize: 12, color: '#cbd5e1', marginTop: 4 }}>索引目录：{clearKb.removedIndexDir}</div>
+          <div style={{ fontSize: 12, color: themeTokens.textPrimary, marginTop: 4 }}>索引目录：{clearKb.removedIndexDir}</div>
         ) : null}
-        {clearKb.error ? <div style={{ fontSize: 12, color: '#fecaca', marginTop: 6 }}>{clearKb.error}</div> : null}
+        {clearKb.error ? <div style={{ fontSize: 12, color: themeTokens.statusError, marginTop: 6 }}>{clearKb.error}</div> : null}
       </div>
     );
   }
@@ -792,64 +812,67 @@ function renderToolResults(
     const citations = Array.isArray(kbResult.citations) ? kbResult.citations : [];
     const hasAnswer = typeof kbResult.answer === 'string' && kbResult.answer.trim().length > 0;
     return (
-      <div style={{ marginTop: 8, background: '#1a1a2e', borderRadius: 6, border: '1px solid #2a2a3d', padding: 10 }}>
-        <div style={{ fontSize: 12, color: kbResult.success ? '#86efac' : '#fca5a5', marginBottom: 8 }}>
+      <div style={{ marginTop: 8, background: themeTokens.workspacePanelSubtleBackground, borderRadius: 6, border: `1px solid ${themeTokens.inputBorder}`, padding: 10 }}>
+        <div style={{ fontSize: 12, color: kbResult.success ? themeTokens.statusSuccess : themeTokens.statusError, marginBottom: 8 }}>
           {kbResult.success ? '知识库命中' : '知识库查询失败'}
-          {typeof kbResult.docsCount === 'number' ? <span style={{ color: '#94a3b8', marginLeft: 8 }}>文档数：{kbResult.docsCount}</span> : null}
+          {typeof kbResult.docsCount === 'number' ? <span style={{ color: themeTokens.textSecondary, marginLeft: 8 }}>文档数：{kbResult.docsCount}</span> : null}
           {kbResult.model?.chat ? (
-            <span style={{ color: '#64748b', marginLeft: 8 }}>
+            <span style={{ color: themeTokens.textSecondary, marginLeft: 8 }}>
               chat={kbResult.model.chat} / embed={kbResult.model.embed ?? '--'}
             </span>
           ) : null}
         </div>
-        {kbResult.error ? <div style={{ fontSize: 12, color: '#fecaca', marginBottom: 8 }}>{kbResult.error}</div> : null}
+        {kbResult.error ? <div style={{ fontSize: 12, color: themeTokens.statusError, marginBottom: 8 }}>{kbResult.error}</div> : null}
         {hasAnswer ? (
           <div style={{ marginBottom: citations.length ? 10 : 0 }}>
             {isLikelyMarkdown(kbResult.answer ?? '') ? (
-              <MarkdownRenderer markdown={kbResult.answer ?? ''} />
+              <MarkdownRenderer markdown={kbResult.answer ?? ''} themeTokens={themeTokens} />
             ) : (
-              <div style={{ whiteSpace: 'pre-wrap', color: '#e2e8f0', fontSize: 13, lineHeight: 1.65 }}>{kbResult.answer}</div>
+              <div style={{ whiteSpace: 'pre-wrap', color: themeTokens.textPrimary, fontSize: 13, lineHeight: 1.65 }}>{kbResult.answer}</div>
             )}
           </div>
         ) : null}
         {citations.length > 0 ? (
           <div>
-            <div style={{ fontSize: 12, color: '#94a3b8', marginBottom: 6 }}>
-              引用来源 <span style={{ color: '#64748b' }}>（次要信息，默认折叠）</span>
+            <div style={{ fontSize: 12, color: themeTokens.textSecondary, marginBottom: 6 }}>
+              引用来源 <span style={{ color: themeTokens.textSecondary }}>（次要信息，默认折叠）</span>
             </div>
             {citations.slice(0, 4).map((item, idx) => (
               <div
                 key={`${item.path ?? 'source'}-${idx}`}
-                style={{ marginBottom: 6, padding: '6px 8px', borderRadius: 4, background: '#0f172a', border: '1px solid #1f2937' }}
+                style={{ marginBottom: 6, padding: '6px 8px', borderRadius: 4, background: themeTokens.workspacePanelBackground, border: `1px solid ${themeTokens.inputBorder}` }}
               >
-                <div style={{ fontSize: 12, color: '#93c5fd', marginBottom: 2 }} title={item.path || '未知来源'}>
+                <div style={{ fontSize: 12, color: themeTokens.tabActiveBorder, marginBottom: 2 }} title={item.path || '未知来源'}>
                   {item.path ? (
-                    <button
+                    <Button
+                      themeTokens={themeTokens}
                       type="button"
                       onClick={() => onOpenKnowledgeDoc?.(item.path ?? '')}
+                      variant="text"
+                      size="sm"
                       style={{
                         border: 'none',
                         background: 'transparent',
-                        color: '#93c5fd',
-                        cursor: 'pointer',
+                        color: themeTokens.tabActiveBorder,
                         padding: 0,
                         fontSize: 12,
                         textDecoration: 'underline',
+                        height: 'auto',
                       }}
                     >
                       {getCitationLabel(item.path)}
-                    </button>
+                    </Button>
                   ) : (
                     getCitationLabel(item.path)
                   )}
-                  {typeof item.score === 'number' ? <span style={{ color: '#64748b', marginLeft: 6 }}>score={item.score.toFixed(3)}</span> : null}
+                  {typeof item.score === 'number' ? <span style={{ color: themeTokens.textSecondary, marginLeft: 6 }}>score={item.score.toFixed(3)}</span> : null}
                 </div>
-                <div style={{ color: '#94a3b8', fontSize: 12, lineHeight: 1.45 }}>{getCitationPreview(item.snippet)}</div>
+                <div style={{ color: themeTokens.textSecondary, fontSize: 12, lineHeight: 1.45 }}>{getCitationPreview(item.snippet)}</div>
                 {item.snippet ? (
                   <details style={{ marginTop: 4 }}>
-                    <summary style={{ fontSize: 12, color: '#64748b', cursor: 'pointer', userSelect: 'none' }}>展开片段</summary>
+                    <summary style={{ fontSize: 12, color: themeTokens.textSecondary, cursor: 'pointer', userSelect: 'none' }}>展开片段</summary>
                     <div style={{ marginTop: 6 }}>
-                      <MarkdownRenderer markdown={item.snippet} />
+                      <MarkdownRenderer markdown={item.snippet} themeTokens={themeTokens} />
                     </div>
                   </details>
                 ) : null}
@@ -867,18 +890,19 @@ function renderToolResults(
     const titleCount = Array.isArray(weeklyReport.jiraTitles) ? weeklyReport.jiraTitles.length : weeklyReport.total ?? 0;
     const reportLead = buildWeeklyReportLeadLine(titleCount, copyCtx);
     return (
-      <div style={{ marginTop: 8, background: '#1a1a2e', borderRadius: 6, border: '1px solid #2a2a3d', padding: 10 }}>
-        <div style={{ fontSize: 12, color: '#94a3b8', marginBottom: 8, display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8 }}>
+      <div style={{ marginTop: 8, background: themeTokens.workspacePanelSubtleBackground, borderRadius: 6, border: `1px solid ${themeTokens.inputBorder}`, padding: 10 }}>
+        <div style={{ fontSize: 12, color: themeTokens.textSecondary, marginBottom: 8, display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8 }}>
           <span>
             {reportLead}
-            {reportHtml ? <span style={{ color: '#64748b', marginLeft: 8 }}>（复制带富文本，便于贴表格/新版编辑器）</span> : null}
+            {reportHtml ? <span style={{ color: themeTokens.textSecondary, marginLeft: 8 }}>（复制带富文本，便于贴表格/新版编辑器）</span> : null}
           </span>
-          <button
+          <Button
+            themeTokens={themeTokens}
             type="button"
             onClick={async () => {
               try {
                 if (reportHtml) {
-                  await copyWeeklyReportToClipboard(reportLead, reportHtml, reportWiki ?? '');
+                  await copyWeeklyReportToClipboard(reportLead, reportHtml, reportWiki ?? '', themeTokens.textSecondary);
                   onTip('已复制：富文本 HTML + 纯文本（Wiki）');
                 } else {
                   await navigator.clipboard.writeText(`${reportLead}\n\n${reportWiki ?? ''}`.trim());
@@ -888,32 +912,25 @@ function renderToolResults(
                 onTip('复制失败，请手动复制');
               }
             }}
-            style={{
-              padding: '4px 10px',
-              borderRadius: 4,
-              border: '1px solid #475569',
-              background: '#0f3460',
-              color: '#e2e8f0',
-              cursor: 'pointer',
-              fontSize: 12,
-            }}
+            variant="solid"
+            size="sm"
           >
             复制周报
-          </button>
+          </Button>
         </div>
         {reportHtml ? (
           <>
             <style>
               {`
-              .weekly-report-html { font-size: 13px; line-height: 1.55; color: #e2e8f0; }
-              .weekly-report-html h1 { font-size: 1.2rem; margin: 0.35em 0 0.15em; font-weight: 700; color: #f8fafc; }
-              .weekly-report-html h2 { font-size: 1.05rem; margin: 0.3em 0 0.12em; font-weight: 600; color: #e2e8f0; }
-              .weekly-report-html h3 { font-size: 1rem; margin: 0.25em 0 0.1em; color: #cbd5e1; }
+              .weekly-report-html { font-size: 13px; line-height: 1.55; color: ${themeTokens.textPrimary}; }
+              .weekly-report-html h1 { font-size: 1.2rem; margin: 0.35em 0 0.15em; font-weight: 700; color: ${themeTokens.textPrimary}; }
+              .weekly-report-html h2 { font-size: 1.05rem; margin: 0.3em 0 0.12em; font-weight: 600; color: ${themeTokens.textPrimary}; }
+              .weekly-report-html h3 { font-size: 1rem; margin: 0.25em 0 0.1em; color: ${themeTokens.textSecondary}; }
               .weekly-report-html ul, .weekly-report-html ol { margin: 0.2em 0 0.3em 1em; padding: 0; }
               .weekly-report-html li { margin: 0.1em 0; }
               .weekly-report-html p { margin: 0.15em 0; }
-              .weekly-report-html pre { background: #111827; padding: 8px; border-radius: 4px; overflow: auto; font-size: 12px; }
-              .weekly-report-html a { color: #93c5fd; }
+              .weekly-report-html pre { background: ${themeTokens.workspacePanelBackground}; padding: 8px; border-radius: 4px; overflow: auto; font-size: 12px; }
+              .weekly-report-html a { color: ${themeTokens.tabActiveBorder}; }
             `}
             </style>
             <div
@@ -924,7 +941,7 @@ function renderToolResults(
             />
           </>
         ) : (
-          <div style={{ whiteSpace: 'pre-wrap', color: '#e2e8f0', fontSize: 13, lineHeight: 1.7 }}>{reportWiki}</div>
+          <div style={{ whiteSpace: 'pre-wrap', color: themeTokens.textPrimary, fontSize: 13, lineHeight: 1.7 }}>{reportWiki}</div>
         )}
       </div>
     );
@@ -937,19 +954,20 @@ function renderToolResults(
     const teamCopyLead = buildTeamSummaryCopyLeadLine(copyCtx);
     const teamSubLine = `本周组内总结${meta ? ` · ${meta}` : ''} · 来源 HTML 约 ${teamSummary.sourceHtmlChars ?? 0} 字符`;
     return (
-      <div style={{ marginTop: 8, background: '#1a1a2e', borderRadius: 6, border: '1px solid #2a2a3d', padding: 10 }}>
-        <div style={{ fontSize: 12, color: '#94a3b8', marginBottom: 8, display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 8 }}>
+      <div style={{ marginTop: 8, background: themeTokens.workspacePanelSubtleBackground, borderRadius: 6, border: `1px solid ${themeTokens.inputBorder}`, padding: 10 }}>
+        <div style={{ fontSize: 12, color: themeTokens.textSecondary, marginBottom: 8, display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 8 }}>
           <span style={{ lineHeight: 1.45, flex: 1, minWidth: 0 }}>
-            <span style={{ color: '#e2e8f0' }}>{teamCopyLead}</span>
-            <div style={{ color: '#64748b', fontSize: 11, marginTop: 4 }}>{teamSubLine}</div>
-            {teamReportHtml ? <span style={{ color: '#64748b', fontSize: 11 }}>（复制带富文本）</span> : null}
+            <span style={{ color: themeTokens.textPrimary }}>{teamCopyLead}</span>
+            <div style={{ color: themeTokens.textSecondary, fontSize: 11, marginTop: 4 }}>{teamSubLine}</div>
+            {teamReportHtml ? <span style={{ color: themeTokens.textSecondary, fontSize: 11 }}>（复制带富文本）</span> : null}
           </span>
-          <button
+          <Button
+            themeTokens={themeTokens}
             type="button"
             onClick={async () => {
               try {
                 if (teamReportHtml) {
-                  await copyWeeklyReportToClipboard(teamCopyLead, teamReportHtml, teamReportWiki ?? '');
+                  await copyWeeklyReportToClipboard(teamCopyLead, teamReportHtml, teamReportWiki ?? '', themeTokens.textSecondary);
                   onTip('已复制：富文本 HTML + 纯文本（Wiki）');
                 } else {
                   await navigator.clipboard.writeText(`${teamCopyLead}\n\n${teamReportWiki ?? ''}`.trim());
@@ -959,22 +977,15 @@ function renderToolResults(
                 onTip('复制失败，请手动复制');
               }
             }}
-            style={{
-              padding: '4px 10px',
-              borderRadius: 4,
-              border: '1px solid #475569',
-              background: '#0f3460',
-              color: '#e2e8f0',
-              cursor: 'pointer',
-              fontSize: 12,
-            }}
+            variant="solid"
+            size="sm"
           >
             复制组内总结
-          </button>
+          </Button>
         </div>
         {teamSummary.wikiTargetUrl ? (
-          <div style={{ fontSize: 11, color: '#64748b', marginBottom: 8 }}>
-            <a href={teamSummary.wikiTargetUrl} target="_blank" rel="noreferrer" style={{ color: '#93c5fd' }}>
+          <div style={{ fontSize: 11, color: themeTokens.textSecondary, marginBottom: 8 }}>
+            <a href={teamSummary.wikiTargetUrl} target="_blank" rel="noreferrer" style={{ color: themeTokens.tabActiveBorder }}>
               打开 wiki 源页
             </a>
           </div>
@@ -983,15 +994,15 @@ function renderToolResults(
           <>
             <style>
               {`
-              .weekly-report-html { font-size: 13px; line-height: 1.55; color: #e2e8f0; }
-              .weekly-report-html h1 { font-size: 1.2rem; margin: 0.35em 0 0.15em; font-weight: 700; color: #f8fafc; }
-              .weekly-report-html h2 { font-size: 1.05rem; margin: 0.3em 0 0.12em; font-weight: 600; color: #e2e8f0; }
-              .weekly-report-html h3 { font-size: 1rem; margin: 0.25em 0 0.1em; color: #cbd5e1; }
+              .weekly-report-html { font-size: 13px; line-height: 1.55; color: ${themeTokens.textPrimary}; }
+              .weekly-report-html h1 { font-size: 1.2rem; margin: 0.35em 0 0.15em; font-weight: 700; color: ${themeTokens.textPrimary}; }
+              .weekly-report-html h2 { font-size: 1.05rem; margin: 0.3em 0 0.12em; font-weight: 600; color: ${themeTokens.textPrimary}; }
+              .weekly-report-html h3 { font-size: 1rem; margin: 0.25em 0 0.1em; color: ${themeTokens.textSecondary}; }
               .weekly-report-html ul, .weekly-report-html ol { margin: 0.2em 0 0.3em 1em; padding: 0; }
               .weekly-report-html li { margin: 0.1em 0; }
               .weekly-report-html p { margin: 0.15em 0; }
-              .weekly-report-html pre { background: #111827; padding: 8px; border-radius: 4px; overflow: auto; font-size: 12px; }
-              .weekly-report-html a { color: #93c5fd; }
+              .weekly-report-html pre { background: ${themeTokens.workspacePanelBackground}; padding: 8px; border-radius: 4px; overflow: auto; font-size: 12px; }
+              .weekly-report-html a { color: ${themeTokens.tabActiveBorder}; }
             `}
             </style>
             <div
@@ -1002,7 +1013,7 @@ function renderToolResults(
             />
           </>
         ) : (
-          <div style={{ whiteSpace: 'pre-wrap', color: '#e2e8f0', fontSize: 13, lineHeight: 1.7 }}>{teamReportWiki}</div>
+          <div style={{ whiteSpace: 'pre-wrap', color: themeTokens.textPrimary, fontSize: 13, lineHeight: 1.7 }}>{teamReportWiki}</div>
         )}
       </div>
     );
@@ -1012,14 +1023,14 @@ function renderToolResults(
     const ok = wikiWeeklyFetch.success === true;
     const body = (wikiWeeklyFetch.bodyStorage ?? '').trim();
     return (
-      <div style={{ marginTop: 8, background: '#1a1a2e', borderRadius: 6, border: '1px solid #2a2a3d', padding: 10 }}>
-        <div style={{ fontSize: 13, fontWeight: 600, color: ok ? '#86efac' : '#fca5a5', marginBottom: 8 }}>
+      <div style={{ marginTop: 8, background: themeTokens.workspacePanelSubtleBackground, borderRadius: 6, border: `1px solid ${themeTokens.inputBorder}`, padding: 10 }}>
+        <div style={{ fontSize: 13, fontWeight: 600, color: ok ? themeTokens.statusSuccess : themeTokens.statusError, marginBottom: 8 }}>
           {ok ? '已抓取周报页信息' : '抓取周报页失败'}
         </div>
         {wikiWeeklyFetch.error ? (
-          <div style={{ fontSize: 12, color: '#fecaca', marginBottom: 8, whiteSpace: 'pre-wrap' }}>{wikiWeeklyFetch.error}</div>
+          <div style={{ fontSize: 12, color: themeTokens.statusError, marginBottom: 8, whiteSpace: 'pre-wrap' }}>{wikiWeeklyFetch.error}</div>
         ) : null}
-        <div style={{ fontSize: 12, color: '#94a3b8', lineHeight: 1.6, marginBottom: 8 }}>
+        <div style={{ fontSize: 12, color: themeTokens.textSecondary, lineHeight: 1.6, marginBottom: 8 }}>
           {wikiWeeklyFetch.quarter ? <div>季度：{wikiWeeklyFetch.quarter}</div> : null}
           {wikiWeeklyFetch.weekRange ? <div>周区间：{wikiWeeklyFetch.weekRange}</div> : null}
           {wikiWeeklyFetch.pageId ? <div>pageId：{wikiWeeklyFetch.pageId}</div> : null}
@@ -1033,7 +1044,7 @@ function renderToolResults(
           {wikiWeeklyFetch.targetUrl ? (
             <div style={{ marginTop: 6 }}>
               页面：{' '}
-              <a href={wikiWeeklyFetch.targetUrl} target="_blank" rel="noreferrer" style={{ color: '#93c5fd' }}>
+              <a href={wikiWeeklyFetch.targetUrl} target="_blank" rel="noreferrer" style={{ color: themeTokens.tabActiveBorder }}>
                 打开
               </a>
             </div>
@@ -1047,8 +1058,8 @@ function renderToolResults(
               overflow: 'auto',
               fontSize: 11,
               lineHeight: 1.45,
-              color: '#e2e8f0',
-              background: '#0f172a',
+              color: themeTokens.textPrimary,
+              background: themeTokens.workspacePanelBackground,
               padding: 10,
               borderRadius: 4,
               whiteSpace: 'pre-wrap',
@@ -1058,7 +1069,7 @@ function renderToolResults(
             {body}
           </pre>
         ) : ok && !body ? (
-          <div style={{ fontSize: 12, color: '#94a3b8' }}>正文为空（实例可能未返回 body.storage / body.view）。</div>
+          <div style={{ fontSize: 12, color: themeTokens.textSecondary }}>正文为空（实例可能未返回 body.storage / body.view）。</div>
         ) : null}
       </div>
     );
@@ -1067,46 +1078,46 @@ function renderToolResults(
   if (myBugs) {
     const issues = myBugs.issues ?? [];
     return (
-      <div style={{ marginTop: 8, background: '#1a1a2e', borderRadius: 6, border: '1px solid #2a2a3d', overflow: 'hidden' }}>
-        <div style={{ padding: '8px 10px', fontSize: 12, color: '#94a3b8', borderBottom: '1px solid #2a2a3d' }}>
+      <div style={{ marginTop: 8, background: themeTokens.workspacePanelSubtleBackground, borderRadius: 6, border: `1px solid ${themeTokens.inputBorder}`, overflow: 'hidden' }}>
+        <div style={{ padding: '8px 10px', fontSize: 12, color: themeTokens.textSecondary, borderBottom: `1px solid ${themeTokens.inputBorder}` }}>
           共 {myBugs.total ?? issues.length} 条，当前展示 {issues.length} 条
         </div>
         <div style={{ overflowX: 'auto' }}>
-          <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12, color: '#e2e8f0', tableLayout: 'fixed' }}>
+          <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12, color: themeTokens.textPrimary, tableLayout: 'fixed' }}>
             <thead>
-              <tr style={{ background: '#111827' }}>
-                <th style={{ width: '12%', textAlign: 'left', padding: '8px 10px', borderBottom: '1px solid #2a2a3d' }}>关键字</th>
-                <th style={{ width: '30%', textAlign: 'left', padding: '8px 10px', borderBottom: '1px solid #2a2a3d' }}>摘要</th>
-                <th style={{ width: '9%', textAlign: 'left', padding: '8px 10px', borderBottom: '1px solid #2a2a3d' }}>状态</th>
-                <th style={{ width: '9%', textAlign: 'left', padding: '8px 10px', borderBottom: '1px solid #2a2a3d' }}>解决结果</th>
-                <th style={{ width: '11%', textAlign: 'left', padding: '8px 10px', borderBottom: '1px solid #2a2a3d' }}>修复版本</th>
-                <th style={{ width: '11%', textAlign: 'left', padding: '8px 10px', borderBottom: '1px solid #2a2a3d' }}>经办人</th>
-                <th style={{ width: '18%', textAlign: 'left', padding: '8px 10px', borderBottom: '1px solid #2a2a3d' }}>开发人员</th>
+              <tr style={{ background: themeTokens.workspacePanelBackground }}>
+                <th style={{ width: '12%', textAlign: 'left', padding: '8px 10px', borderBottom: `1px solid ${themeTokens.inputBorder}` }}>关键字</th>
+                <th style={{ width: '30%', textAlign: 'left', padding: '8px 10px', borderBottom: `1px solid ${themeTokens.inputBorder}` }}>摘要</th>
+                <th style={{ width: '9%', textAlign: 'left', padding: '8px 10px', borderBottom: `1px solid ${themeTokens.inputBorder}` }}>状态</th>
+                <th style={{ width: '9%', textAlign: 'left', padding: '8px 10px', borderBottom: `1px solid ${themeTokens.inputBorder}` }}>解决结果</th>
+                <th style={{ width: '11%', textAlign: 'left', padding: '8px 10px', borderBottom: `1px solid ${themeTokens.inputBorder}` }}>修复版本</th>
+                <th style={{ width: '11%', textAlign: 'left', padding: '8px 10px', borderBottom: `1px solid ${themeTokens.inputBorder}` }}>经办人</th>
+                <th style={{ width: '18%', textAlign: 'left', padding: '8px 10px', borderBottom: `1px solid ${themeTokens.inputBorder}` }}>开发人员</th>
               </tr>
             </thead>
             <tbody>
               {issues.map((issue, idx) => (
-                <tr key={`${issue.key ?? 'issue'}-${idx}`} style={{ background: idx % 2 === 0 ? '#0f172a' : '#111827' }}>
-                  <td style={{ padding: '8px 10px', borderBottom: '1px solid #2a2a3d', whiteSpace: 'nowrap' }}>
+                <tr key={`${issue.key ?? 'issue'}-${idx}`} style={{ background: idx % 2 === 0 ? themeTokens.workspacePanelSubtleBackground : themeTokens.workspacePanelBackground }}>
+                  <td style={{ padding: '8px 10px', borderBottom: `1px solid ${themeTokens.inputBorder}`, whiteSpace: 'nowrap' }}>
                     {issue.url ? (
-                      <a href={issue.url} target="_blank" rel="noreferrer" style={{ color: '#93c5fd', textDecoration: 'none' }}>
+                      <a href={issue.url} target="_blank" rel="noreferrer" style={{ color: themeTokens.tabActiveBorder, textDecoration: 'none' }}>
                         {issue.key || '--'}
                       </a>
                     ) : (
                       issue.key || '--'
                     )}
                   </td>
-                  <td style={{ padding: '8px 10px', borderBottom: '1px solid #2a2a3d', wordBreak: 'break-word' }}>{issue.summary || '--'}</td>
-                  <td style={{ padding: '8px 10px', borderBottom: '1px solid #2a2a3d', wordBreak: 'break-word' }}>{issue.status || '--'}</td>
-                  <td style={{ padding: '8px 10px', borderBottom: '1px solid #2a2a3d', wordBreak: 'break-word' }}>{issue.resolution || '--'}</td>
-                  <td style={{ padding: '8px 10px', borderBottom: '1px solid #2a2a3d', wordBreak: 'break-word' }}>{issue.fixVersion || '--'}</td>
-                  <td style={{ padding: '8px 10px', borderBottom: '1px solid #2a2a3d', wordBreak: 'break-word' }}>{issue.assignee || '--'}</td>
-                  <td style={{ padding: '8px 10px', borderBottom: '1px solid #2a2a3d', wordBreak: 'break-word' }}>{issue.developer ?? '—'}</td>
+                  <td style={{ padding: '8px 10px', borderBottom: `1px solid ${themeTokens.inputBorder}`, wordBreak: 'break-word' }}>{issue.summary || '--'}</td>
+                  <td style={{ padding: '8px 10px', borderBottom: `1px solid ${themeTokens.inputBorder}`, wordBreak: 'break-word' }}>{issue.status || '--'}</td>
+                  <td style={{ padding: '8px 10px', borderBottom: `1px solid ${themeTokens.inputBorder}`, wordBreak: 'break-word' }}>{issue.resolution || '--'}</td>
+                  <td style={{ padding: '8px 10px', borderBottom: `1px solid ${themeTokens.inputBorder}`, wordBreak: 'break-word' }}>{issue.fixVersion || '--'}</td>
+                  <td style={{ padding: '8px 10px', borderBottom: `1px solid ${themeTokens.inputBorder}`, wordBreak: 'break-word' }}>{issue.assignee || '--'}</td>
+                  <td style={{ padding: '8px 10px', borderBottom: `1px solid ${themeTokens.inputBorder}`, wordBreak: 'break-word' }}>{issue.developer ?? '—'}</td>
                 </tr>
               ))}
               {issues.length === 0 && (
                 <tr>
-                  <td colSpan={7} style={{ padding: '10px', color: '#94a3b8' }}>
+                  <td colSpan={7} style={{ padding: '10px', color: themeTokens.textSecondary }}>
                     暂无数据
                   </td>
                 </tr>
@@ -1117,13 +1128,13 @@ function renderToolResults(
       </div>
     );
   }
-  const cursorTodayUsage = renderCursorTodayUsage(toolResults);
+  const cursorTodayUsage = renderCursorTodayUsage(toolResults, themeTokens);
   if (cursorTodayUsage) return cursorTodayUsage;
-  const cursorUsage = renderCursorUsage(toolResults);
+  const cursorUsage = renderCursorUsage(toolResults, themeTokens);
   if (cursorUsage) return cursorUsage;
   if (toolResults && toolResults.length > 0) {
     return (
-      <pre style={{ marginTop: 8, fontSize: 12, background: '#1a1a2e', padding: 8, borderRadius: 4, overflow: 'auto' }}>
+      <pre style={{ marginTop: 8, fontSize: 12, background: themeTokens.workspacePanelSubtleBackground, color: themeTokens.textPrimary, padding: 8, borderRadius: 4, overflow: 'auto' }}>
         {JSON.stringify(toolResults, null, 2)}
       </pre>
     );
@@ -1157,10 +1168,13 @@ export function ChatPanel({ apiBase, addLog, onStartWorkEmbedded, onOpenKnowledg
   const [completionIndex, setCompletionIndex] = useState(0);
   const [showCompletion, setShowCompletion] = useState(false);
   const [tipMessage, setTipMessage] = useState('');
-  const [sendBtnHovered, setSendBtnHovered] = useState(false);
-  const [sendBtnPressed, setSendBtnPressed] = useState(false);
   const [liveTokenMetrics, setLiveTokenMetrics] = useState<LiveTokenMetrics | null>(null);
   const [projects, setProjects] = useState<ProjectInfo[]>([]);
+  const chatModelOptions = useMemo(
+    () => installedModels.filter((name) => isLikelyChatModelName(name)),
+    [installedModels]
+  );
+  const selectedChatModel = chatModelOptions.includes(currentModel) ? currentModel : '';
   const deployPollRef = useRef<{ stop: () => void } | null>(null);
   const inputWrapRef = useRef<HTMLDivElement>(null);
   const feedbackListRef = useRef<HTMLDivElement>(null);
@@ -1627,44 +1641,27 @@ export function ChatPanel({ apiBase, addLog, onStartWorkEmbedded, onOpenKnowledg
     <section style={{ flex: 1, display: 'flex', flexDirection: 'column', minHeight: 0, padding: 16 }}>
       <div style={{ marginBottom: 12, display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
         {QUICK_ACTIONS.map(({ label, message }) => (
-          <button
+          <Button
             key={label}
+            themeTokens={themeTokens}
             type="button"
             onClick={() => send(message)}
-            style={{
-              padding: '8px 14px',
-              background: themeTokens.accentButtonBackground,
-              color: themeTokens.textPrimary,
-              border: `1px solid ${themeTokens.accentButtonBorder}`,
-              borderRadius: 6,
-              cursor: 'pointer',
-            }}
+            variant="ghost"
+            size="md"
           >
             {label}
-          </button>
+          </Button>
         ))}
-        <button
+        <IconButton
+          themeTokens={themeTokens}
+          icon="⊗"
           type="button"
           onClick={() => setMessages([])}
           title="清屏"
-          style={{
-            marginLeft: 'auto',
-            width: 28,
-            height: 28,
-            padding: 0,
-            border: `1px solid ${themeTokens.panelBorder}`,
-            borderRadius: 6,
-            background: themeTokens.inputBackground,
-            color: themeTokens.textSecondary,
-            cursor: 'pointer',
-            fontSize: 14,
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-          }}
-        >
-          ⊗
-        </button>
+          variant="soft"
+          size="icon"
+          style={{ marginLeft: 'auto' }}
+        />
       </div>
       <div
         ref={feedbackListRef}
@@ -1679,14 +1676,14 @@ export function ChatPanel({ apiBase, addLog, onStartWorkEmbedded, onOpenKnowledg
         }}
       >
         {messages.length === 0 && (
-          <p style={{ color: '#888' }}>
+          <p style={{ color: themeTokens.textSecondary }}>
             [Chat] 输入指令或点击上方快捷按钮，例如：开始工作、终端打开 react18、升级集测react18的nova版本、启动 react18、打开 Jenkins、部署order-service
           </p>
         )}
         {messages.map((m, i) => (
-          <div key={i} style={{ marginBottom: 12 }}>
-            <strong style={{ color: m.role === 'user' ? '#7f9cf5' : '#68d391' }}>{m.role === 'user' ? 'You' : 'AI'}:</strong>{' '}
-            <LinkifiedText text={m.content} />
+          <div key={i} style={{ marginBottom: 12, color: themeTokens.textPrimary }}>
+            <strong style={{ color: m.role === 'user' ? themeTokens.tabActiveBorder : themeTokens.accentButtonBackground }}>{m.role === 'user' ? 'You' : 'AI'}:</strong>{' '}
+            <LinkifiedText text={m.content} linkColor={themeTokens.tabActiveBorder} />
             {renderToolResults(
               m.toolResults,
               setTipMessage,
@@ -1695,6 +1692,7 @@ export function ChatPanel({ apiBase, addLog, onStartWorkEmbedded, onOpenKnowledg
                 ollamaModelName: currentModel,
                 agentChatLlmBody,
               },
+              themeTokens,
               onOpenKnowledgeDoc
             )}
           </div>
@@ -1711,23 +1709,23 @@ export function ChatPanel({ apiBase, addLog, onStartWorkEmbedded, onOpenKnowledg
             }}
           >
             {liveTokenMetrics && (
-              <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', fontSize: 11, color: '#94a3b8', marginBottom: 8 }}>
+              <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', fontSize: 11, color: themeTokens.textSecondary, marginBottom: 8 }}>
                 <span>Input: {liveTokenMetrics.inputTokens}</span>
                 <span>Output: {liveTokenMetrics.outputTokens}</span>
                 <span>Speed: {liveTokenMetrics.speedTps.toFixed(1)} tok/s</span>
-                <span style={{ color: '#86efac' }}>后端实时统计</span>
+                <span style={{ color: themeTokens.statusSuccess }}>后端实时统计</span>
               </div>
             )}
             {streamLive.thinking ? (
               <>
-                <div style={{ fontSize: 13, color: '#c4b5fd', marginBottom: 8, fontWeight: 600 }}>Thinking…</div>
+                <div style={{ fontSize: 13, color: themeTokens.textSecondary, marginBottom: 8, fontWeight: 600 }}>Thinking…</div>
                 <pre
                   style={{
                     margin: '0 0 8px',
                     whiteSpace: 'pre-wrap',
                     wordBreak: 'break-word',
                     fontSize: 12,
-                    color: '#e9d5ff',
+                    color: themeTokens.textPrimary,
                     maxHeight: 280,
                     overflow: 'auto',
                     lineHeight: 1.45,
@@ -1736,27 +1734,27 @@ export function ChatPanel({ apiBase, addLog, onStartWorkEmbedded, onOpenKnowledg
                   {streamLive.thinking}
                 </pre>
                 {streamLive.content ? (
-                  <div style={{ fontSize: 12, color: '#86efac', margin: '0 0 8px' }}>...done thinking.</div>
+                  <div style={{ fontSize: 12, color: themeTokens.statusSuccess, margin: '0 0 8px' }}>...done thinking.</div>
                 ) : null}
               </>
             ) : (
               !streamLive.content && (
-                <div style={{ fontSize: 13, color: '#c4b5fd', marginBottom: 8, fontWeight: 600 }}>Thinking…</div>
+                <div style={{ fontSize: 13, color: themeTokens.textSecondary, marginBottom: 8, fontWeight: 600 }}>Thinking…</div>
               )
             )}
             {!streamLive.thinking && !streamLive.content && (
-              <div style={{ fontSize: 12, color: '#64748b' }}>已请求流式推理；若久无文字请升级 Ollama；仅在使用支持 thinking 的模型且需要思考流时配置 OLLAMA_THINK</div>
+              <div style={{ fontSize: 12, color: themeTokens.textSecondary }}>已请求流式推理；若久无文字请升级 Ollama；仅在使用支持 thinking 的模型且需要思考流时配置 OLLAMA_THINK</div>
             )}
             {streamLive.content ? (
               <>
-                <div style={{ fontSize: 11, color: '#94a3b8', margin: '0 0 6px' }}>Answer</div>
+                <div style={{ fontSize: 11, color: themeTokens.textSecondary, margin: '0 0 6px' }}>Answer</div>
                 <pre
                   style={{
                     margin: 0,
                     whiteSpace: 'pre-wrap',
                     wordBreak: 'break-word',
                     fontSize: 13,
-                    color: '#e2e8f0',
+                    color: themeTokens.textPrimary,
                     maxHeight: 320,
                     overflow: 'auto',
                     lineHeight: 1.45,
@@ -1774,15 +1772,15 @@ export function ChatPanel({ apiBase, addLog, onStartWorkEmbedded, onOpenKnowledg
               marginBottom: 12,
               padding: 12,
               borderRadius: 8,
-              border: '1px solid #3b2f5c',
-              background: '#130a1e',
+              border: `1px solid ${themeTokens.inputBorder}`,
+              background: themeTokens.workspacePanelSubtleBackground,
               fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace',
             }}
           >
-            <div style={{ fontSize: 12, color: '#a78bfa', marginBottom: 8, fontWeight: 600 }}>工具内流式输出（知识库 / 周报 / 组内总结）</div>
+            <div style={{ fontSize: 12, color: themeTokens.textSecondary, marginBottom: 8, fontWeight: 600 }}>工具内流式输出（知识库 / 周报 / 组内总结）</div>
             {toolStreamLive.thinking ? (
               <>
-                <div style={{ fontSize: 11, color: '#c4b5fd', marginBottom: 4 }}>Thinking</div>
+                <div style={{ fontSize: 11, color: themeTokens.textSecondary, marginBottom: 4 }}>Thinking</div>
                 <pre
                   ref={toolStreamThinkingPreRef}
                   onScroll={(e) => {
@@ -1795,7 +1793,7 @@ export function ChatPanel({ apiBase, addLog, onStartWorkEmbedded, onOpenKnowledg
                     whiteSpace: 'pre-wrap',
                     wordBreak: 'break-word',
                     fontSize: 12,
-                    color: '#e9d5ff',
+                    color: themeTokens.textPrimary,
                     maxHeight: 260,
                     overflow: 'auto',
                     lineHeight: 1.45,
@@ -1807,7 +1805,7 @@ export function ChatPanel({ apiBase, addLog, onStartWorkEmbedded, onOpenKnowledg
             ) : null}
             {toolStreamLive.content ? (
               <>
-                <div style={{ fontSize: 11, color: '#94a3b8', marginBottom: 4 }}>正文</div>
+                <div style={{ fontSize: 11, color: themeTokens.textSecondary, marginBottom: 4 }}>正文</div>
                 <pre
                   ref={toolStreamContentPreRef}
                   onScroll={(e) => {
@@ -1820,7 +1818,7 @@ export function ChatPanel({ apiBase, addLog, onStartWorkEmbedded, onOpenKnowledg
                     whiteSpace: 'pre-wrap',
                     wordBreak: 'break-word',
                     fontSize: 13,
-                    color: '#f1f5f9',
+                    color: themeTokens.textPrimary,
                     maxHeight: 360,
                     overflow: 'auto',
                     lineHeight: 1.45,
@@ -1830,7 +1828,7 @@ export function ChatPanel({ apiBase, addLog, onStartWorkEmbedded, onOpenKnowledg
                 </pre>
               </>
             ) : !toolStreamLive.thinking ? (
-              <div style={{ fontSize: 12, color: '#64748b' }}>等待模型输出…</div>
+              <div style={{ fontSize: 12, color: themeTokens.textSecondary }}>等待模型输出…</div>
             ) : null}
           </div>
         )}
@@ -1840,22 +1838,22 @@ export function ChatPanel({ apiBase, addLog, onStartWorkEmbedded, onOpenKnowledg
               marginBottom: 12,
               padding: 10,
               borderRadius: 8,
-              border: '1px solid #1e3a5f',
-              background: '#0c1526',
+              border: `1px solid ${themeTokens.inputBorder}`,
+              background: themeTokens.workspacePanelSubtleBackground,
               maxHeight: 200,
               overflow: 'auto',
             }}
           >
-            <div style={{ fontSize: 11, color: '#64748b', marginBottom: 6 }}>工具执行进度</div>
+            <div style={{ fontSize: 11, color: themeTokens.textSecondary, marginBottom: 6 }}>工具执行进度</div>
             {toolProgressLines.slice(-14).map((line, idx) => (
-              <div key={`${idx}-${line.slice(0, 24)}`} style={{ fontSize: 12, color: '#cbd5e1', marginBottom: 4, lineHeight: 1.4 }}>
+              <div key={`${idx}-${line.slice(0, 24)}`} style={{ fontSize: 12, color: themeTokens.textPrimary, marginBottom: 4, lineHeight: 1.4 }}>
                 {line}
               </div>
             ))}
           </div>
         )}
         {loading && (
-          <p style={{ color: '#888' }}>
+          <p style={{ color: themeTokens.textSecondary }}>
             {toolStreamLive && (toolStreamLive.thinking || toolStreamLive.content)
               ? '流式输出中（见上方「工具内流式输出」）…'
               : streamLive
@@ -2027,7 +2025,7 @@ export function ChatPanel({ apiBase, addLog, onStartWorkEmbedded, onOpenKnowledg
           {llmRuntimeMode === 'local' ? (
             <div style={{ display: 'flex', flexDirection: 'column', gap: 6, alignItems: 'stretch', width: '100%' }}>
               <select
-                value={currentModel}
+                value={selectedChatModel}
                 onFocus={refreshOllamaModels}
                 onChange={(e) => void handleModelSelectChange(e.target.value)}
                 title="从本机已安装模型中选择；切换时会停止当前推理并卸载上一模型"
@@ -2043,56 +2041,30 @@ export function ChatPanel({ apiBase, addLog, onStartWorkEmbedded, onOpenKnowledg
                   cursor: 'pointer',
                 }}
               >
-                {currentModel && !installedModels.includes(currentModel) && (
+                {currentModel && !chatModelOptions.includes(currentModel) && (
                   <option value={currentModel}>{currentModel}</option>
                 )}
-                {installedModels.length === 0 && !currentModel && <option value="">（无已安装模型）</option>}
-                {installedModels.map((name) => (
+                {chatModelOptions.length === 0 && !selectedChatModel && <option value="">（无可用聊天模型）</option>}
+                {chatModelOptions.map((name) => (
                   <option key={name} value={name}>
                     {name}
                   </option>
                 ))}
               </select>
-              <button
+              <Button
+                themeTokens={themeTokens}
                 type="submit"
-                onMouseEnter={() => setSendBtnHovered(true)}
-                onMouseLeave={() => {
-                  setSendBtnHovered(false);
-                  setSendBtnPressed(false);
-                }}
-                onMouseDown={() => setSendBtnPressed(true)}
-                onMouseUp={() => setSendBtnPressed(false)}
-                style={{
-                  width: '100%',
-                  height: 38,
-                  padding: '0 12px',
-                  background: sendBtnPressed
-                    ? themeTokens.tabInactiveBackground
-                    : sendBtnHovered
-                      ? themeTokens.tabActiveBackground
-                      : themeTokens.accentButtonBackground,
-                  color: themeTokens.textPrimary,
-                  border: sendBtnHovered
-                    ? `1px solid ${themeTokens.tabActiveBorder}`
-                    : `1px solid ${themeTokens.accentButtonBorder}`,
-                  borderRadius: 6,
-                  cursor: 'pointer',
-                  fontWeight: 600,
-                  lineHeight: 1,
-                  transform: sendBtnPressed ? 'translateY(1px)' : 'translateY(0)',
-                  boxShadow: sendBtnHovered
-                    ? '0 4px 12px rgba(15, 52, 96, 0.35)'
-                    : '0 2px 6px rgba(15, 52, 96, 0.2)',
-                  transition: 'background-color 120ms ease, border-color 120ms ease, box-shadow 120ms ease, transform 80ms ease',
-                }}
+                variant="solid"
+                size="md"
+                fullWidth
               >
                 发送
-              </button>
+              </Button>
             </div>
           ) : (
-            <div style={{ fontSize: 12, color: '#94a3b8', textAlign: 'right', maxWidth: 220, lineHeight: 1.45 }}>
+            <div style={{ fontSize: 12, color: themeTokens.textSecondary, textAlign: 'right', maxWidth: 220, lineHeight: 1.45 }}>
               外部 Gemini
-              <div style={{ color: '#64748b', marginTop: 4 }}>
+              <div style={{ color: themeTokens.textSecondary, marginTop: 4 }}>
                 {agentChatLlmBody?.mode === 'external' ? agentChatLlmBody.model : '--'}
                 {agentChatLlmBody?.mode === 'external' && !agentChatLlmBody.apiKey ? (
                   <span style={{ display: 'block', marginTop: 4 }}>Key：服务端环境变量</span>
@@ -2101,41 +2073,15 @@ export function ChatPanel({ apiBase, addLog, onStartWorkEmbedded, onOpenKnowledg
             </div>
           )}
           {llmRuntimeMode !== 'local' && (
-            <button
+            <Button
+              themeTokens={themeTokens}
               type="submit"
-              onMouseEnter={() => setSendBtnHovered(true)}
-              onMouseLeave={() => {
-                setSendBtnHovered(false);
-                setSendBtnPressed(false);
-              }}
-              onMouseDown={() => setSendBtnPressed(true)}
-              onMouseUp={() => setSendBtnPressed(false)}
-              style={{
-                width: '100%',
-                height: 38,
-                padding: '0 12px',
-                background: sendBtnPressed
-                  ? themeTokens.tabInactiveBackground
-                  : sendBtnHovered
-                    ? themeTokens.tabActiveBackground
-                    : themeTokens.accentButtonBackground,
-                color: themeTokens.textPrimary,
-                border: sendBtnHovered
-                  ? `1px solid ${themeTokens.tabActiveBorder}`
-                  : `1px solid ${themeTokens.accentButtonBorder}`,
-                borderRadius: 6,
-                cursor: 'pointer',
-                fontWeight: 600,
-                lineHeight: 1,
-                transform: sendBtnPressed ? 'translateY(1px)' : 'translateY(0)',
-                boxShadow: sendBtnHovered
-                  ? '0 4px 12px rgba(15, 52, 96, 0.35)'
-                  : '0 2px 6px rgba(15, 52, 96, 0.2)',
-                transition: 'background-color 120ms ease, border-color 120ms ease, box-shadow 120ms ease, transform 80ms ease',
-              }}
+              variant="solid"
+              size="md"
+              fullWidth
             >
               发送
-            </button>
+            </Button>
           )}
         </div>
       </form>

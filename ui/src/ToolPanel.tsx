@@ -1,4 +1,6 @@
 /* AI 生成 By Peng.Guo */
+import type { AppThemeTokens } from './domain/theme/appTheme';
+
 const TOOLS = [
   { name: 'run_workflow', desc: '执行工作流（如：开始工作、执行 start-work）' },
   { name: 'run_workflow_step', desc: '执行工作流单步（如：启动 cpxy、启动 react18、启动 scm）' },
@@ -16,14 +18,18 @@ const TOOLS = [
   { name: 'run_shell', desc: '执行 shell 命令' },
 ];
 
-export function ToolPanel() {
+type ToolPanelProps = {
+  themeTokens: AppThemeTokens;
+};
+
+export function ToolPanel({ themeTokens }: ToolPanelProps) {
   return (
     <section style={{ padding: 16, flex: 1 }}>
-      <h3 style={{ margin: '0 0 12px', fontSize: 14 }}>Tools</h3>
+      <h3 style={{ margin: '0 0 12px', fontSize: 14, color: themeTokens.textSecondary }}>Tools</h3>
       <ul style={{ listStyle: 'none', padding: 0, margin: 0 }}>
         {TOOLS.map((t) => (
-          <li key={t.name} style={{ marginBottom: 8, fontSize: 13, color: '#aaa' }}>
-            <strong style={{ color: '#eaeaea' }}>{t.name}</strong> — {t.desc}
+          <li key={t.name} style={{ marginBottom: 8, fontSize: 13, color: themeTokens.textSecondary }}>
+            <strong style={{ color: themeTokens.textPrimary }}>{t.name}</strong> — {t.desc}
           </li>
         ))}
       </ul>

@@ -1,6 +1,7 @@
 /* AI 生成 By Peng.Guo */
 import { useEffect, useRef } from 'react';
 import type { AppThemeTokens } from './domain/theme/appTheme';
+import { IconButton } from './view/IconButton';
 
 interface LogsPanelProps {
   logs: string[];
@@ -32,28 +33,15 @@ export function LogsPanel({ logs, width = 400, onClear, themeTokens }: LogsPanel
     >
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '12px 12px 12px 12px', borderBottom: `1px solid ${themeTokens.panelBorder}`, flexShrink: 0 }}>
         <h3 style={{ margin: 0, fontSize: 14, color: themeTokens.textPrimary }}>Logs</h3>
-        <button
-          type="button"
+        <IconButton
+          themeTokens={themeTokens}
+          icon="⊗"
           onClick={onClear}
           title="清空 Logs"
           disabled={!onClear}
-          style={{
-            width: 28,
-            height: 28,
-            padding: 0,
-            border: `1px solid ${themeTokens.panelBorder}`,
-            borderRadius: 6,
-            background: onClear ? themeTokens.inputBackground : themeTokens.tabInactiveBackground,
-            color: themeTokens.textSecondary,
-            cursor: onClear ? 'pointer' : 'default',
-            fontSize: 14,
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-          }}
-        >
-          ⊗
-        </button>
+          variant="soft"
+          size="icon"
+        />
       </div>
       <pre
         ref={preRef}

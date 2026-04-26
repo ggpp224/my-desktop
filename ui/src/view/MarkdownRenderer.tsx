@@ -3,10 +3,13 @@ import { isValidElement, useMemo, useState } from 'react';
 import ReactMarkdown from 'react-markdown';
 import rehypeHighlight from 'rehype-highlight';
 import remarkGfm from 'remark-gfm';
+import { APP_THEME_TOKENS, type AppThemeTokens } from '../domain/theme/appTheme';
+import { Button } from './Button';
 
 type MarkdownRendererProps = {
   markdown: string;
   onLinkClick?: (href: string) => boolean;
+  themeTokens?: AppThemeTokens;
 };
 
 const MARKDOWN_SYNTAX_REG = /(^|\n)\s{0,3}(#{1,6}\s|[-*+]\s|\d+\.\s|>\s|```)|\[[^\]]+\]\([^)]+\)|\|.+\|/m;
@@ -40,9 +43,11 @@ function parseCodeLanguage(className?: string): string {
 function CodeBlock({
   className,
   children,
+  themeTokens,
 }: {
   className?: string;
   children: React.ReactNode;
+  themeTokens: AppThemeTokens;
 }) {
   const [copied, setCopied] = useState(false);
   const codeText = useMemo(() => extractTextFromNode(children).replace(/\n$/, ''), [children]);
@@ -63,9 +68,14 @@ function CodeBlock({
     <div className="gitlab-md-code-block" data-code-key={key}>
       <div className="gitlab-md-code-toolbar">
         <span>{language || 'text'}</span>
-        <button type="button" onClick={() => void handleCopy()}>
+        <Button
+          themeTokens={themeTokens}
+          variant="soft"
+          size="sm"
+          onClick={() => void handleCopy()}
+        >
           {copied ? '已复制' : '复制'}
-        </button>
+        </Button>
       </div>
       <pre>
         <code className={className}>{children}</code>
@@ -74,7 +84,7 @@ function CodeBlock({
   );
 }
 
-export function MarkdownRenderer({ markdown, onLinkClick }: MarkdownRendererProps) {
+export function MarkdownRenderer({ markdown, onLinkClick, themeTokens = APP_THEME_TOKENS.blue }: MarkdownRendererProps) {
   return (
     <div className="markdown-body gitlab-markdown-body">
       <ReactMarkdown
@@ -102,7 +112,7 @@ export function MarkdownRenderer({ markdown, onLinkClick }: MarkdownRendererProp
             const plainText = extractTextFromNode(children);
             const isBlock = Boolean(className) || plainText.includes('\n');
             if (!isBlock) return <code className={className}>{children}</code>;
-            return <CodeBlock className={className}>{children}</CodeBlock>;
+            return <CodeBlock className={className} themeTokens={themeTokens}>{children}</CodeBlock>;
           },
         }}
       >

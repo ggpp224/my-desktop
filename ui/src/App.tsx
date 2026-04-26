@@ -8,7 +8,10 @@ import { MyWorkPanel, type WorkTerminal } from './MyWorkPanel';
 import { KnowledgeBasePanel } from './KnowledgeBasePanel';
 import { KnowledgeDocPanel } from './KnowledgeDocPanel';
 import { LlmSettingsModal } from './view/LlmSettingsModal';
+import { HeaderTabNav } from './view/HeaderTabNav';
 import { ThemeSwitcher } from './view/ThemeSwitcher';
+import { Button } from './view/Button';
+import { IconButton } from './view/IconButton';
 import { loadLlmSettings, saveLlmSettings } from './infrastructure/llm/llmSettingsRepository';
 import { buildAgentChatLlmBody } from './domain/llm/agentLlmRequest';
 import type { GeminiUserSettings, LlmRuntimeMode } from './domain/llm/agentLlmRequest';
@@ -79,7 +82,6 @@ export default function App() {
   const agentChatLlmBody = useMemo(() => buildAgentChatLlmBody(llmMode, geminiSettings), [llmMode, geminiSettings]);
   const [activeHeaderTab, setActiveHeaderTab] = useState<string>(HEADER_TABS[0].key);
   const [headerTabs, setHeaderTabs] = useState<HeaderTab[]>(HEADER_TABS);
-  const [hoveredHeaderTab, setHoveredHeaderTab] = useState<string | null>(null);
   const [myWorkSessionId, setMyWorkSessionId] = useState('');
   const [myWorkTerminals, setMyWorkTerminals] = useState<WorkTerminal[]>([]);
   const [leftCollapsed, setLeftCollapsed] = useState(true);
@@ -262,86 +264,22 @@ export default function App() {
     <div style={{ display: 'flex', flexDirection: 'column', height: '100vh', background: themeTokens.appBackground }}>
       <header style={{ padding: '12px 16px', borderBottom: `1px solid ${themeTokens.panelBorder}`, background: themeTokens.headerBackground, display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 16 }}>
         <div style={{ flex: 1, minWidth: 0 }}>
-          <nav aria-label="头部功能页签" style={{ display: 'flex', gap: 6 }}>
-            {headerTabs.map((tab) => {
-              const isActive = activeHeaderTab === tab.key;
-              const closable = tab.key !== 'workspace';
-              return (
-                <div
-                  key={tab.key}
-                  onMouseEnter={() => setHoveredHeaderTab(tab.key)}
-                  onMouseLeave={() => setHoveredHeaderTab((prev) => (prev === tab.key ? null : prev))}
-                  style={{
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    position: 'relative',
-                    padding: '8px 14px',
-                    borderRadius: 6,
-                    border: `1px solid ${isActive ? themeTokens.tabActiveBorder : themeTokens.tabInactiveBorder}`,
-                    background: isActive ? themeTokens.tabActiveBackground : themeTokens.tabInactiveBackground,
-                    color: themeTokens.textPrimary,
-                    fontSize: 14,
-                    fontWeight: 600,
-                  }}
-                >
-                  <button
-                    type="button"
-                    onClick={() => setActiveHeaderTab(tab.key)}
-                    style={{
-                      border: 'none',
-                      background: 'transparent',
-                      color: 'inherit',
-                      cursor: 'pointer',
-                      padding: 0,
-                      font: 'inherit',
-                      fontWeight: 600,
-                      minWidth: 72,
-                      textAlign: 'center',
-                    }}
-                  >
-                    {tab.label}
-                  </button>
-                  {closable && (
-                    <button
-                      type="button"
-                      onClick={() => void closeHeaderTab(tab.key)}
-                      title={`关闭 ${tab.label}`}
-                      style={{
-                        position: 'absolute',
-                        right: 8,
-                        top: '50%',
-                        transform: 'translateY(-50%)',
-                        border: 'none',
-                        background: 'transparent',
-                        color: '#cbd5e1',
-                        cursor: hoveredHeaderTab === tab.key ? 'pointer' : 'default',
-                        width: 16,
-                        height: 16,
-                        lineHeight: '16px',
-                        textAlign: 'center',
-                        padding: 0,
-                        opacity: hoveredHeaderTab === tab.key ? 1 : 0,
-                        pointerEvents: hoveredHeaderTab === tab.key ? 'auto' : 'none',
-                        transition: 'opacity 0.12s ease',
-                      }}
-                    >
-                      ×
-                    </button>
-                  )}
-                </div>
-              );
-            })}
-          </nav>
+          <HeaderTabNav
+            tabs={headerTabs}
+            activeTabKey={activeHeaderTab}
+            themeTokens={themeTokens}
+            onTabClick={setActiveHeaderTab}
+            onTabClose={(tabKey) => void closeHeaderTab(tabKey)}
+          />
           {llmMode === 'local' && ollamaOk === false && (
-            <p style={{ margin: '8px 0 0', fontSize: 12, color: '#f59e0b' }}>
-              请先安装并启动 Ollama，并拉取模型（如 ollama pull qwen2.5）。<a href="https://ollama.com" target="_blank" rel="noreferrer" style={{ color: '#93c5fd' }}>文档</a>
+            <p style={{ margin: '8px 0 0', fontSize: 12, color: themeTokens.statusWarning }}>
+              请先安装并启动 Ollama，并拉取模型（如 ollama pull qwen2.5）。<a href="https://ollama.com" target="_blank" rel="noreferrer" style={{ color: themeTokens.tabActiveBorder }}>文档</a>
             </p>
           )}
           {llmMode === 'external' && !geminiSettings.apiKey.trim() && (
-            <p style={{ margin: '8px 0 0', fontSize: 12, color: '#94a3b8' }}>
-              外部模式：未在界面填写 Key 时，将使用启动 API 进程中的 <code style={{ color: '#cbd5e1' }}>GEMINI_API_KEY</code> /{' '}
-              <code style={{ color: '#cbd5e1' }}>GOOGLE_API_KEY</code>（与 A2UI 相同，可在 shell 中 export）。
+            <p style={{ margin: '8px 0 0', fontSize: 12, color: themeTokens.textSecondary }}>
+              外部模式：未在界面填写 Key 时，将使用启动 API 进程中的 <code style={{ color: themeTokens.textPrimary }}>GEMINI_API_KEY</code> /{' '}
+              <code style={{ color: themeTokens.textPrimary }}>GOOGLE_API_KEY</code>（与 A2UI 相同，可在 shell 中 export）。
             </p>
           )}
         </div>
@@ -354,80 +292,56 @@ export default function App() {
           <div
             role="group"
             aria-label="本地或外部模型"
-            style={{ display: 'flex', borderRadius: 8, overflow: 'hidden', border: '1px solid #475569', background: '#0f172a' }}
+            style={{ display: 'flex', borderRadius: 8, overflow: 'hidden', border: `1px solid ${themeTokens.tabInactiveBorder}`, background: themeTokens.tabInactiveBackground }}
           >
-            <button
-              type="button"
+            <Button
+              themeTokens={themeTokens}
               onClick={() => {
                 const next: LlmRuntimeMode = 'local';
                 setLlmMode(next);
                 saveLlmSettings({ mode: next, gemini: geminiSettings });
               }}
-              style={{
-                padding: '6px 12px',
-                fontSize: 12,
-                fontWeight: 600,
-                border: 'none',
-                cursor: 'pointer',
-                background: llmMode === 'local' ? '#1d4ed8' : 'transparent',
-                color: llmMode === 'local' ? '#f8fafc' : '#94a3b8',
-              }}
+              variant={llmMode === 'local' ? 'solid' : 'ghost'}
+              size="sm"
+              style={{ border: 'none', borderRadius: 0 }}
             >
               本地
-            </button>
-            <button
-              type="button"
+            </Button>
+            <Button
+              themeTokens={themeTokens}
               onClick={() => {
                 const next: LlmRuntimeMode = 'external';
                 setLlmMode(next);
                 saveLlmSettings({ mode: next, gemini: geminiSettings });
               }}
-              style={{
-                padding: '6px 12px',
-                fontSize: 12,
-                fontWeight: 600,
-                border: 'none',
-                borderLeft: '1px solid #334155',
-                cursor: 'pointer',
-                background: llmMode === 'external' ? '#1d4ed8' : 'transparent',
-                color: llmMode === 'external' ? '#f8fafc' : '#94a3b8',
-              }}
+              variant={llmMode === 'external' ? 'solid' : 'ghost'}
+              size="sm"
+              style={{ border: 'none', borderLeft: `1px solid ${themeTokens.tabInactiveBorder}`, borderRadius: 0 }}
             >
               外部
-            </button>
+            </Button>
           </div>
           <div ref={settingsRef} style={{ position: 'relative' }}>
-            <button
-              type="button"
+            <IconButton
+              themeTokens={themeTokens}
+              icon="⚙"
               onClick={(e) => {
                 e.stopPropagation();
                 setSettingsOpen((v) => !v);
                 setHelpOpen(false);
               }}
               title="设置：外部模型（Gemini）"
-              style={{
-                width: 28,
-                height: 28,
-                borderRadius: '50%',
-                border: '1px solid #475569',
-                background: settingsOpen ? '#334155' : '#1e293b',
-                color: '#94a3b8',
-                cursor: 'pointer',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                fontSize: 14,
-                fontWeight: 600,
-              }}
-            >
-              ⚙
-            </button>
+              variant={settingsOpen ? 'solid' : 'soft'}
+              size="icon"
+              style={{ borderRadius: '50%' }}
+            />
             {settingsOpen && (
               <LlmSettingsModal
                 open
                 apiBase={apiBase}
                 mode={llmMode}
                 gemini={geminiSettings}
+                themeTokens={themeTokens}
                 onClose={() => setSettingsOpen(false)}
                 onSave={(next) => {
                   setGeminiSettings(next.gemini);
@@ -439,27 +353,15 @@ export default function App() {
             )}
           </div>
           <div ref={helpRef} style={{ position: 'relative' }}>
-          <button
-            type="button"
+          <IconButton
+            themeTokens={themeTokens}
+            icon="?"
             onClick={(e) => { e.stopPropagation(); setHelpOpen((v) => !v); setSettingsOpen(false); }}
             title="帮助：可用指令"
-            style={{
-              width: 28,
-              height: 28,
-              borderRadius: '50%',
-              border: '1px solid #475569',
-              background: helpOpen ? '#334155' : '#1e293b',
-              color: '#94a3b8',
-              cursor: 'pointer',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              fontSize: 14,
-              fontWeight: 600,
-            }}
-          >
-            ?
-          </button>
+            variant={helpOpen ? 'solid' : 'soft'}
+            size="icon"
+            style={{ borderRadius: '50%' }}
+          />
           {helpOpen && (
             <div
               style={{
@@ -471,36 +373,36 @@ export default function App() {
                 maxWidth: 'calc(100vw - 32px)',
                 maxHeight: '70vh',
                 overflow: 'auto',
-                background: '#1e293b',
-                border: '1px solid #475569',
+                background: themeTokens.tabInactiveBackground,
+                border: `1px solid ${themeTokens.tabInactiveBorder}`,
                 borderRadius: 8,
                 boxShadow: '0 10px 25px rgba(0,0,0,0.3)',
                 padding: 12,
                 zIndex: 100,
               }}
             >
-              <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 10, color: '#e2e8f0' }}>可用指令及说明</div>
-              <ul style={{ margin: 0, paddingLeft: 20, fontSize: 12, color: '#94a3b8', lineHeight: 1.6 }}>
+              <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 10, color: themeTokens.textPrimary }}>可用指令及说明</div>
+              <ul style={{ margin: 0, paddingLeft: 20, fontSize: 12, color: themeTokens.textSecondary, lineHeight: 1.6 }}>
                 {HELP_COMMANDS.flatMap((item, i) => {
                   const showSection = item.section && (i === 0 || HELP_COMMANDS[i - 1].section !== item.section);
                   return [
-                    ...(showSection ? [<li key={`${i}-sec`} style={{ listStyle: 'none', marginLeft: -20, marginTop: i === 0 ? 0 : 10, marginBottom: 2, fontWeight: 600, color: '#94a3b8' }}>{item.section}</li>] : []),
+                    ...(showSection ? [<li key={`${i}-sec`} style={{ listStyle: 'none', marginLeft: -20, marginTop: i === 0 ? 0 : 10, marginBottom: 2, fontWeight: 600, color: themeTokens.textSecondary }}>{item.section}</li>] : []),
                     <li key={i} style={{ marginBottom: 8, listStyle: 'disc' }}>
-                      <span style={{ color: '#f1f5f9' }}>{item.command}</span>
-                      <span style={{ color: '#64748b', marginLeft: 6 }}>— {item.description}</span>
+                      <span style={{ color: themeTokens.textPrimary }}>{item.command}</span>
+                      <span style={{ color: themeTokens.textSecondary, marginLeft: 6 }}>— {item.description}</span>
                     </li>,
                   ];
                 })}
               </ul>
-              <div style={{ fontSize: 12, marginTop: 14, paddingTop: 10, borderTop: '1px solid #475569' }}>
-                <div style={{ fontWeight: 600, marginBottom: 6, color: '#e2e8f0' }}>代号速查（便于查找指令）</div>
+              <div style={{ fontSize: 12, marginTop: 14, paddingTop: 10, borderTop: `1px solid ${themeTokens.tabInactiveBorder}` }}>
+                <div style={{ fontWeight: 600, marginBottom: 6, color: themeTokens.textPrimary }}>代号速查（便于查找指令）</div>
                 <div style={{ marginBottom: 6 }}>
-                  <span style={{ color: '#94a3b8' }}>项目代号：</span>
-                  <span style={{ color: '#cbd5e1', wordBreak: 'break-all' }}>{HELP_CODES['项目代号'].join('、')}</span>
+                  <span style={{ color: themeTokens.textSecondary }}>项目代号：</span>
+                  <span style={{ color: themeTokens.textPrimary, wordBreak: 'break-all' }}>{HELP_CODES['项目代号'].join('、')}</span>
                 </div>
                 <div>
-                  <span style={{ color: '#94a3b8' }}>IDE 代号：</span>
-                  <span style={{ color: '#cbd5e1' }}>{HELP_CODES['IDE代号'].join('；')}</span>
+                  <span style={{ color: themeTokens.textSecondary }}>IDE 代号：</span>
+                  <span style={{ color: themeTokens.textPrimary }}>{HELP_CODES['IDE代号'].join('；')}</span>
                 </div>
               </div>
             </div>
@@ -521,42 +423,42 @@ export default function App() {
             transition: 'width 0.2s ease',
           }}
         >
-          <button
-            type="button"
+          <IconButton
+            themeTokens={themeTokens}
+            icon={leftCollapsed ? '▶' : '◀'}
             onClick={() => setLeftCollapsed((c) => !c)}
             title={leftCollapsed ? '展开左侧' : '收起左侧'}
+            variant="soft"
+            size="md"
+            fullWidth
             style={{
               flexShrink: 0,
-              width: '100%',
-              padding: '10px 0',
               border: 'none',
               borderBottom: `1px solid ${themeTokens.panelBorder}`,
+              borderRadius: 0,
               background: themeTokens.sidebarToggleBackground,
-              color: themeTokens.textSecondary,
-              cursor: 'pointer',
-              fontSize: 14,
+              justifyContent: 'center',
             }}
-          >
-            {leftCollapsed ? '▶' : '◀'}
-          </button>
+          />
           {!leftCollapsed && (
             <>
-              <WorkflowPanel apiBase={apiBase} addLog={addLog} onStartWorkEmbedded={onStartWorkEmbedded} />
-              <ToolPanel />
+              <WorkflowPanel apiBase={apiBase} addLog={addLog} onStartWorkEmbedded={onStartWorkEmbedded} themeTokens={themeTokens} />
+              <ToolPanel themeTokens={themeTokens} />
             </>
           )}
         </aside>
         <main style={{ flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0, borderRight: `1px solid ${themeTokens.panelBorder}` }}>
           {activeHeaderTab === 'knowledge-base' ? (
-            <KnowledgeBasePanel apiBase={apiBase} addLog={addLog} />
+            <KnowledgeBasePanel apiBase={apiBase} addLog={addLog} themeTokens={themeTokens} />
           ) : activeHeaderTab.startsWith('knowledge-doc:') ? (
             <KnowledgeDocPanel
               apiBase={apiBase}
               sourcePath={headerTabs.find((tab) => tab.key === activeHeaderTab)?.docPath ?? ''}
+              themeTokens={themeTokens}
               onOpenKnowledgeDoc={openKnowledgeDocTab}
             />
           ) : activeHeaderTab === 'my-work' && myWorkSessionId ? (
-            <MyWorkPanel apiBase={apiBase} sessionId={myWorkSessionId} initialTerminals={myWorkTerminals} />
+            <MyWorkPanel apiBase={apiBase} sessionId={myWorkSessionId} initialTerminals={myWorkTerminals} themeTokens={themeTokens} />
           ) : (
             <ChatPanel
               apiBase={apiBase}
@@ -578,7 +480,7 @@ export default function App() {
             width: 6,
             flexShrink: 0,
             cursor: 'col-resize',
-            background: resizing ? '#475569' : '#334155',
+            background: resizing ? themeTokens.tabActiveBorder : themeTokens.inputBorder,
           }}
         />
         <LogsPanel logs={logs} width={rightWidth} onClear={() => setLogs([])} themeTokens={themeTokens} />

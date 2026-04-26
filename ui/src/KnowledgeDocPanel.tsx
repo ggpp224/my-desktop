@@ -1,10 +1,12 @@
 /* AI 生成 By Peng.Guo */
 import { useEffect, useState } from 'react';
 import { MarkdownRenderer } from './view/MarkdownRenderer';
+import type { AppThemeTokens } from './domain/theme/appTheme';
 
 type KnowledgeDocPanelProps = {
   apiBase: string;
   sourcePath: string;
+  themeTokens: AppThemeTokens;
   onOpenKnowledgeDoc: (sourcePath: string) => void;
 };
 
@@ -40,7 +42,7 @@ function resolveDocLinkPath(currentPath: string, href: string): string | null {
   return stack.join('/');
 }
 
-export function KnowledgeDocPanel({ apiBase, sourcePath, onOpenKnowledgeDoc }: KnowledgeDocPanelProps) {
+export function KnowledgeDocPanel({ apiBase, sourcePath, themeTokens, onOpenKnowledgeDoc }: KnowledgeDocPanelProps) {
   const [loading, setLoading] = useState(false);
   const [data, setData] = useState<KnowledgeDocumentPayload | null>(null);
 
@@ -67,20 +69,21 @@ export function KnowledgeDocPanel({ apiBase, sourcePath, onOpenKnowledgeDoc }: K
 
   return (
     <section style={{ flex: 1, display: 'flex', flexDirection: 'column', minHeight: 0, padding: 16 }}>
-      <div style={{ marginBottom: 10, fontSize: 12, color: '#94a3b8' }}>
-        文档路径：<span style={{ color: '#93c5fd' }}>{sourcePath}</span>
+      <div style={{ marginBottom: 10, fontSize: 12, color: themeTokens.textSecondary }}>
+        文档路径：<span style={{ color: themeTokens.tabActiveBorder }}>{sourcePath}</span>
       </div>
       {loading ? (
-        <div style={{ color: '#94a3b8', fontSize: 13 }}>正在加载文档...</div>
+        <div style={{ color: themeTokens.textSecondary, fontSize: 13 }}>正在加载文档...</div>
       ) : data?.success ? (
         <div style={{ display: 'flex', flexDirection: 'column', minHeight: 0 }}>
-          <div style={{ marginBottom: 8, fontSize: 12, color: '#94a3b8', display: 'flex', gap: 12 }}>
+          <div style={{ marginBottom: 8, fontSize: 12, color: themeTokens.textSecondary, display: 'flex', gap: 12 }}>
             {typeof data.size === 'number' ? <span>大小：{(data.size / 1024).toFixed(2)} KB</span> : null}
             {data.modifiedAt ? <span>修改时间：{new Date(data.modifiedAt).toLocaleString('zh-CN')}</span> : null}
           </div>
-          <div style={{ overflow: 'auto', background: '#0d0d1a', borderRadius: 8, padding: 12 }}>
+          <div style={{ overflow: 'auto', background: themeTokens.workspacePanelBackground, border: `1px solid ${themeTokens.inputBorder}`, borderRadius: 8, padding: 12 }}>
             <MarkdownRenderer
               markdown={data.content ?? ''}
+              themeTokens={themeTokens}
               onLinkClick={(href) => {
                 const nextPath = resolveDocLinkPath(sourcePath, href);
                 if (!nextPath) return false;
@@ -91,7 +94,7 @@ export function KnowledgeDocPanel({ apiBase, sourcePath, onOpenKnowledgeDoc }: K
           </div>
         </div>
       ) : (
-        <div style={{ color: '#fca5a5', fontSize: 13 }}>{data?.error ?? '加载失败'}</div>
+        <div style={{ color: themeTokens.statusError, fontSize: 13 }}>{data?.error ?? '加载失败'}</div>
       )}
     </section>
   );

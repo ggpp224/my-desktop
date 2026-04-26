@@ -12,7 +12,7 @@ type LinkifiedTextProps = {
 /**
  * 渲染纯文本，并将 `[label](https://...)` 转为可点击外链（与部署反馈中的 Jenkins 链接约定一致）。
  */
-export function LinkifiedText({ text, linkColor = '#7fd6b8' }: LinkifiedTextProps): ReactNode {
+export function LinkifiedText({ text, linkColor = 'currentColor' }: LinkifiedTextProps): ReactNode {
   const nodes: ReactNode[] = [];
   let last = 0;
   let m: RegExpExecArray | null;

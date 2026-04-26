@@ -1,14 +1,17 @@
 /* AI 生成 By Peng.Guo */
 import { useMemo, useRef, useState, type ChangeEvent } from 'react';
+import type { AppThemeTokens } from './domain/theme/appTheme';
+import { Button } from './view/Button';
 
 type UploadItem = { path: string; content: string };
 
 interface KnowledgeBasePanelProps {
   apiBase: string;
   addLog: (line: string) => void;
+  themeTokens: AppThemeTokens;
 }
 
-export function KnowledgeBasePanel({ apiBase, addLog }: KnowledgeBasePanelProps) {
+export function KnowledgeBasePanel({ apiBase, addLog, themeTokens }: KnowledgeBasePanelProps) {
   const pickerRef = useRef<HTMLInputElement>(null);
   const [uploading, setUploading] = useState(false);
   const [sourceName, setSourceName] = useState('');
@@ -74,17 +77,18 @@ export function KnowledgeBasePanel({ apiBase, addLog }: KnowledgeBasePanelProps)
 
   return (
     <section style={{ flex: 1, display: 'flex', flexDirection: 'column', minHeight: 0, padding: 16 }}>
-      <div style={{ marginBottom: 12, color: '#cbd5e1', fontSize: 14 }}>
+      <div style={{ marginBottom: 12, color: themeTokens.textPrimary, fontSize: 14 }}>
         选择一个本地目录，将目录下所有 <code>.md</code> 文档导入私人知识库。导入后可直接在聊天中提问。
       </div>
       <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap', marginBottom: 12 }}>
-        <button
-          type="button"
+        <Button
+          themeTokens={themeTokens}
           onClick={chooseFolder}
-          style={{ padding: '8px 14px', borderRadius: 6, border: '1px solid #334155', background: '#0f3460', color: '#e2e8f0', cursor: 'pointer' }}
+          variant="solid"
+          size="md"
         >
           选择目录
-        </button>
+        </Button>
         <input
           ref={pickerRef}
           type="file"
@@ -102,20 +106,22 @@ export function KnowledgeBasePanel({ apiBase, addLog }: KnowledgeBasePanelProps)
             minWidth: 280,
             padding: '8px 10px',
             borderRadius: 6,
-            border: '1px solid #334155',
-            background: '#0f172a',
-            color: '#e2e8f0',
+            border: `1px solid ${themeTokens.inputBorder}`,
+            background: themeTokens.inputBackground,
+            color: themeTokens.textPrimary,
           }}
         />
-        <button
-          type="button"
+        <Button
+          themeTokens={themeTokens}
           onClick={importFolder}
-          style={{ padding: '8px 14px', borderRadius: 6, border: '1px solid #334155', background: '#1d4ed8', color: '#f8fafc', cursor: 'pointer' }}
+          variant="solid"
+          size="md"
+          loading={uploading}
         >
           {uploading ? '导入中...' : '加入知识库'}
-        </button>
+        </Button>
       </div>
-      <div style={{ marginBottom: 10, color: '#94a3b8', fontSize: 12 }}>
+      <div style={{ marginBottom: 10, color: themeTokens.textSecondary, fontSize: 12 }}>
         已选择文件：{selectedFiles.length} 个，其中 Markdown：{mdCount} 个
       </div>
       {result && (
@@ -124,24 +130,24 @@ export function KnowledgeBasePanel({ apiBase, addLog }: KnowledgeBasePanelProps)
             marginBottom: 12,
             padding: '10px 12px',
             borderRadius: 6,
-            border: `1px solid ${result.success ? '#14532d' : '#7f1d1d'}`,
-            background: result.success ? '#052e16' : '#450a0a',
-            color: result.success ? '#86efac' : '#fecaca',
+            border: `1px solid ${result.success ? themeTokens.tabActiveBorder : themeTokens.statusError}`,
+            background: result.success ? themeTokens.tabActiveBackground : themeTokens.statusErrorBackground,
+            color: result.success ? themeTokens.textPrimary : themeTokens.statusError,
             fontSize: 13,
           }}
         >
           {result.message}
         </div>
       )}
-      <div style={{ flex: 1, minHeight: 0, overflow: 'auto', background: '#0d0d1a', border: '1px solid #1f2937', borderRadius: 8, padding: 10 }}>
+      <div style={{ flex: 1, minHeight: 0, overflow: 'auto', background: themeTokens.workspacePanelBackground, border: `1px solid ${themeTokens.inputBorder}`, borderRadius: 8, padding: 10 }}>
         {selectedFiles.length === 0 ? (
-          <div style={{ color: '#64748b', fontSize: 13 }}>尚未选择目录</div>
+          <div style={{ color: themeTokens.textSecondary, fontSize: 13 }}>尚未选择目录</div>
         ) : (
           selectedFiles.slice(0, 200).map((file, idx) => {
             const rel = (file as File & { webkitRelativePath?: string }).webkitRelativePath || file.name;
             const isMd = file.name.toLowerCase().endsWith('.md');
             return (
-              <div key={`${rel}-${idx}`} style={{ color: isMd ? '#cbd5e1' : '#64748b', fontSize: 12, marginBottom: 4 }}>
+              <div key={`${rel}-${idx}`} style={{ color: isMd ? themeTokens.textPrimary : themeTokens.textSecondary, fontSize: 12, marginBottom: 4 }}>
                 {rel}
               </div>
             );

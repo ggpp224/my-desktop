@@ -1,5 +1,5 @@
 /* AI 生成 By Peng.Guo */
-export type AppThemeId = 'blue' | 'emerald';
+export type AppThemeId = 'blue' | 'emerald' | 'mint-light';
 
 export type AppThemeTokens = {
   appBackground: string;
@@ -19,11 +19,16 @@ export type AppThemeTokens = {
   accentButtonBorder: string;
   textPrimary: string;
   textSecondary: string;
+  statusWarning: string;
+  statusSuccess: string;
+  statusError: string;
+  statusErrorBackground: string;
 };
 
 export const APP_THEME_LABELS: Record<AppThemeId, string> = {
   blue: '蓝色',
   emerald: '青绿色',
+  'mint-light': '浅色薄荷',
 };
 
 const BLUE_THEME: AppThemeTokens = {
@@ -44,6 +49,10 @@ const BLUE_THEME: AppThemeTokens = {
   accentButtonBorder: '#284a76',
   textPrimary: '#e2e8f0',
   textSecondary: '#94a3b8',
+  statusWarning: '#f59e0b',
+  statusSuccess: '#86efac',
+  statusError: '#fca5a5',
+  statusErrorBackground: '#450a0a',
 };
 
 const EMERALD_THEME: AppThemeTokens = {
@@ -64,9 +73,38 @@ const EMERALD_THEME: AppThemeTokens = {
   accentButtonBorder: '#0d9488',
   textPrimary: '#e6fffa',
   textSecondary: '#99f6e4',
+  statusWarning: '#f59e0b',
+  statusSuccess: '#86efac',
+  statusError: '#fca5a5',
+  statusErrorBackground: '#450a0a',
+};
+
+const MINT_LIGHT_THEME: AppThemeTokens = {
+  appBackground: '#f6faf8',
+  headerBackground: '#ffffff',
+  sidebarBackground: '#ffffff',
+  sidebarToggleBackground: '#e6f5ef',
+  workspacePanelBackground: '#ffffff',
+  workspacePanelSubtleBackground: '#f8fcfa',
+  inputBackground: '#ffffff',
+  inputBorder: '#d6e8e1',
+  panelBorder: '#e1ece7',
+  tabActiveBackground: '#2fb88f',
+  tabActiveBorder: '#1fa37d',
+  tabInactiveBackground: '#f2f8f5',
+  tabInactiveBorder: '#d6e8e1',
+  accentButtonBackground: '#2fb88f',
+  accentButtonBorder: '#1fa37d',
+  textPrimary: '#1f2a27',
+  textSecondary: '#5f746d',
+  statusWarning: '#b45309',
+  statusSuccess: '#047857',
+  statusError: '#b91c1c',
+  statusErrorBackground: '#fee2e2',
 };
 
 export const APP_THEME_TOKENS: Record<AppThemeId, AppThemeTokens> = {
   blue: BLUE_THEME,
   emerald: EMERALD_THEME,
+  'mint-light': MINT_LIGHT_THEME,
 };
