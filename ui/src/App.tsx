@@ -8,9 +8,11 @@ import { MyWorkPanel, type WorkTerminal } from './MyWorkPanel';
 import { KnowledgeBasePanel } from './KnowledgeBasePanel';
 import { KnowledgeDocPanel } from './KnowledgeDocPanel';
 import { LlmSettingsModal } from './view/LlmSettingsModal';
+import { ThemeSwitcher } from './view/ThemeSwitcher';
 import { loadLlmSettings, saveLlmSettings } from './infrastructure/llm/llmSettingsRepository';
 import { buildAgentChatLlmBody } from './domain/llm/agentLlmRequest';
 import type { GeminiUserSettings, LlmRuntimeMode } from './domain/llm/agentLlmRequest';
+import { useAppTheme } from './viewmodel/theme/useAppTheme';
 
 const DEFAULT_API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:3000';
 const MY_WORK_SESSION_STORAGE_KEY = 'ai-dev-control-center:my-work-session-id';
@@ -64,6 +66,7 @@ declare global {
 }
 
 export default function App() {
+  const { themeId, tokens: themeTokens, switchTheme } = useAppTheme();
   const [apiBase, setApiBase] = useState<string | null>(() =>
     typeof window !== 'undefined' && window.electronAPI ? null : DEFAULT_API_BASE
   );
@@ -164,7 +167,7 @@ export default function App() {
 
   if (apiBase === null) {
     return (
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100vh', background: '#16213e', color: '#94a3b8' }}>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100vh', background: themeTokens.headerBackground, color: themeTokens.textSecondary }}>
         加载中…
       </div>
     );
@@ -256,8 +259,8 @@ export default function App() {
   }, [myWorkSessionId]);
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', height: '100vh' }}>
-      <header style={{ padding: '12px 16px', borderBottom: '1px solid #333', background: '#16213e', display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 16 }}>
+    <div style={{ display: 'flex', flexDirection: 'column', height: '100vh', background: themeTokens.appBackground }}>
+      <header style={{ padding: '12px 16px', borderBottom: `1px solid ${themeTokens.panelBorder}`, background: themeTokens.headerBackground, display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 16 }}>
         <div style={{ flex: 1, minWidth: 0 }}>
           <nav aria-label="头部功能页签" style={{ display: 'flex', gap: 6 }}>
             {headerTabs.map((tab) => {
@@ -275,9 +278,9 @@ export default function App() {
                     position: 'relative',
                     padding: '8px 14px',
                     borderRadius: 6,
-                    border: `1px solid ${isActive ? '#4f83ff' : '#334155'}`,
-                    background: isActive ? '#1d4ed8' : '#0f172a',
-                    color: '#e2e8f0',
+                    border: `1px solid ${isActive ? themeTokens.tabActiveBorder : themeTokens.tabInactiveBorder}`,
+                    background: isActive ? themeTokens.tabActiveBackground : themeTokens.tabInactiveBackground,
+                    color: themeTokens.textPrimary,
                     fontSize: 14,
                     fontWeight: 600,
                   }}
@@ -343,6 +346,11 @@ export default function App() {
           )}
         </div>
         <div style={{ display: 'flex', alignItems: 'flex-start', gap: 8, flexShrink: 0 }}>
+          <ThemeSwitcher
+            value={themeId}
+            tokens={themeTokens}
+            onChange={switchTheme}
+          />
           <div
             role="group"
             aria-label="本地或外部模型"
@@ -505,10 +513,10 @@ export default function App() {
           style={{
             width: leftCollapsed ? 40 : 250,
             flexShrink: 0,
-            borderRight: '1px solid #333',
+            borderRight: `1px solid ${themeTokens.panelBorder}`,
             display: 'flex',
             flexDirection: 'column',
-            background: '#16213e',
+            background: themeTokens.sidebarBackground,
             overflow: 'hidden',
             transition: 'width 0.2s ease',
           }}
@@ -522,9 +530,9 @@ export default function App() {
               width: '100%',
               padding: '10px 0',
               border: 'none',
-              borderBottom: '1px solid #333',
-              background: '#0f3460',
-              color: '#94a3b8',
+              borderBottom: `1px solid ${themeTokens.panelBorder}`,
+              background: themeTokens.sidebarToggleBackground,
+              color: themeTokens.textSecondary,
               cursor: 'pointer',
               fontSize: 14,
             }}
@@ -538,7 +546,7 @@ export default function App() {
             </>
           )}
         </aside>
-        <main style={{ flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0, borderRight: '1px solid #333' }}>
+        <main style={{ flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0, borderRight: `1px solid ${themeTokens.panelBorder}` }}>
           {activeHeaderTab === 'knowledge-base' ? (
             <KnowledgeBasePanel apiBase={apiBase} addLog={addLog} />
           ) : activeHeaderTab.startsWith('knowledge-doc:') ? (
@@ -558,6 +566,7 @@ export default function App() {
               onOpenKnowledgeDoc={openKnowledgeDocTab}
               llmRuntimeMode={llmMode}
               agentChatLlmBody={agentChatLlmBody}
+              themeTokens={themeTokens}
             />
           )}
         </main>
@@ -572,7 +581,7 @@ export default function App() {
             background: resizing ? '#475569' : '#334155',
           }}
         />
-        <LogsPanel logs={logs} width={rightWidth} onClear={() => setLogs([])} />
+        <LogsPanel logs={logs} width={rightWidth} onClear={() => setLogs([])} themeTokens={themeTokens} />
       </div>
     </div>
   );

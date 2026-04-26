@@ -14,6 +14,7 @@ import {
 } from './infrastructure/agent/ollamaModelApi';
 import { postAgentChatStream, type AgentToolProgressEvent } from './infrastructure/agent/agentChatStreamApi';
 import type { AgentChatLlmBody, LlmRuntimeMode } from './domain/llm/agentLlmRequest';
+import type { AppThemeTokens } from './domain/theme/appTheme';
 import {
   buildTeamSummaryCopyLeadLine,
   buildWeeklyReportLeadLine,
@@ -177,6 +178,7 @@ interface ChatPanelProps {
   llmRuntimeMode: LlmRuntimeMode;
   /** 外部模式且已填 Key 时传入，随请求发往本机后端 */
   agentChatLlmBody?: AgentChatLlmBody;
+  themeTokens: AppThemeTokens;
 }
 
 const QUICK_ACTIONS: Array<{ label: string; message: string }> = [
@@ -1137,7 +1139,7 @@ function formatToolProgressLogLine(e: AgentToolProgressEvent): string {
   return e.ok ? `[工具] ${e.tool} 完成` : `[工具] ${e.tool} 失败${e.message ? `: ${e.message}` : ''}`;
 }
 
-export function ChatPanel({ apiBase, addLog, onStartWorkEmbedded, onOpenKnowledgeBase, onOpenKnowledgeDoc, llmRuntimeMode, agentChatLlmBody }: ChatPanelProps) {
+export function ChatPanel({ apiBase, addLog, onStartWorkEmbedded, onOpenKnowledgeBase, onOpenKnowledgeDoc, llmRuntimeMode, agentChatLlmBody, themeTokens }: ChatPanelProps) {
   const [input, setInput] = useState('');
   const [inputHistory, setInputHistory] = useState<string[]>([]);
   const [loading, setLoading] = useState(false);
@@ -1631,9 +1633,9 @@ export function ChatPanel({ apiBase, addLog, onStartWorkEmbedded, onOpenKnowledg
             onClick={() => send(message)}
             style={{
               padding: '8px 14px',
-              background: '#0f3460',
-              color: '#eaeaea',
-              border: '1px solid #333',
+              background: themeTokens.accentButtonBackground,
+              color: themeTokens.textPrimary,
+              border: `1px solid ${themeTokens.accentButtonBorder}`,
               borderRadius: 6,
               cursor: 'pointer',
             }}
@@ -1650,10 +1652,10 @@ export function ChatPanel({ apiBase, addLog, onStartWorkEmbedded, onOpenKnowledg
             width: 28,
             height: 28,
             padding: 0,
-            border: '1px solid #333',
+            border: `1px solid ${themeTokens.panelBorder}`,
             borderRadius: 6,
-            background: '#16213e',
-            color: '#94a3b8',
+            background: themeTokens.inputBackground,
+            color: themeTokens.textSecondary,
             cursor: 'pointer',
             fontSize: 14,
             display: 'flex',
@@ -1670,7 +1672,7 @@ export function ChatPanel({ apiBase, addLog, onStartWorkEmbedded, onOpenKnowledg
           flex: 1,
           overflow: 'auto',
           marginBottom: 12,
-          background: '#0d0d1a',
+          background: themeTokens.workspacePanelBackground,
           borderRadius: 8,
           padding: 12,
           overflowAnchor: 'none',
@@ -1703,8 +1705,8 @@ export function ChatPanel({ apiBase, addLog, onStartWorkEmbedded, onOpenKnowledg
               marginBottom: 12,
               padding: 12,
               borderRadius: 8,
-              border: '1px solid #334155',
-              background: '#111827',
+              border: `1px solid ${themeTokens.inputBorder}`,
+              background: themeTokens.workspacePanelSubtleBackground,
               fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace',
             }}
           >
@@ -1869,9 +1871,9 @@ export function ChatPanel({ apiBase, addLog, onStartWorkEmbedded, onOpenKnowledg
               marginLeft: 'auto',
               width: 'fit-content',
               maxWidth: '80%',
-              background: '#0f172a',
-              border: '1px solid #334155',
-              color: '#e2e8f0',
+              background: themeTokens.tabInactiveBackground,
+              border: `1px solid ${themeTokens.inputBorder}`,
+              color: themeTokens.textPrimary,
               borderRadius: 6,
               padding: '6px 10px',
               fontSize: 12,
@@ -1968,10 +1970,10 @@ export function ChatPanel({ apiBase, addLog, onStartWorkEmbedded, onOpenKnowledg
               width: '100%',
               minHeight: 60,
               padding: '10px 12px',
-              background: '#16213e',
-              border: '1px solid #334155',
+              background: themeTokens.inputBackground,
+              border: `1px solid ${themeTokens.inputBorder}`,
               borderRadius: 6,
-              color: '#eaeaea',
+              color: themeTokens.textPrimary,
               resize: 'vertical',
               font: 'inherit',
               boxSizing: 'border-box',
@@ -1988,8 +1990,8 @@ export function ChatPanel({ apiBase, addLog, onStartWorkEmbedded, onOpenKnowledg
                 marginBottom: 4,
                 padding: 4,
                 listStyle: 'none',
-                background: '#1a1a2e',
-                border: '1px solid #333',
+                background: themeTokens.tabInactiveBackground,
+                border: `1px solid ${themeTokens.panelBorder}`,
                 borderRadius: 6,
                 boxShadow: '0 -4px 12px rgba(0,0,0,0.3)',
                 zIndex: 20,
@@ -2010,8 +2012,8 @@ export function ChatPanel({ apiBase, addLog, onStartWorkEmbedded, onOpenKnowledg
                     padding: '8px 10px',
                     cursor: 'pointer',
                     borderRadius: 4,
-                    background: i === completionIndex ? '#0f3460' : 'transparent',
-                    color: '#eaeaea',
+                    background: i === completionIndex ? themeTokens.accentButtonBackground : 'transparent',
+                    color: themeTokens.textPrimary,
                     fontSize: 13,
                   }}
                 >
@@ -2034,9 +2036,9 @@ export function ChatPanel({ apiBase, addLog, onStartWorkEmbedded, onOpenKnowledg
                   fontSize: 12,
                   height: 38,
                   padding: '6px 8px',
-                  background: '#16213e',
-                  color: '#e2e8f0',
-                  border: '1px solid #334155',
+                  background: themeTokens.inputBackground,
+                  color: themeTokens.textPrimary,
+                  border: `1px solid ${themeTokens.inputBorder}`,
                   borderRadius: 6,
                   cursor: 'pointer',
                 }}
@@ -2065,14 +2067,14 @@ export function ChatPanel({ apiBase, addLog, onStartWorkEmbedded, onOpenKnowledg
                   height: 38,
                   padding: '0 12px',
                   background: sendBtnPressed
-                    ? '#0b2a4d'
+                    ? themeTokens.tabInactiveBackground
                     : sendBtnHovered
-                      ? '#14477f'
-                      : '#0f3460',
-                  color: '#eaeaea',
+                      ? themeTokens.tabActiveBackground
+                      : themeTokens.accentButtonBackground,
+                  color: themeTokens.textPrimary,
                   border: sendBtnHovered
-                    ? '1px solid #3a6ba3'
-                    : '1px solid #284a76',
+                    ? `1px solid ${themeTokens.tabActiveBorder}`
+                    : `1px solid ${themeTokens.accentButtonBorder}`,
                   borderRadius: 6,
                   cursor: 'pointer',
                   fontWeight: 600,
@@ -2113,14 +2115,14 @@ export function ChatPanel({ apiBase, addLog, onStartWorkEmbedded, onOpenKnowledg
                 height: 38,
                 padding: '0 12px',
                 background: sendBtnPressed
-                  ? '#0b2a4d'
+                  ? themeTokens.tabInactiveBackground
                   : sendBtnHovered
-                    ? '#14477f'
-                    : '#0f3460',
-                color: '#eaeaea',
+                    ? themeTokens.tabActiveBackground
+                    : themeTokens.accentButtonBackground,
+                color: themeTokens.textPrimary,
                 border: sendBtnHovered
-                  ? '1px solid #3a6ba3'
-                  : '1px solid #284a76',
+                  ? `1px solid ${themeTokens.tabActiveBorder}`
+                  : `1px solid ${themeTokens.accentButtonBorder}`,
                 borderRadius: 6,
                 cursor: 'pointer',
                 fontWeight: 600,
