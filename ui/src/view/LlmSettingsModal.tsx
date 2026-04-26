@@ -156,7 +156,6 @@ function LlmSettingsForm({ apiBase, mode, gemini, onSave, onCancel }: FormProps)
           <div style={{ marginBottom: 12 }}>
             <button
               type="button"
-              disabled={testState.phase === 'loading'}
               onClick={() => {
                 setError('');
                 void runTest({
@@ -171,7 +170,7 @@ function LlmSettingsForm({ apiBase, mode, gemini, onSave, onCancel }: FormProps)
                 border: '1px solid #64748b',
                 background: '#334155',
                 color: '#e2e8f0',
-                cursor: testState.phase === 'loading' ? 'wait' : 'pointer',
+                cursor: 'pointer',
                 fontSize: 13,
               }}
             >

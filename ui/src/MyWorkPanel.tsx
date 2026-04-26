@@ -241,7 +241,6 @@ export function MyWorkPanel({ apiBase, sessionId, initialTerminals }: MyWorkPane
       <div style={{ display: 'flex', gap: 6, padding: '10px 12px', borderBottom: '1px solid #334155', overflowX: 'auto' }}>
         <button
           type="button"
-          disabled={creatingTerminal}
           onClick={createManualTerminal}
           style={{
             padding: '6px 12px',
@@ -249,7 +248,7 @@ export function MyWorkPanel({ apiBase, sessionId, initialTerminals }: MyWorkPane
             border: '1px dashed #4f83ff',
             background: '#0b1220',
             color: '#93c5fd',
-            cursor: creatingTerminal ? 'not-allowed' : 'pointer',
+            cursor: 'pointer',
             whiteSpace: 'nowrap',
             flexShrink: 0,
           }}

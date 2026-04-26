@@ -110,8 +110,7 @@ export function KnowledgeBasePanel({ apiBase, addLog }: KnowledgeBasePanelProps)
         <button
           type="button"
           onClick={importFolder}
-          disabled={uploading || mdCount === 0}
-          style={{ padding: '8px 14px', borderRadius: 6, border: '1px solid #334155', background: uploading ? '#334155' : '#1d4ed8', color: '#f8fafc', cursor: uploading ? 'not-allowed' : 'pointer' }}
+          style={{ padding: '8px 14px', borderRadius: 6, border: '1px solid #334155', background: '#1d4ed8', color: '#f8fafc', cursor: 'pointer' }}
         >
           {uploading ? '导入中...' : '加入知识库'}
         </button>

@@ -1148,6 +1148,8 @@ export function ChatPanel({ apiBase, addLog, onStartWorkEmbedded, onOpenKnowledg
   const [completionIndex, setCompletionIndex] = useState(0);
   const [showCompletion, setShowCompletion] = useState(false);
   const [tipMessage, setTipMessage] = useState('');
+  const [sendBtnHovered, setSendBtnHovered] = useState(false);
+  const [sendBtnPressed, setSendBtnPressed] = useState(false);
   const [projects, setProjects] = useState<ProjectInfo[]>([]);
   const deployPollRef = useRef<{ stop: () => void } | null>(null);
   const inputWrapRef = useRef<HTMLDivElement>(null);
@@ -1593,14 +1595,13 @@ export function ChatPanel({ apiBase, addLog, onStartWorkEmbedded, onOpenKnowledg
             key={label}
             type="button"
             onClick={() => send(message)}
-            disabled={loading}
             style={{
               padding: '8px 14px',
               background: '#0f3460',
               color: '#eaeaea',
               border: '1px solid #333',
               borderRadius: 6,
-              cursor: loading ? 'not-allowed' : 'pointer',
+              cursor: 'pointer',
             }}
           >
             {label}
@@ -1841,7 +1842,7 @@ export function ChatPanel({ apiBase, addLog, onStartWorkEmbedded, onOpenKnowledg
       </div>
       <form
         onSubmit={(e) => { e.preventDefault(); send(input); }}
-        style={{ display: 'flex', gap: 8, alignItems: 'flex-end' }}
+        style={{ display: 'flex', gap: 6, alignItems: 'flex-end' }}
       >
         <div ref={inputWrapRef} style={{ flex: 1, position: 'relative' }}>
           <textarea
@@ -1920,14 +1921,13 @@ export function ChatPanel({ apiBase, addLog, onStartWorkEmbedded, onOpenKnowledg
               }
             }}
             placeholder="输入指令...（Enter 发送，Shift+Enter 换行，↑↓ 切换历史，Tab 补全）"
-            disabled={loading}
             rows={3}
             style={{
               width: '100%',
               minHeight: 60,
-              padding: 10,
+              padding: '10px 12px',
               background: '#16213e',
-              border: '1px solid #333',
+              border: '1px solid #334155',
               borderRadius: 6,
               color: '#eaeaea',
               resize: 'vertical',
@@ -1979,18 +1979,18 @@ export function ChatPanel({ apiBase, addLog, onStartWorkEmbedded, onOpenKnowledg
             </ul>
           )}
         </div>
-        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 6 }}>
+        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'stretch', gap: 6, width: 156 }}>
           {llmRuntimeMode === 'local' ? (
-            <label style={{ fontSize: 12, color: '#64748b', display: 'flex', flexDirection: 'column', gap: 4, alignItems: 'flex-end' }}>
-              <span>Ollama 模型</span>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 6, alignItems: 'stretch', width: '100%' }}>
               <select
                 value={currentModel}
                 onFocus={refreshOllamaModels}
                 onChange={(e) => void handleModelSelectChange(e.target.value)}
                 title="从本机已安装模型中选择；切换时会停止当前推理并卸载上一模型"
                 style={{
-                  maxWidth: 220,
+                  width: '100%',
                   fontSize: 12,
+                  height: 38,
                   padding: '6px 8px',
                   background: '#16213e',
                   color: '#e2e8f0',
@@ -2009,7 +2009,42 @@ export function ChatPanel({ apiBase, addLog, onStartWorkEmbedded, onOpenKnowledg
                   </option>
                 ))}
               </select>
-            </label>
+              <button
+                type="submit"
+                onMouseEnter={() => setSendBtnHovered(true)}
+                onMouseLeave={() => {
+                  setSendBtnHovered(false);
+                  setSendBtnPressed(false);
+                }}
+                onMouseDown={() => setSendBtnPressed(true)}
+                onMouseUp={() => setSendBtnPressed(false)}
+                style={{
+                  width: '100%',
+                  height: 38,
+                  padding: '0 12px',
+                  background: sendBtnPressed
+                    ? '#0b2a4d'
+                    : sendBtnHovered
+                      ? '#14477f'
+                      : '#0f3460',
+                  color: '#eaeaea',
+                  border: sendBtnHovered
+                    ? '1px solid #3a6ba3'
+                    : '1px solid #284a76',
+                  borderRadius: 6,
+                  cursor: 'pointer',
+                  fontWeight: 600,
+                  lineHeight: 1,
+                  transform: sendBtnPressed ? 'translateY(1px)' : 'translateY(0)',
+                  boxShadow: sendBtnHovered
+                    ? '0 4px 12px rgba(15, 52, 96, 0.35)'
+                    : '0 2px 6px rgba(15, 52, 96, 0.2)',
+                  transition: 'background-color 120ms ease, border-color 120ms ease, box-shadow 120ms ease, transform 80ms ease',
+                }}
+              >
+                发送
+              </button>
+            </div>
           ) : (
             <div style={{ fontSize: 12, color: '#94a3b8', textAlign: 'right', maxWidth: 220, lineHeight: 1.45 }}>
               外部 Gemini
@@ -2021,20 +2056,43 @@ export function ChatPanel({ apiBase, addLog, onStartWorkEmbedded, onOpenKnowledg
               </div>
             </div>
           )}
-          <button
-            type="submit"
-            disabled={loading}
-            style={{
-              padding: '10px 20px',
-              background: '#0f3460',
-              color: '#eaeaea',
-              border: '1px solid #333',
-              borderRadius: 6,
-              cursor: loading ? 'not-allowed' : 'pointer',
-            }}
-          >
-            发送
-          </button>
+          {llmRuntimeMode !== 'local' && (
+            <button
+              type="submit"
+              onMouseEnter={() => setSendBtnHovered(true)}
+              onMouseLeave={() => {
+                setSendBtnHovered(false);
+                setSendBtnPressed(false);
+              }}
+              onMouseDown={() => setSendBtnPressed(true)}
+              onMouseUp={() => setSendBtnPressed(false)}
+              style={{
+                width: '100%',
+                height: 38,
+                padding: '0 12px',
+                background: sendBtnPressed
+                  ? '#0b2a4d'
+                  : sendBtnHovered
+                    ? '#14477f'
+                    : '#0f3460',
+                color: '#eaeaea',
+                border: sendBtnHovered
+                  ? '1px solid #3a6ba3'
+                  : '1px solid #284a76',
+                borderRadius: 6,
+                cursor: 'pointer',
+                fontWeight: 600,
+                lineHeight: 1,
+                transform: sendBtnPressed ? 'translateY(1px)' : 'translateY(0)',
+                boxShadow: sendBtnHovered
+                  ? '0 4px 12px rgba(15, 52, 96, 0.35)'
+                  : '0 2px 6px rgba(15, 52, 96, 0.2)',
+                transition: 'background-color 120ms ease, border-color 120ms ease, box-shadow 120ms ease, transform 80ms ease',
+              }}
+            >
+              发送
+            </button>
+          )}
         </div>
       </form>
     </section>

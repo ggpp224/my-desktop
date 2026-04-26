@@ -60,7 +60,6 @@ export function WorkflowPanel({ apiBase, addLog, onStartWorkEmbedded }: Workflow
             <button
               type="button"
               onClick={() => runWorkflow(name, label)}
-              disabled={running}
               style={{
                 width: '100%',
                 padding: '8px 12px',
@@ -68,7 +67,7 @@ export function WorkflowPanel({ apiBase, addLog, onStartWorkEmbedded }: Workflow
                 color: '#eaeaea',
                 border: '1px solid #333',
                 borderRadius: 6,
-                cursor: running ? 'not-allowed' : 'pointer',
+                cursor: 'pointer',
                 textAlign: 'left',
               }}
             >

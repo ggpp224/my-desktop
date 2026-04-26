@@ -1,6 +1,5 @@
 {
   "items": [
-    "AdvanceGrid的主从合并怎么使用",
     "主从合并时预计算的吗",
     "AdvanceGrid的主从合并怎么使用",
     "slaveMergeConfig是什么",
@@ -9,6 +8,7 @@
     "知识库有哪些文档",
     "重建知识库索引",
     "知识库有哪些文档",
-    "AdvanceGrid的主从合并怎么使用"
+    "AdvanceGrid的主从合并怎么使用",
+    "部署nova"
   ]
 }
