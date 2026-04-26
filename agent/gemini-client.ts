@@ -23,6 +23,7 @@ if (typeof dns.setDefaultResultOrder === 'function') {
 export type GeminiChatOptions = {
   signal?: AbortSignal;
   onDelta: (d: { thinkingDelta?: string; contentDelta?: string }) => void;
+  onTokenUsage?: (u: GeminiTokenUsage) => void;
 };
 
 export type GeminiTokenUsage = {
@@ -384,7 +385,10 @@ export async function chatWithToolsGeminiStream(
         if (c.usageMetadata) {
           const p = c.usageMetadata.promptTokenCount;
           const q = c.usageMetadata.candidatesTokenCount;
-          if (p != null || q != null) tokenUsage = { promptTokens: p, completionTokens: q };
+          if (p != null || q != null) {
+            tokenUsage = { promptTokens: p, completionTokens: q };
+            options.onTokenUsage?.(tokenUsage);
+          }
         }
       }
     } catch (err) {

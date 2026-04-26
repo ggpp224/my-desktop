@@ -5,6 +5,7 @@ import type { AgentChatLlmBody } from '../../domain/llm/agentLlmRequest.js';
 
 export type AgentChatSsePayload =
   | { type: 'llm_delta'; thinkingDelta?: string; contentDelta?: string }
+  | { type: 'token_usage'; promptTokens?: number; completionTokens?: number }
   | {
       type: 'tool_progress';
       phase: 'start' | 'progress' | 'stream_delta' | 'done';
@@ -30,6 +31,7 @@ export async function consumeAgentChatSseStream(
   body: ReadableStream<Uint8Array>,
   handlers: {
     onLlmDelta: (d: { thinkingDelta?: string; contentDelta?: string }) => void;
+    onTokenUsage?: (u: { promptTokens?: number; completionTokens?: number }) => void;
     onToolProgress?: (e: AgentToolProgressEvent) => void;
     onResult: (result: unknown) => void;
     onError: (message: string) => void;
@@ -63,6 +65,11 @@ export async function consumeAgentChatSseStream(
           handlers.onLlmDelta({
             thinkingDelta: payload.thinkingDelta,
             contentDelta: payload.contentDelta,
+          });
+        } else if (payload.type === 'token_usage') {
+          handlers.onTokenUsage?.({
+            promptTokens: payload.promptTokens,
+            completionTokens: payload.completionTokens,
           });
         } else if (payload.type === 'tool_progress') {
           handlers.onToolProgress?.({
@@ -101,6 +108,7 @@ export async function postAgentChatStream(
   signal: AbortSignal,
   handlers: {
     onLlmDelta: (d: { thinkingDelta?: string; contentDelta?: string }) => void;
+    onTokenUsage?: (u: { promptTokens?: number; completionTokens?: number }) => void;
     onToolProgress?: (e: AgentToolProgressEvent) => void;
     onResult: (result: unknown) => void;
     onError: (message: string) => void;

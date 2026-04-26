@@ -107,6 +107,8 @@ export type RunAgentOptions = {
   signal?: AbortSignal;
   /** 首轮 LLM 流式增量（思考 / 正文），供 SSE 实时推送 */
   onFirstLLMStream?: (chunk: { thinkingDelta?: string; contentDelta?: string }) => void;
+  /** 首轮 LLM token 统计增量（来源于模型 SDK / API 的真实 usage） */
+  onTokenUsage?: (usage: { promptTokens?: number; completionTokens?: number }) => void;
   /** 工具开始 / 子步骤 / 结束，供 SSE 推送执行过程 */
   onToolProgress?: ToolProgressCallback;
   /** 未传或 mode=local 时使用 Ollama */
@@ -173,6 +175,7 @@ export async function runAgent(userMessage: string, options?: RunAgentOptions): 
         {
           signal,
           onDelta: streamCb ?? ((_d) => {}),
+          onTokenUsage: options?.onTokenUsage,
         }
       );
       message = gemMsg;
@@ -185,6 +188,11 @@ export async function runAgent(userMessage: string, options?: RunAgentOptions): 
         ? await chatWithToolsStream(messages, tools, {
             signal,
             onDelta: streamCb,
+            onTokenUsage: (u) =>
+              options?.onTokenUsage?.({
+                promptTokens: u.prompt_eval_count,
+                completionTokens: u.eval_count,
+              }),
           })
         : await chatWithTools(messages, tools, { signal });
       message = oMsg;

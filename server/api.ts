@@ -410,6 +410,12 @@ app.post('/agent/chat/stream', async (req, res) => {
           thinkingDelta: chunk.thinkingDelta,
           contentDelta: chunk.contentDelta,
         }),
+      onTokenUsage: (usage) =>
+        send({
+          type: 'token_usage',
+          promptTokens: usage.promptTokens,
+          completionTokens: usage.completionTokens,
+        }),
       onToolProgress: (e) => {
         if (e.phase === 'start') send({ type: 'tool_progress', phase: 'start', tool: e.tool });
         else if (e.phase === 'progress') send({ type: 'tool_progress', phase: 'progress', tool: e.tool, message: e.message });

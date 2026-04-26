@@ -121,6 +121,7 @@ export async function chatWithToolsStream(
   tools: Array<{ type: 'function'; function: { name: string; description: string; parameters: object } }>,
   options: ChatWithToolsOptions & {
     onDelta: (d: { thinkingDelta?: string; contentDelta?: string }) => void;
+    onTokenUsage?: (u: OllamaTokenUsage) => void;
   }
 ): Promise<{ message: ChatMessage; done: boolean; tokenUsage?: OllamaTokenUsage }> {
   const baseInit = { method: 'POST' as const, headers: { 'Content-Type': 'application/json' }, signal: options.signal };
@@ -182,6 +183,7 @@ export async function chatWithToolsStream(
       if (data.done === true) {
         if (data.prompt_eval_count != null || data.eval_count != null) {
           tokenUsage = { prompt_eval_count: data.prompt_eval_count, eval_count: data.eval_count };
+          options.onTokenUsage?.(tokenUsage);
         }
         if (msg) lastDoneMessage = msg;
       }
@@ -195,6 +197,7 @@ export async function chatWithToolsStream(
       if (data.message) lastDoneMessage = data.message;
       if (data.done && (data.prompt_eval_count != null || data.eval_count != null)) {
         tokenUsage = { prompt_eval_count: data.prompt_eval_count, eval_count: data.eval_count };
+        options.onTokenUsage?.(tokenUsage);
       }
     } catch {
       /* ignore trailing garbage */

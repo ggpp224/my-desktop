@@ -141,6 +141,13 @@ type ListKnowledgeDocsPayload = {
   error?: string;
 };
 
+// AI 生成 By Peng.Guo：实时 Token 监控（仅展示后端 SSE 上报的真实 usage）
+type LiveTokenMetrics = {
+  inputTokens: number;
+  outputTokens: number;
+  speedTps: number;
+};
+
 // AI 生成 By Peng.Guo：将引用来源压缩展示，避免次要信息占据过多空间
 function getCitationLabel(sourcePath?: string): string {
   const raw = (sourcePath ?? '').trim();
@@ -1150,6 +1157,7 @@ export function ChatPanel({ apiBase, addLog, onStartWorkEmbedded, onOpenKnowledg
   const [tipMessage, setTipMessage] = useState('');
   const [sendBtnHovered, setSendBtnHovered] = useState(false);
   const [sendBtnPressed, setSendBtnPressed] = useState(false);
+  const [liveTokenMetrics, setLiveTokenMetrics] = useState<LiveTokenMetrics | null>(null);
   const [projects, setProjects] = useState<ProjectInfo[]>([]);
   const deployPollRef = useRef<{ stop: () => void } | null>(null);
   const inputWrapRef = useRef<HTMLDivElement>(null);
@@ -1162,6 +1170,7 @@ export function ChatPanel({ apiBase, addLog, onStartWorkEmbedded, onOpenKnowledg
   const shouldStickToolContentBottomRef = useRef(true);
   const streamFlushTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const toolStreamFlushTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const streamStartedAtRef = useRef<number>(0);
   const toolStreamVisibleRef = useRef(false);
   const historyIndexRef = useRef(-1);
   const savedInputRef = useRef('');
@@ -1341,6 +1350,13 @@ export function ChatPanel({ apiBase, addLog, onStartWorkEmbedded, onOpenKnowledg
         const p = tu.promptTokens ?? 0;
         const c = tu.completionTokens ?? 0;
         addLog(`  [Token] 本次指令：输入 ${p}，输出 ${c}，合计 ${p + c}`);
+        const elapsedMs = streamStartedAtRef.current > 0 ? Date.now() - streamStartedAtRef.current : 0;
+        const elapsedSec = Math.max(0.001, elapsedMs / 1000);
+        setLiveTokenMetrics({
+          inputTokens: p,
+          outputTokens: c,
+          speedTps: c / elapsedSec,
+        });
       }
     }
     const deployResult = data.toolResults?.find(
@@ -1428,6 +1444,7 @@ export function ChatPanel({ apiBase, addLog, onStartWorkEmbedded, onOpenKnowledg
     setMessages((prev) => [...prev, { role: 'user', content: msg }]);
     setInput('');
     setLoading(true);
+    setLiveTokenMetrics(null);
     addLog(`发送: ${msg}`);
     const mergeTask = MERGE_TASKS.find((t) => msg === t.label || new RegExp(`合并\\s*${t.key}`, 'i').test(msg));
     if (mergeTask) {
@@ -1455,6 +1472,8 @@ export function ChatPanel({ apiBase, addLog, onStartWorkEmbedded, onOpenKnowledg
     chatAbortRef.current = new AbortController();
     const { signal } = chatAbortRef.current;
     streamAccumRef.current = { thinking: '', content: '' };
+    streamStartedAtRef.current = Date.now();
+    setLiveTokenMetrics(null);
     setStreamLive({ thinking: '', content: '' });
     setToolStreamLive(null);
     toolStreamVisibleRef.current = false;
@@ -1491,6 +1510,16 @@ export function ChatPanel({ apiBase, addLog, onStartWorkEmbedded, onOpenKnowledg
           streamAccumRef.current.content += d.contentDelta ?? '';
           flushStreamLive();
         },
+        onTokenUsage: (usage) => {
+          const prompt = usage.promptTokens ?? 0;
+          const completion = usage.completionTokens ?? 0;
+          const elapsedSec = Math.max(0.001, (Date.now() - streamStartedAtRef.current) / 1000);
+          setLiveTokenMetrics({
+            inputTokens: prompt,
+            outputTokens: completion,
+            speedTps: completion / elapsedSec,
+          });
+        },
         onToolProgress: (e) => {
           if (e.phase === 'stream_delta') {
             if (!toolStreamVisibleRef.current) {
@@ -1525,6 +1554,7 @@ export function ChatPanel({ apiBase, addLog, onStartWorkEmbedded, onOpenKnowledg
           setToolProgressLines([]);
           const data = raw as AgentResult;
           handleAgentResponse(data, true);
+          streamStartedAtRef.current = 0;
         },
         onError: (errMsg) => {
           if (streamFlushTimerRef.current) clearTimeout(streamFlushTimerRef.current);
@@ -1535,6 +1565,8 @@ export function ChatPanel({ apiBase, addLog, onStartWorkEmbedded, onOpenKnowledg
           setToolStreamLive(null);
           toolStreamVisibleRef.current = false;
           setToolProgressLines([]);
+          setLiveTokenMetrics(null);
+          streamStartedAtRef.current = 0;
           setLoading(false);
           if (errMsg.trim()) {
             addLog(`请求异常: ${errMsg}`);
@@ -1553,6 +1585,8 @@ export function ChatPanel({ apiBase, addLog, onStartWorkEmbedded, onOpenKnowledg
       setToolStreamLive(null);
       toolStreamVisibleRef.current = false;
       setToolProgressLines([]);
+      setLiveTokenMetrics(null);
+      streamStartedAtRef.current = 0;
       if (e instanceof Error && e.name === 'AbortError') {
         addLog('请求已取消（本地中断）');
         setLoading(false);
@@ -1674,6 +1708,14 @@ export function ChatPanel({ apiBase, addLog, onStartWorkEmbedded, onOpenKnowledg
               fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace',
             }}
           >
+            {liveTokenMetrics && (
+              <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', fontSize: 11, color: '#94a3b8', marginBottom: 8 }}>
+                <span>Input: {liveTokenMetrics.inputTokens}</span>
+                <span>Output: {liveTokenMetrics.outputTokens}</span>
+                <span>Speed: {liveTokenMetrics.speedTps.toFixed(1)} tok/s</span>
+                <span style={{ color: '#86efac' }}>后端实时统计</span>
+              </div>
+            )}
             {streamLive.thinking ? (
               <>
                 <div style={{ fontSize: 13, color: '#c4b5fd', marginBottom: 8, fontWeight: 600 }}>Thinking…</div>
