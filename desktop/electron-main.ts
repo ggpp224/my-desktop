@@ -10,6 +10,9 @@ import { startServer } from '../server/api.js';
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 // 仅当显式 NODE_ENV=development 时走开发模式（连 5173）；否则一律用打包 UI，避免 npm run start 或安装版误连 5173 白屏
 const isDev = !app.isPackaged && process.env.NODE_ENV === 'development';
+// AI 生成 By Peng.Guo
+// 开发态默认应用名会显示为 Electron，显式设置应用名以保证 Dock/提示文本正确。
+app.setName('AI Dev Control Center');
 
 // AI 生成 By Peng.Guo
 // 在可用设备上尽量启用 GPU 与 WebGL 相关能力（仍受驱动与系统策略限制）。

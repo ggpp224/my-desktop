@@ -72,6 +72,8 @@ export function HeaderTabNav({
               size="sm"
               style={{
                 border: 'none',
+                outline: 'none',
+                boxShadow: 'none',
                 background: 'transparent',
                 color: 'inherit',
                 padding: '8px 0 9px',

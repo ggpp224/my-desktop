@@ -243,16 +243,16 @@ export function MyWorkPanel({ apiBase, sessionId, initialTerminals, themeTokens 
 
   return (
     <section style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
-      <div style={{ display: 'flex', gap: 10, padding: '10px 12px', borderBottom: `1px solid ${themeTokens.inputBorder}`, overflowX: 'auto' }}>
+      <div style={{ display: 'flex', gap: 8, padding: '6px 10px', borderBottom: `1px solid ${themeTokens.inputBorder}`, overflowX: 'auto' }}>
         <IconButton
           themeTokens={themeTokens}
           icon="+"
           label="新建终端"
           onClick={createManualTerminal}
           variant="dashed"
-          size="md"
+          size="sm"
           title="手动创建空终端（目录与当前页签一致，⌘T / Ctrl+T 同）"
-          style={{ whiteSpace: 'nowrap', flexShrink: 0 }}
+          style={{ whiteSpace: 'nowrap', flexShrink: 0, height: 24, padding: '0 10px', borderRadius: 8 }}
         />
         {terminals.map((terminal) => {
           const isActive = terminal.id === activeTerminal?.id;
@@ -270,7 +270,7 @@ export function MyWorkPanel({ apiBase, sessionId, initialTerminals, themeTokens 
                 display: 'flex',
                 alignItems: 'center',
                 gap: 6,
-                padding: '0 2px',
+                padding: '0 1px',
                 borderBottom: isActive ? `2px solid ${themeTokens.tabActiveBorder}` : '2px solid transparent',
                 color: isActive ? themeTokens.tabActiveBorder : themeTokens.textSecondary,
                 whiteSpace: 'nowrap',
@@ -287,9 +287,10 @@ export function MyWorkPanel({ apiBase, sessionId, initialTerminals, themeTokens 
                   border: 'none',
                   background: 'transparent',
                   color: 'inherit',
-                  padding: '8px 0 9px',
-                  fontSize: 13,
+                  padding: '5px 0 6px',
+                  fontSize: 12,
                   fontWeight: isActive ? 600 : 500,
+                  height: 24,
                 }}
                 title={`${terminal.cwdAbs} (${terminal.status})`}
               >
@@ -322,6 +323,9 @@ export function MyWorkPanel({ apiBase, sessionId, initialTerminals, themeTokens 
                   border: 'none',
                   background: 'transparent',
                   color: 'inherit',
+                  width: 22,
+                  height: 22,
+                  minWidth: 22,
                   cursor: showClose ? 'pointer' : 'default',
                   opacity: showClose ? 1 : 0,
                   pointerEvents: showClose ? 'auto' : 'none',

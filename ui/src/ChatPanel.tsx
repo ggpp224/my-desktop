@@ -1190,6 +1190,58 @@ export function ChatPanel({ apiBase, addLog, onStartWorkEmbedded, onOpenKnowledg
   const toolStreamVisibleRef = useRef(false);
   const historyIndexRef = useRef(-1);
   const savedInputRef = useRef('');
+  const [showModelPicker, setShowModelPicker] = useState(false);
+  const [modelKeyword, setModelKeyword] = useState('');
+  const modelPickerWrapRef = useRef<HTMLDivElement>(null);
+  const displayedModel = selectedChatModel || currentModel || '选择模型';
+  const filteredChatModels = useMemo(() => {
+    const keyword = modelKeyword.trim().toLowerCase();
+    if (!keyword) return chatModelOptions;
+    return chatModelOptions.filter((name) => name.toLowerCase().includes(keyword));
+  }, [chatModelOptions, modelKeyword]);
+  const isLightTheme = useMemo(() => {
+    const bg = themeTokens.workspacePanelBackground.replace('#', '');
+    if (bg.length !== 6) return false;
+    const r = parseInt(bg.slice(0, 2), 16);
+    const g = parseInt(bg.slice(2, 4), 16);
+    const b = parseInt(bg.slice(4, 6), 16);
+    const luminance = (0.2126 * r + 0.7152 * g + 0.0722 * b) / 255;
+    return luminance > 0.65;
+  }, [themeTokens.workspacePanelBackground]);
+  const modelPickerUi = useMemo(
+    () =>
+      isLightTheme
+        ? {
+            triggerText: '#4f4f4f',
+            triggerArrow: '#7a7a7a',
+            panelBg: '#ffffff',
+            panelBorder: '#dfe6e2',
+            panelShadow: '0 18px 36px rgba(31, 42, 39, 0.16)',
+            searchBg: '#f7f9f8',
+            searchBorder: '#dbe5e0',
+            searchText: '#1f2a27',
+            rowActiveBg: '#edf2ef',
+            rowText: '#2b3432',
+            rowActiveText: '#1f2a27',
+          }
+        : {
+            triggerText: '#4b4b4b',
+            triggerArrow: '#666666',
+            panelBg: '#1f2024',
+            panelBorder: '#34363d',
+            panelShadow: '0 20px 36px rgba(0,0,0,0.42)',
+            searchBg: '#25272d',
+            searchBorder: '#3a3d45',
+            searchText: '#e9eaed',
+            rowActiveBg: '#2c2f36',
+            rowText: '#d4d6db',
+            rowActiveText: '#ffffff',
+          },
+    [isLightTheme]
+  );
+  const inlineModelLabel = llmRuntimeMode === 'local'
+    ? displayedModel
+    : (agentChatLlmBody?.mode === 'external' ? agentChatLlmBody.model : '--');
 
   useEffect(() => () => {
     if (deployPollRef.current) deployPollRef.current.stop();
@@ -1295,6 +1347,17 @@ export function ChatPanel({ apiBase, addLog, onStartWorkEmbedded, onOpenKnowledg
     const timer = setTimeout(() => setTipMessage(''), 2000);
     return () => clearTimeout(timer);
   }, [tipMessage]);
+
+  useEffect(() => {
+    if (!showModelPicker) return;
+    const onOutsideClick = (e: MouseEvent) => {
+      if (modelPickerWrapRef.current && !modelPickerWrapRef.current.contains(e.target as Node)) {
+        setShowModelPicker(false);
+      }
+    };
+    document.addEventListener('mousedown', onOutsideClick);
+    return () => document.removeEventListener('mousedown', onOutsideClick);
+  }, [showModelPicker]);
 
   const executeMerge = async (path: string, doneLabel: string) => {
     if (!apiBase) return;
@@ -1639,7 +1702,7 @@ export function ChatPanel({ apiBase, addLog, onStartWorkEmbedded, onOpenKnowledg
 
   return (
     <section style={{ flex: 1, display: 'flex', flexDirection: 'column', minHeight: 0, padding: 16 }}>
-      <div style={{ marginBottom: 12, display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
+      <div style={{ marginBottom: 8, display: 'flex', gap: 4, flexWrap: 'wrap', alignItems: 'center' }}>
         {QUICK_ACTIONS.map(({ label, message }) => (
           <Button
             key={label}
@@ -1647,7 +1710,8 @@ export function ChatPanel({ apiBase, addLog, onStartWorkEmbedded, onOpenKnowledg
             type="button"
             onClick={() => send(message)}
             variant="ghost"
-            size="md"
+            size="sm"
+            style={{ height: 22, padding: '0 8px', fontSize: 11, borderRadius: 6 }}
           >
             {label}
           </Button>
@@ -1659,8 +1723,8 @@ export function ChatPanel({ apiBase, addLog, onStartWorkEmbedded, onOpenKnowledg
           onClick={() => setMessages([])}
           title="清屏"
           variant="soft"
-          size="icon"
-          style={{ marginLeft: 'auto' }}
+          size="sm"
+          style={{ marginLeft: 'auto', height: 22, minWidth: 22, padding: 0, borderRadius: 6 }}
         />
       </div>
       <div
@@ -1967,7 +2031,7 @@ export function ChatPanel({ apiBase, addLog, onStartWorkEmbedded, onOpenKnowledg
             style={{
               width: '100%',
               minHeight: 60,
-              padding: '10px 12px',
+              padding: '10px 166px 10px 12px',
               background: themeTokens.inputBackground,
               border: `1px solid ${themeTokens.inputBorder}`,
               borderRadius: 6,
@@ -1977,6 +2041,158 @@ export function ChatPanel({ apiBase, addLog, onStartWorkEmbedded, onOpenKnowledg
               boxSizing: 'border-box',
             }}
           />
+          <div
+            ref={llmRuntimeMode === 'local' ? modelPickerWrapRef : undefined}
+            style={{
+              position: 'absolute',
+              right: 48,
+              bottom: 10,
+              zIndex: 3,
+            }}
+          >
+            {/* AI 生成 By Peng.Guo */}
+            <button
+              type="button"
+              onClick={
+                llmRuntimeMode === 'local'
+                  ? () => {
+                      if (!showModelPicker) refreshOllamaModels();
+                      setShowModelPicker((prev) => !prev);
+                    }
+                  : undefined
+              }
+              title="选择模型"
+              style={{
+                height: 30,
+                border: 'none',
+                background: 'transparent',
+                color: modelPickerUi.triggerText,
+                padding: '0 6px',
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: 6,
+                cursor: llmRuntimeMode === 'local' ? 'pointer' : 'default',
+                fontSize: 14,
+                fontWeight: 600,
+              }}
+            >
+              <span style={{ maxWidth: 108, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                {inlineModelLabel}
+              </span>
+              {llmRuntimeMode === 'local' ? (
+                <span style={{ fontSize: 10, color: modelPickerUi.triggerArrow }}>{showModelPicker ? '▲' : '▼'}</span>
+              ) : null}
+            </button>
+            {llmRuntimeMode === 'local' && showModelPicker && (
+              <div
+                style={{
+                  position: 'absolute',
+                  right: -6,
+                  bottom: 'calc(100% + 8px)',
+                  width: 320,
+                  maxHeight: 360,
+                  background: modelPickerUi.panelBg,
+                  border: `1px solid ${modelPickerUi.panelBorder}`,
+                  borderRadius: 14,
+                  boxShadow: modelPickerUi.panelShadow,
+                  zIndex: 40,
+                  overflow: 'hidden',
+                }}
+              >
+                <div style={{ padding: 10, borderBottom: `1px solid ${modelPickerUi.panelBorder}` }}>
+                  <input
+                    value={modelKeyword}
+                    onChange={(e) => setModelKeyword(e.target.value)}
+                    placeholder="Search models"
+                    autoFocus
+                    style={{
+                      width: '100%',
+                      height: 34,
+                      border: `1px solid ${modelPickerUi.searchBorder}`,
+                      borderRadius: 9,
+                      background: modelPickerUi.searchBg,
+                      color: modelPickerUi.searchText,
+                      padding: '0 10px',
+                      fontSize: 13,
+                      outline: 'none',
+                    }}
+                  />
+                </div>
+                <div style={{ maxHeight: 300, overflow: 'auto', padding: 8 }}>
+                  {filteredChatModels.length === 0 ? (
+                    <div style={{ padding: '10px 12px', fontSize: 12, color: themeTokens.textSecondary }}>No models found</div>
+                  ) : (
+                    filteredChatModels.map((name) => {
+                      const isActive = name === currentModel;
+                      return (
+                        <button
+                          key={name}
+                          type="button"
+                          onClick={() => {
+                            setShowModelPicker(false);
+                            setModelKeyword('');
+                            void handleModelSelectChange(name);
+                          }}
+                          style={{
+                            width: '100%',
+                            height: 38,
+                            border: 'none',
+                            borderRadius: 9,
+                            background: isActive ? modelPickerUi.rowActiveBg : 'transparent',
+                            color: isActive ? modelPickerUi.rowActiveText : modelPickerUi.rowText,
+                            fontWeight: 400,
+                            padding: '0 12px',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'space-between',
+                            cursor: 'pointer',
+                            fontSize: 13,
+                            marginBottom: 4,
+                          }}
+                        >
+                          <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', textAlign: 'left' }}>{name}</span>
+                          {isActive ? <span style={{ color: '#9fe19b', fontSize: 12 }}>✓</span> : null}
+                        </button>
+                      );
+                    })
+                  )}
+                </div>
+              </div>
+            )}
+          </div>
+          {/* AI 生成 By Peng.Guo */}
+          <button
+            type="submit"
+            title="发送"
+            aria-label="发送"
+            disabled={loading || !input.trim()}
+            style={{
+              position: 'absolute',
+              right: 10,
+              bottom: 10,
+              width: 30,
+              height: 30,
+              borderRadius: 999,
+              border: 'none',
+              outline: 'none',
+              display: 'inline-flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              cursor: loading || !input.trim() ? 'not-allowed' : 'pointer',
+              background: loading || !input.trim() ? '#a3a3a3' : '#111111',
+              color: '#ffffff',
+              boxShadow: loading || !input.trim()
+                ? 'none'
+                : '0 4px 10px rgba(0, 0, 0, 0.2), inset 0 0 0 1px rgba(255,255,255,0.08)',
+              transition: 'all 0.15s ease',
+              zIndex: 2,
+            }}
+          >
+            <svg width="13" height="13" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+              <path d="M8 3L8 12" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
+              <path d="M4.8 6.2L8 3L11.2 6.2" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+            </svg>
+          </button>
           {showCompletion && completionList.length > 0 && (
             <ul
               style={{
@@ -2019,69 +2235,6 @@ export function ChatPanel({ apiBase, addLog, onStartWorkEmbedded, onOpenKnowledg
                 </li>
               ))}
             </ul>
-          )}
-        </div>
-        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'stretch', gap: 6, width: 156 }}>
-          {llmRuntimeMode === 'local' ? (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 6, alignItems: 'stretch', width: '100%' }}>
-              <select
-                value={selectedChatModel}
-                onFocus={refreshOllamaModels}
-                onChange={(e) => void handleModelSelectChange(e.target.value)}
-                title="从本机已安装模型中选择；切换时会停止当前推理并卸载上一模型"
-                style={{
-                  width: '100%',
-                  fontSize: 12,
-                  height: 38,
-                  padding: '6px 8px',
-                  background: themeTokens.inputBackground,
-                  color: themeTokens.textPrimary,
-                  border: `1px solid ${themeTokens.inputBorder}`,
-                  borderRadius: 6,
-                  cursor: 'pointer',
-                }}
-              >
-                {currentModel && !chatModelOptions.includes(currentModel) && (
-                  <option value={currentModel}>{currentModel}</option>
-                )}
-                {chatModelOptions.length === 0 && !selectedChatModel && <option value="">（无可用聊天模型）</option>}
-                {chatModelOptions.map((name) => (
-                  <option key={name} value={name}>
-                    {name}
-                  </option>
-                ))}
-              </select>
-              <Button
-                themeTokens={themeTokens}
-                type="submit"
-                variant="solid"
-                size="md"
-                fullWidth
-              >
-                发送
-              </Button>
-            </div>
-          ) : (
-            <div style={{ fontSize: 12, color: themeTokens.textSecondary, textAlign: 'right', maxWidth: 220, lineHeight: 1.45 }}>
-              外部 Gemini
-              <div style={{ color: themeTokens.textSecondary, marginTop: 4 }}>
-                {agentChatLlmBody?.mode === 'external' ? agentChatLlmBody.model : '--'}
-                {agentChatLlmBody?.mode === 'external' && !agentChatLlmBody.apiKey ? (
-                  <span style={{ display: 'block', marginTop: 4 }}>Key：服务端环境变量</span>
-                ) : null}
-              </div>
-            </div>
-          )}
-          {llmRuntimeMode !== 'local' && (
-            <Button
-              themeTokens={themeTokens}
-              type="submit"
-              variant="solid"
-              size="md"
-              fullWidth
-            >
-              发送
-            </Button>
           )}
         </div>
       </form>
