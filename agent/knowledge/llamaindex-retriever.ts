@@ -97,7 +97,7 @@ class QuestionAnsweredExtractor {
   }
 }
 
-class BM25Retriever {
+class KeywordRetriever {
   private readonly docs: ChildNodeRecord[];
 
   constructor(docs: ChildNodeRecord[]) {
@@ -190,6 +190,266 @@ function diversifyByDocSource(ranked: RankedNode[], topK: number, maxPerDoc = 2)
   return selected;
 }
 
+function isUsageIntentQuery(query: string): boolean {
+  const q = query.trim().toLowerCase();
+  if (!q) return false;
+  const hints = ['怎么用', '如何用', '如何使用', '怎么配置', '快速开始', 'quick start', 'usage', '接入', '示例'];
+  return hints.some((k) => q.includes(k));
+}
+
+function buildExpandedHybridQuery(query: string): string {
+  const q = query.trim();
+  if (!q) return q;
+  if (!isUsageIntentQuery(q)) return q;
+  const anchors = ['快速开始', '使用说明', '示例', '配置', '接入'];
+  const lower = q.toLowerCase();
+  // AI 生成 By Peng.Guo：主从合并场景补齐关键配置锚点，提升 QUICK_START / USAGE 召回概率
+  if (lower.includes('主从合并') || lower.includes('slave')) {
+    anchors.push('slaveMergeConfig', 'masterField', 'slaveFields', 'displayMode', 'defaultEnableSlaveMerge', 'detailListDisplayMode');
+  }
+  return `${q} ${anchors.join(' ')}`;
+}
+
+function calcUsageIntentContentBoost(node: ChildNodeRecord, query: string): number {
+  const qTokens = tokenize(query).filter((t) => t.length >= 2);
+  const title = (node.metadata.title || '').toLowerCase();
+  const summary = (node.metadata.summary || '').toLowerCase();
+  const questions = (node.metadata.hypotheticalQuestions || []).join(' ').toLowerCase();
+  const text = (node.text || '').toLowerCase();
+  const lex = `${title}\n${summary}\n${questions}\n${text}`;
+
+  // 1) 查询词覆盖度（标题/摘要/可回答问题优先）
+  const titleHit = qTokens.filter((t) => title.includes(t)).length;
+  const summaryHit = qTokens.filter((t) => summary.includes(t)).length;
+  const questionHit = qTokens.filter((t) => questions.includes(t)).length;
+
+  // 2) “怎么用”类可执行信号：配置键、示例代码、步骤/开关等
+  const actionSignals = [
+    /masterfield/i,
+    /slavefields?/i,
+    /slavemergeconfig/i,
+    /displaymode/i,
+    /defaultenableslavemerge/i,
+    /detaillistdisplaymode/i,
+    /profile/i,
+    /split|merge-center|merge-top|hidden/i,
+    /示例|步骤|配置|开关|使用说明|快速开始/,
+    /import\s+\{[^}]+\}\s+from/i,
+  ];
+  const actionability = actionSignals.reduce((acc, re) => acc + (re.test(lex) ? 1 : 0), 0);
+
+  // 3) 导航/入口页惩罚（不是文件名规则，而是内容形态规则）
+  const navSignals = [
+    /功能列表|适用场景|本文将帮助你选择|对比|目录|索引|入口/,
+    /\|\s*功能\s*\|\s*说明\s*\|\s*适用场景\s*\|/,
+  ];
+  const navigationPenalty = navSignals.reduce((acc, re) => acc + (re.test(lex) ? 1 : 0), 0);
+
+  // 入口/导航型片段强降权：即使词覆盖高，也不应压过可执行配置文档
+  if (navigationPenalty > 0 && actionability < 3) {
+    return -0.08 - navigationPenalty * 0.03;
+  }
+
+  return titleHit * 0.014 + summaryHit * 0.01 + questionHit * 0.008 + actionability * 0.012 - navigationPenalty * 0.03;
+}
+
+function isNavigationLike(node: ChildNodeRecord): boolean {
+  const title = (node.metadata.title || '').toLowerCase();
+  const summary = (node.metadata.summary || '').toLowerCase();
+  const text = (node.text || '').toLowerCase();
+  const lex = `${title}\n${summary}\n${text}`;
+  const navSignals = [
+    /功能列表|适用场景|本文将帮助你选择|对比|目录|索引|入口/,
+    /\|\s*功能\s*\|\s*说明\s*\|\s*适用场景\s*\|/,
+  ];
+  return navSignals.some((re) => re.test(lex));
+}
+
+function hasExecutableSignal(node: ChildNodeRecord): boolean {
+  const title = (node.metadata.title || '').toLowerCase();
+  const summary = (node.metadata.summary || '').toLowerCase();
+  const text = (node.text || '').toLowerCase();
+  const lex = `${title}\n${summary}\n${text}`;
+  const actionSignals = [
+    /masterfield/i,
+    /slavefields?/i,
+    /slavemergeconfig/i,
+    /displaymode/i,
+    /defaultenableslavemerge/i,
+    /detaillistdisplaymode/i,
+    /profile/i,
+    /split|merge-center|merge-top|hidden/i,
+    /示例|步骤|配置|开关|使用说明|快速开始/,
+    /import\s+\{[^}]+\}\s+from/i,
+  ];
+  return actionSignals.some((re) => re.test(lex));
+}
+
+function rerankByUsageDocPriority(ranked: RankedNode[], query: string): RankedNode[] {
+  if (!isUsageIntentQuery(query)) return ranked;
+  return ranked
+    .map((item) => ({
+      ...item,
+      score: item.score + calcUsageIntentContentBoost(item.node, query),
+    }))
+    .sort((a, b) => b.score - a.score);
+}
+
+type RerankStrategy = 'rule' | 'model';
+
+function getRerankStrategy(): RerankStrategy {
+  return config.knowledgeBase.rerankMode === 'rule' ? 'rule' : 'model';
+}
+
+function extractJSONArray(raw: string): string | null {
+  const first = raw.indexOf('[');
+  const last = raw.lastIndexOf(']');
+  if (first < 0 || last <= first) return null;
+  return raw.slice(first, last + 1);
+}
+
+async function rerankByLocalModel(query: string, ranked: RankedNode[], callbacks?: KnowledgeQueryStreamCallbacks): Promise<RankedNode[]> {
+  if (ranked.length <= 1) return ranked;
+  const pool = ranked.slice(0, config.knowledgeBase.rerankPoolSize);
+  const docsForRerank = pool.map((item) => {
+    const md = item.node.metadata;
+    const text = trimContextText(item.node.text, 320).replace(/\s+/g, ' ');
+    return `path=${md.filePath}\ntitle=${md.title}\nsummary=${md.summary}\ntext=${text}`;
+  });
+  // 优先使用 Ollama 原生 rerank 接口（适配 bge-reranker-v2-m3）
+  try {
+    const rerankRes = await fetch(`${config.ollama.baseUrl}/api/rerank`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        model: config.knowledgeBase.rerankModel,
+        query,
+        documents: docsForRerank,
+        top_n: docsForRerank.length,
+      }),
+    });
+    if (rerankRes.ok) {
+      const rerankData = (await rerankRes.json()) as {
+        results?: Array<{ index?: number; relevance_score?: number; score?: number }>;
+        rankings?: Array<{ index?: number; relevance_score?: number; score?: number }>;
+      };
+      const rows = Array.isArray(rerankData.results)
+        ? rerankData.results
+        : Array.isArray(rerankData.rankings)
+          ? rerankData.rankings
+          : [];
+      const scoreMap = new Map<number, number>();
+      for (const row of rows) {
+        const idx = Number(row.index);
+        const score = Number(row.relevance_score ?? row.score);
+        if (!Number.isFinite(idx) || !Number.isFinite(score)) continue;
+        if (idx < 0 || idx >= pool.length) continue;
+        scoreMap.set(idx, score);
+      }
+      if (scoreMap.size > 0) {
+        callbacks?.onProgress?.(`本地模型重排完成：模型 ${config.knowledgeBase.rerankModel}（api/rerank）候选 ${pool.length}`);
+        return pool
+          .map((item, idx) => ({
+            ...item,
+            score: item.score + (scoreMap.get(idx) ?? 0) * 0.35,
+          }))
+          .sort((a, b) => b.score - a.score);
+      }
+    }
+  } catch {
+    // fall through to chat-based rerank
+  }
+
+  const prompt = [
+    '你是知识检索重排器。请根据用户问题，为候选片段输出相关性分数。',
+    '要求：',
+    '1) 只返回 JSON 数组，元素格式 {"idx":数字,"score":0到1的小数}；',
+    '2) idx 对应候选编号；',
+    '3) 对“入口/导航”内容降分，对“可执行配置/步骤/字段映射”内容升分；',
+    `问题：${query}`,
+    '候选：',
+    ...pool.map((item, idx) => {
+      const md = item.node.metadata;
+      const text = trimContextText(item.node.text, 280).replace(/\s+/g, ' ');
+      return `[${idx}] path=${md.filePath} title=${md.title} summary=${md.summary} text=${text}`;
+    }),
+  ].join('\n');
+  const res = await fetch(`${config.ollama.baseUrl}/api/chat`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      model: config.knowledgeBase.rerankModel,
+      stream: false,
+      messages: [{ role: 'user', content: prompt }],
+      options: {
+        num_ctx: Math.max(config.knowledgeBase.numCtx, 4096),
+        flash_attention: config.knowledgeBase.flashAttention,
+      },
+    }),
+  });
+  if (!res.ok) throw new Error(`本地模型重排失败：${res.status}`);
+  const data = (await res.json()) as { message?: { content?: string } };
+  const raw = data.message?.content ?? '';
+  const arrText = extractJSONArray(raw);
+  if (!arrText) throw new Error('本地模型重排返回格式错误（缺少 JSON 数组）');
+  const parsed = JSON.parse(arrText) as Array<{ idx?: number; score?: number }>;
+  const scoreMap = new Map<number, number>();
+  parsed.forEach((row) => {
+    const idx = Number(row.idx);
+    const score = Number(row.score);
+    if (!Number.isFinite(idx) || !Number.isFinite(score)) return;
+    if (idx < 0 || idx >= pool.length) return;
+    scoreMap.set(idx, Math.max(0, Math.min(1, score)));
+  });
+  callbacks?.onProgress?.(`本地模型重排完成：模型 ${config.knowledgeBase.rerankModel}，候选 ${pool.length}`);
+  return pool
+    .map((item, idx) => ({
+      ...item,
+      score: item.score + (scoreMap.get(idx) ?? 0) * 0.2,
+    }))
+    .sort((a, b) => b.score - a.score);
+}
+
+async function rerankCandidates(
+  query: string,
+  ranked: RankedNode[],
+  callbacks?: KnowledgeQueryStreamCallbacks
+): Promise<{ ranked: RankedNode[]; strategy: RerankStrategy }> {
+  const strategy = getRerankStrategy();
+  if (strategy === 'rule') {
+    return { ranked: rerankByUsageDocPriority(ranked, query), strategy };
+  }
+  try {
+    callbacks?.onProgress?.(`开始本地模型重排：${config.knowledgeBase.rerankModel}`);
+    const modelRanked = await rerankByLocalModel(query, ranked, callbacks);
+    const withRuleBias = rerankByUsageDocPriority(modelRanked, query);
+    const beforeMap = new Map(ranked.map((item) => [item.node.id, item.score]));
+    const diffLines = withRuleBias.slice(0, 5).map((item, idx) => {
+      const before = beforeMap.get(item.node.id) ?? 0;
+      const after = item.score;
+      const delta = after - before;
+      return `${idx + 1}. ${item.node.metadata.filePath} ${before.toFixed(3)} -> ${after.toFixed(3)} (Δ${delta >= 0 ? '+' : ''}${delta.toFixed(3)})`;
+    });
+    callbacks?.onProgress?.(`重排分数变化（Top5）\n${diffLines.join('\n')}`);
+    return { ranked: withRuleBias, strategy };
+  } catch (err) {
+    callbacks?.onProgress?.(`本地模型重排失败，已回退规则重排：${err instanceof Error ? err.message : String(err)}`);
+    return { ranked: rerankByUsageDocPriority(ranked, query), strategy: 'rule' };
+  }
+}
+
+function applyUsageIntentGuard(ranked: RankedNode[], query: string, topK: number): RankedNode[] {
+  if (!isUsageIntentQuery(query)) return ranked;
+  const weakNavigation = ranked.filter((item) => isNavigationLike(item.node) && !hasExecutableSignal(item.node));
+  const strongOrNormal = ranked.filter((item) => !weakNavigation.includes(item));
+  const executableStrong = strongOrNormal.filter((item) => hasExecutableSignal(item.node));
+  const nonExecutableStrong = strongOrNormal.filter((item) => !hasExecutableSignal(item.node));
+  const prioritized = [...executableStrong, ...nonExecutableStrong];
+  // 硬约束：只有前面候选不足 topK 时，才允许入口/导航片段补位
+  const needFallback = Math.max(0, topK - prioritized.length);
+  return needFallback > 0 ? [...prioritized, ...weakNavigation.slice(0, needFallback)] : prioritized;
+}
+
 let cachedState: CachedIndexState | null = null;
 let rebuildingPromise: Promise<CachedIndexState> | null = null;
 
@@ -249,6 +509,11 @@ function nowTag(): string {
 
 function logLifecycle(stage: string): void {
   console.log(`[KB][${nowTag()}] ${stage}`);
+}
+
+function isRulePatchDebugEnabled(): boolean {
+  const raw = String(process.env.KB_RULE_PATCH_DEBUG ?? '').trim().toLowerCase();
+  return ['1', 'true', 'yes', 'on'].includes(raw);
 }
 
 function safeRelPath(absPath: string): string {
@@ -1001,6 +1266,181 @@ ${contextText}`;
   return streamAnswerFromOllama(question, contexts, callbacks, modelOverride);
 }
 
+function extractQueryKeywords(question: string): string[] {
+  const tokens = tokenize(question)
+    .map((t) => t.toLowerCase())
+    .filter((t) => t.length >= 2);
+  return Array.from(new Set(tokens));
+}
+
+function isRuleLikeSentence(line: string): boolean {
+  const l = line.toLowerCase();
+  return (
+    l.includes(' 映射') ||
+    l.includes('默认') ||
+    l.includes('未传') ||
+    l.includes('显式') ||
+    l.includes('以该值为准') ||
+    l.includes('->') ||
+    l.includes('=>') ||
+    l.includes(' when ') ||
+    l.includes('if ')
+  );
+}
+
+function normalizeCoverageKey(line: string): string {
+  return line
+    .toLowerCase()
+    .replace(/[`"'*#\s]+/g, ' ')
+    .replace(/[^\p{L}\p{N}._/-]+/gu, ' ')
+    .trim();
+}
+
+function buildRuleFamilyKey(line: string): string {
+  const normalized = normalizeCoverageKey(line);
+  if (!normalized) return '';
+  const head = normalized.split(/[：:]/)[0] ?? normalized;
+  return head
+    .split(' ')
+    .filter(Boolean)
+    .slice(0, 8)
+    .join(' ');
+}
+
+function buildRuleBlocksFromLines(lines: string[]): string[] {
+  const blocks: string[] = [];
+  for (let i = 0; i < lines.length; i += 1) {
+    const current = lines[i] ?? '';
+    if (!current) continue;
+    const parts = [current];
+    // AI 生成 By Peng.Guo：若规则句以“：”结尾，通常后续 1~2 行是映射/分支，拼接避免截断
+    const needStrongContinuation = /映射[：:]?$|mapping[：:]?$/i.test(current);
+    if (/[：:]$/.test(current) || needStrongContinuation) {
+      for (let j = i + 1; j < Math.min(lines.length, i + 5); j += 1) {
+        const next = (lines[j] ?? '').trim();
+        if (!next) break;
+        if (/^#{1,6}\s|^###|^##|^常见问题|^注意事项|^总结/.test(next)) break;
+        const isContinuation =
+          /^[-*•]/.test(next) ||
+          /->|=>|映射|默认|未传|merge|centered|hidden|split|displaymode|profile/i.test(next);
+        if (!isContinuation) break;
+        parts.push(next.replace(/^[-*•\d.)\s]+/, '').trim());
+        // 如果已经包含映射箭头和目标值，可提前结束
+        const joined = parts.join(' ').toLowerCase();
+        if ((joined.includes('->') || joined.includes('=>')) && (joined.includes('centered') || joined.includes('hidden'))) {
+          break;
+        }
+      }
+    }
+    blocks.push(parts.join(' '));
+  }
+  return blocks;
+}
+
+function extractMustContainTokensFromRule(line: string): string[] {
+  const key = normalizeCoverageKey(line);
+  if (!key) return [];
+  const base = key.split(' ').filter(Boolean).slice(0, 3);
+  const extra: string[] = [];
+  const lower = line.toLowerCase();
+  const mappingWords = [
+    'detaillistdisplaymode',
+    'displaymode',
+    'merge-center',
+    'merge-top',
+    'centered',
+    'hidden',
+  ];
+  for (const w of mappingWords) {
+    if (lower.includes(w)) extra.push(w);
+  }
+  if (lower.includes('->') || lower.includes('=>') || lower.includes('映射')) {
+    // 映射类规则需要更严格校验，避免“只有前半句被判已覆盖”
+    return Array.from(new Set([...base, ...extra])).slice(0, 8);
+  }
+  return base;
+}
+
+function collectCriticalRuleCandidates(
+  question: string,
+  contexts: Array<{ parentText: string; childText: string; metadata: EnhancedNodeMetadata }>
+): string[] {
+  const keywords = extractQueryKeywords(question);
+  const lines = contexts
+    .flatMap((ctx) => `${ctx.parentText}\n${ctx.childText}`.split(/\r?\n/))
+    .map((line) => line.trim())
+    .filter((line) => line.length >= 12);
+  const ruleBlocks = buildRuleBlocksFromLines(lines);
+  const scored = ruleBlocks
+    .map((block) => {
+      const lower = block.toLowerCase();
+      const hit = keywords.filter((k) => lower.includes(k)).length;
+      const configSignal = /[a-zA-Z]+\.[a-zA-Z]+|masterfield|slavefields?|displaymode|profile|默认|映射|未传|显式/.test(lower)
+        ? 1
+        : 0;
+      const ruleSignal = isRuleLikeSentence(lower) ? 1 : 0;
+      // AI 生成 By Peng.Guo：完整规则块优先于半截规则块（含箭头映射、枚举值、更长上下文）
+      const hasArrow = /->|=>/.test(lower) ? 1 : 0;
+      const hasRuleTargets = /(centered|hidden|split|merge-center|merge-top|true|false)/.test(lower) ? 1 : 0;
+      const lengthBonus = Math.min(2, Math.floor(block.length / 90));
+      const score = hit * 2 + configSignal * 2 + ruleSignal * 2 + hasArrow * 3 + hasRuleTargets * 2 + lengthBonus;
+      return { block, score, family: buildRuleFamilyKey(block) };
+    })
+    .filter((row) => row.score >= 4)
+    .sort((a, b) => b.score - a.score);
+  const bestByFamily = new Map<string, { block: string; score: number }>();
+  for (const row of scored) {
+    const family = row.family || normalizeCoverageKey(row.block);
+    if (!family) continue;
+    const prev = bestByFamily.get(family);
+    if (!prev || row.score > prev.score || (row.score === prev.score && row.block.length > prev.block.length)) {
+      bestByFamily.set(family, { block: row.block, score: row.score });
+    }
+  }
+  const selected = Array.from(bestByFamily.values())
+    .sort((a, b) => b.score - a.score)
+    .slice(0, 4)
+    .map((item) => item.block.replace(/^[-*•\d.)\s]+/, '').trim());
+  if (isRulePatchDebugEnabled()) {
+    const topCandidates = scored.slice(0, 8).map((item) => ({
+      score: item.score,
+      family: item.family || normalizeCoverageKey(item.block),
+      preview: item.block.slice(0, 220),
+    }));
+    console.log(
+      `[KB][${nowTag()}] [RULE_PATCH_DEBUG] topCandidates=${JSON.stringify(topCandidates)} selected=${JSON.stringify(
+        selected.slice(0, 4)
+      )}`
+    );
+  }
+  return selected;
+}
+
+function patchMissingCriticalRules(
+  question: string,
+  answer: string,
+  contexts: Array<{ parentText: string; childText: string; metadata: EnhancedNodeMetadata }>
+): string {
+  const candidates = collectCriticalRuleCandidates(question, contexts);
+  if (candidates.length === 0) return answer;
+  const answerNorm = normalizeCoverageKey(answer);
+  const missing = candidates.filter((line) => {
+    const mustContainTokens = extractMustContainTokensFromRule(line);
+    if (mustContainTokens.length === 0) return false;
+    return !mustContainTokens.every((tk) => answerNorm.includes(tk));
+  });
+  if (isRulePatchDebugEnabled()) {
+    console.log(
+      `[KB][${nowTag()}] [RULE_PATCH_DEBUG] candidates=${JSON.stringify(candidates)} missing=${JSON.stringify(
+        missing
+      )}`
+    );
+  }
+  if (missing.length === 0) return answer;
+  const patch = ['### 关键规则补充（检索兜底）', ...missing.slice(0, 3).map((line) => `- ${line}`)].join('\n');
+  return `${answer.trim()}\n\n${patch}`;
+}
+
 export async function ingestDocument(doc: KnowledgeDoc, onProgress?: RebuildProgressCallback, preferredModel?: string): Promise<IngestionResult> {
   const ingestModel = resolveIngestModel(preferredModel);
   const cache = await readCache();
@@ -1073,6 +1513,7 @@ export async function clearKnowledgeIndexStorage(onProgress?: RebuildProgressCal
 export async function queryKnowledgeIndex(question: string, chatModel?: string, callbacks?: KnowledgeQueryStreamCallbacks): Promise<KnowledgeQueryResult> {
   const q = question.trim();
   if (!q) throw new Error('知识库查询问题不能为空');
+  const hybridQuery = buildExpandedHybridQuery(q);
   const retrieveStartMs = Date.now();
   callbacks?.onProgress?.('开始检索知识库...');
   logLifecycle('retrieve_start');
@@ -1085,38 +1526,74 @@ export async function queryKnowledgeIndex(question: string, chatModel?: string, 
   const relaxedFilter: FilterStrategy = { query: q, queryTokens: filter.queryTokens, possibleEntities: [] };
 
   const vectorRetriever = state.index.asRetriever({ similarityTopK: config.knowledgeBase.hybridTopK });
-  const rawVector = await (vectorRetriever as any).retrieve?.(q);
+  const rawVector = await (vectorRetriever as any).retrieve?.(hybridQuery);
   const vectorRanked = mapVectorResults(rawVector);
-  const bm25Retriever = new BM25Retriever(state.children);
-  const bm25Ranked = bm25Retriever.retrieve(q, config.knowledgeBase.hybridTopK, relaxedFilter);
+  const keywordRetriever = new KeywordRetriever(state.children);
+  const keywordRanked = keywordRetriever.retrieve(hybridQuery, config.knowledgeBase.hybridTopK, relaxedFilter);
 
   const vectorPrioritized = prioritizeEntityMatches(vectorRanked, filter);
-  const bm25Prioritized = prioritizeEntityMatches(bm25Ranked, filter);
-  const rankedLists: RankedNode[][] = [vectorPrioritized.ranked, bm25Prioritized.ranked];
+  const keywordPrioritized = prioritizeEntityMatches(keywordRanked, filter);
+  const rankedLists: RankedNode[][] = [vectorPrioritized.ranked, keywordPrioritized.ranked];
   if (filter.possibleEntities.length > 0) {
-    if (vectorPrioritized.matchedCount > 0 || bm25Prioritized.matchedCount > 0) {
+    if (vectorPrioritized.matchedCount > 0 || keywordPrioritized.matchedCount > 0) {
       callbacks?.onProgress?.(
-        `实体增强重排已启用：向量命中 ${vectorPrioritized.matchedCount} 条，关键词命中 ${bm25Prioritized.matchedCount} 条`
+        `实体增强重排已启用：向量命中 ${vectorPrioritized.matchedCount} 条，关键词命中 ${keywordPrioritized.matchedCount} 条`
       );
       // AI 生成 By Peng.Guo：追加实体优先列表到 RRF，作为软约束加权而非硬过滤
-      rankedLists.push(vectorPrioritized.ranked, bm25Prioritized.ranked);
+      rankedLists.push(vectorPrioritized.ranked, keywordPrioritized.ranked);
     } else {
       callbacks?.onProgress?.('实体增强未命中，已自动使用宽松检索结果');
     }
   }
-  // 先取更大的候选池再做按文档分散，减少单文档片段重复导致的信息遗漏
-  const fusedRaw = new ReciprocalRankFusion(config.knowledgeBase.rrfK).fuse(
-    rankedLists,
-    Math.max(config.knowledgeBase.topK, config.knowledgeBase.topK * 3)
+  const normalizeByMax = (items: RankedNode[]): RankedNode[] => {
+    const maxScore = items.reduce((max, item) => Math.max(max, item.score), 0);
+    if (maxScore <= 0) return items.map((item) => ({ ...item, score: 0 }));
+    return items.map((item) => ({ ...item, score: item.score / maxScore }));
+  };
+  const fuseByAlpha = (vector: RankedNode[], keyword: RankedNode[], topN: number, alpha: number): RankedNode[] => {
+    // alpha 表示向量权重，关键词权重为 (1 - alpha)
+    const vectorWeight = Math.max(0, Math.min(1, alpha));
+    const keywordWeight = 1 - vectorWeight;
+    const vectorNorm = normalizeByMax(vector);
+    const keywordNorm = normalizeByMax(keyword);
+    const merged = new Map<string, RankedNode>();
+    const upsert = (item: RankedNode, weight: number) => {
+      const id = item.node.id;
+      const existing = merged.get(id);
+      if (!existing) {
+        merged.set(id, { node: item.node, score: item.score * weight });
+        return;
+      }
+      existing.score += item.score * weight;
+      merged.set(id, existing);
+    };
+    vectorNorm.forEach((item) => upsert(item, vectorWeight));
+    keywordNorm.forEach((item) => upsert(item, keywordWeight));
+    return Array.from(merged.values())
+      .sort((a, b) => b.score - a.score)
+      .slice(0, topN);
+  };
+  const fusedRaw = fuseByAlpha(
+    vectorPrioritized.ranked,
+    keywordPrioritized.ranked,
+    Math.max(config.knowledgeBase.topK, config.knowledgeBase.rerankPoolSize, config.knowledgeBase.topK * 3),
+    config.knowledgeBase.hybridAlpha
   );
-  const fused = diversifyByDocSource(fusedRaw, config.knowledgeBase.topK, 2);
+  const { ranked: reranked, strategy } = await rerankCandidates(q, fusedRaw, callbacks);
+  const guarded = applyUsageIntentGuard(reranked, q, config.knowledgeBase.topK);
+  const maxPerDoc = isUsageIntentQuery(q) ? 1 : 2;
+  const fused = diversifyByDocSource(guarded, config.knowledgeBase.topK, maxPerDoc);
   const recursiveRetriever = new RecursiveRetriever(state.parentById);
   const hydrated = recursiveRetriever.hydrate(fused);
   clearTimeout(slowTimer);
   const elapsed = Date.now() - retrieveStartMs;
   logLifecycle(`retrieve_done (${elapsed}ms)`);
   const hitDocCount = new Set(hydrated.map((row) => row.child.node.metadata.docId || row.child.node.metadata.filePath)).size;
-  callbacks?.onProgress?.(`检索完成，用时 ${elapsed}ms，命中 ${hydrated.length} 个候选片段，覆盖 ${hitDocCount} 个文档`);
+  callbacks?.onProgress?.(
+    `检索完成，用时 ${elapsed}ms，hybrid(alpha=${config.knowledgeBase.hybridAlpha.toFixed(2)}, 向量=${config.knowledgeBase.hybridAlpha.toFixed(
+      2
+    )}, 关键词=${(1 - config.knowledgeBase.hybridAlpha).toFixed(2)})，重排=${strategy}，命中 ${hydrated.length} 个候选片段，覆盖 ${hitDocCount} 个文档`
+  );
 
   const contexts = hydrated.map((row) => ({
     parentText: row.parent?.text ?? row.child.node.text,
@@ -1125,7 +1602,8 @@ export async function queryKnowledgeIndex(question: string, chatModel?: string, 
   }));
   logLifecycle('generation_start');
   callbacks?.onProgress?.('LLM 开始生成（streaming=true）...');
-  const answer = await streamAnswerFromSelectedModel(q, contexts, callbacks, chatModel);
+  const rawAnswer = await streamAnswerFromSelectedModel(q, contexts, callbacks, chatModel);
+  const answer = patchMissingCriticalRules(q, rawAnswer, contexts);
   const citations = hydrated.map((item) => ({
     path: item.child.node.metadata.filePath,
     score: item.child.score,

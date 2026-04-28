@@ -92,10 +92,18 @@ export const config = {
     topK: Math.max(1, Number(process.env.KB_TOP_K) || 7),
     /** 混合检索候选数量 */
     hybridTopK: Math.max(2, Number(process.env.KB_HYBRID_TOP_K) || 4),
+    /** Hybrid Search 的向量权重（关键词权重 = 1 - alpha） */
+    hybridAlpha: Math.max(0, Math.min(1, Number(process.env.KB_HYBRID_ALPHA) || 0.4)),
     /** RRF 融合参数（越大越平滑） */
     rrfK: Math.max(10, Number(process.env.KB_RRF_K) || 50),
     /** 引用片段最大字符数 */
     maxSnippetChars: Math.max(80, Number(process.env.KB_MAX_SNIPPET_CHARS) || 280),
+    /** 重排模式：model（本地模型重排）或 rule（规则重排） */
+    rerankMode: (process.env.KB_RERANK_MODE || 'rule').toLowerCase() === 'model' ? 'model' : 'rule',
+    /** 本地模型重排使用的 Ollama 模型（推荐 bge-reranker-v2-m3） */
+    rerankModel: process.env.KB_RERANK_MODEL || 'bge-reranker-v2-m3',
+    /** 进入重排的候选池大小 */
+    rerankPoolSize: Math.max(4, Number(process.env.KB_RERANK_POOL_SIZE) || 24),
     /** 单次知识库查询超时（毫秒），避免工具阶段长时间无响应 */
     queryTimeoutMs: Math.max(5000, Number(process.env.KB_QUERY_TIMEOUT_MS) || 120000),
   },
