@@ -151,6 +151,48 @@ type LiveTokenMetrics = {
   speedTps: number;
 };
 
+// AI 生成 By Peng.Guo：知识库重建专用实时反馈模型
+type KnowledgeRebuildProgress = {
+  cacheTotal: number;
+  preprocessDone: Array<{ doc: string; status: 'done' | 'reused' }>;
+  preprocessCurrent?: string;
+  vectorDone: string[];
+  vectorCurrent?: string;
+};
+
+type KbProgressEvent = {
+  stage: 'preprocess' | 'vector' | 'summary';
+  status: 'start' | 'done' | 'reused' | 'cache_total';
+  doc?: string;
+  count?: number;
+};
+
+function parseKbProgressEvent(message?: string): KbProgressEvent | null {
+  const text = (message ?? '').trim();
+  if (!text.startsWith('[KB_PROGRESS]')) return null;
+  const stageMatch = text.match(/stage=(preprocess|vector|summary)/);
+  const statusMatch = text.match(/status=(start|done|reused|cache_total)/);
+  const summaryCountMatch = text.match(/count=(\d+)/);
+  const docMatch = text.match(/doc=([^\s]+)/);
+  const stage = stageMatch?.[1];
+  const status = statusMatch?.[1];
+  const doc = docMatch?.[1];
+  if (!stage || !status) return null;
+  if (stage === 'summary' && status === 'cache_total') {
+    return {
+      stage: 'summary',
+      status: 'cache_total',
+      count: Number(summaryCountMatch?.[1] ?? 0),
+    };
+  }
+  if (!doc) return null;
+  return {
+    stage: stage as KbProgressEvent['stage'],
+    status: status as KbProgressEvent['status'],
+    doc,
+  };
+}
+
 // AI 生成 By Peng.Guo：将引用来源压缩展示，避免次要信息占据过多空间
 function getCitationLabel(sourcePath?: string): string {
   const raw = (sourcePath ?? '').trim();
@@ -839,7 +881,7 @@ function renderToolResults(
             <div style={{ fontSize: 12, color: themeTokens.textSecondary, marginBottom: 6 }}>
               引用来源 <span style={{ color: themeTokens.textSecondary }}>（次要信息，默认折叠）</span>
             </div>
-            {citations.slice(0, 4).map((item, idx) => (
+            {citations.slice(0, 7).map((item, idx) => (
               <div
                 key={`${item.path ?? 'source'}-${idx}`}
                 style={{ marginBottom: 6, padding: '6px 8px', borderRadius: 4, background: themeTokens.workspacePanelBackground, border: `1px solid ${themeTokens.inputBorder}` }}
@@ -1171,6 +1213,7 @@ export function ChatPanel({ apiBase, addLog, onStartWorkEmbedded, onOpenKnowledg
   const [showCompletion, setShowCompletion] = useState(false);
   const [tipMessage, setTipMessage] = useState('');
   const [liveTokenMetrics, setLiveTokenMetrics] = useState<LiveTokenMetrics | null>(null);
+  const [knowledgeRebuildProgress, setKnowledgeRebuildProgress] = useState<KnowledgeRebuildProgress | null>(null);
   const [projects, setProjects] = useState<ProjectInfo[]>([]);
   const chatModelOptions = useMemo(
     () => installedModels.filter((name) => isLikelyChatModelName(name)),
@@ -1620,6 +1663,73 @@ export function ChatPanel({ apiBase, addLog, onStartWorkEmbedded, onOpenKnowledg
             toolStreamVisibleRef.current = true;
             setToolStreamLive({ thinking: '', content: '' });
           }
+          if (
+            e.phase === 'start' &&
+            (e.tool === 'rebuild_knowledge_base_index' || e.tool === 'incremental_rebuild_knowledge_base_index')
+          ) {
+            setKnowledgeRebuildProgress({
+              cacheTotal: 0,
+              preprocessDone: [],
+              vectorDone: [],
+            });
+          }
+          if (
+            e.phase === 'progress' &&
+            (e.tool === 'rebuild_knowledge_base_index' || e.tool === 'incremental_rebuild_knowledge_base_index')
+          ) {
+            const progressEvent = parseKbProgressEvent(e.message);
+            if (progressEvent) {
+              setKnowledgeRebuildProgress((prev) => {
+                const current = prev ?? { cacheTotal: 0, preprocessDone: [], vectorDone: [] };
+                if (progressEvent.stage === 'summary' && progressEvent.status === 'cache_total') {
+                  return { ...current, cacheTotal: progressEvent.count ?? 0 };
+                }
+                if (progressEvent.stage === 'preprocess') {
+                  if (progressEvent.status === 'start') {
+                    return { ...current, preprocessCurrent: progressEvent.doc };
+                  }
+                  if (progressEvent.status === 'done' || progressEvent.status === 'reused') {
+                    const existed = current.preprocessDone.find((item) => item.doc === progressEvent.doc);
+                    const nextDone = existed
+                      ? current.preprocessDone.map((item) =>
+                          item.doc === progressEvent.doc
+                            ? { doc: progressEvent.doc!, status: progressEvent.status as 'done' | 'reused' }
+                            : item
+                        )
+                      : [...current.preprocessDone, { doc: progressEvent.doc!, status: progressEvent.status as 'done' | 'reused' }];
+                    return { ...current, preprocessDone: nextDone, preprocessCurrent: undefined };
+                  }
+                }
+                if (progressEvent.stage === 'vector') {
+                  if (progressEvent.status === 'start') {
+                    return { ...current, vectorCurrent: progressEvent.doc };
+                  }
+                  if (progressEvent.status === 'done') {
+                    const nextDone = current.vectorDone.includes(progressEvent.doc)
+                      ? current.vectorDone
+                      : [...current.vectorDone, progressEvent.doc];
+                    return { ...current, vectorDone: nextDone, vectorCurrent: undefined };
+                  }
+                }
+                return current;
+              });
+              return;
+            }
+          }
+          if (
+            e.phase === 'done' &&
+            (e.tool === 'rebuild_knowledge_base_index' || e.tool === 'incremental_rebuild_knowledge_base_index')
+          ) {
+            setKnowledgeRebuildProgress((prev) =>
+              prev
+                ? {
+                    ...prev,
+                    preprocessCurrent: undefined,
+                    vectorCurrent: undefined,
+                  }
+                : prev
+            );
+          }
           const line = formatToolProgressLogLine(e);
           addLog(line);
           setToolProgressLines((prev) => [...prev.slice(-40), line]);
@@ -1722,7 +1832,13 @@ export function ChatPanel({ apiBase, addLog, onStartWorkEmbedded, onOpenKnowledg
           themeTokens={themeTokens}
           icon="⊗"
           type="button"
-          onClick={() => setMessages([])}
+          onClick={() => {
+            setMessages([]);
+            setKnowledgeRebuildProgress(null);
+            setToolProgressLines([]);
+            setToolStreamLive(null);
+            setStreamLive(null);
+          }}
           title="清屏"
           variant="soft"
           size="sm"
@@ -1918,12 +2034,118 @@ export function ChatPanel({ apiBase, addLog, onStartWorkEmbedded, onOpenKnowledg
             ))}
           </div>
         )}
+        {knowledgeRebuildProgress && (
+          <div
+            style={{
+              marginBottom: 12,
+              padding: 10,
+              borderRadius: 8,
+              border: `1px solid ${themeTokens.inputBorder}`,
+              background: themeTokens.workspacePanelSubtleBackground,
+              maxHeight: 260,
+              overflow: 'auto',
+            }}
+          >
+            <div style={{ fontSize: 11, color: themeTokens.textSecondary, marginBottom: 8 }}>
+              知识库重建反馈（已处理 + 实时处理中）
+            </div>
+            <div style={{ fontSize: 12, color: themeTokens.textPrimary, marginBottom: 8 }}>
+              <strong>预处理文档：</strong>
+              <span style={{ color: themeTokens.textSecondary, marginLeft: 6 }}>历史已缓存 {knowledgeRebuildProgress.cacheTotal}</span>
+              <span style={{ color: themeTokens.textSecondary, marginLeft: 8 }}>
+                本次已处理 {knowledgeRebuildProgress.preprocessDone.filter((item) => item.status === 'done').length}
+              </span>
+              <span style={{ color: themeTokens.textSecondary, marginLeft: 8 }}>
+                本次复用 {knowledgeRebuildProgress.preprocessDone.filter((item) => item.status === 'reused').length}
+              </span>
+              {knowledgeRebuildProgress.preprocessCurrent ? (
+                <span style={{ color: themeTokens.statusSuccess, marginLeft: 8 }}>
+                  处理中：{knowledgeRebuildProgress.preprocessCurrent}
+                </span>
+              ) : null}
+            </div>
+            <div style={{ fontSize: 11, color: themeTokens.textSecondary, marginBottom: 6 }}>已处理列表（含实时处理中）</div>
+            {knowledgeRebuildProgress.preprocessDone.length > 0 || knowledgeRebuildProgress.preprocessCurrent ? (
+              <div
+                style={{
+                  fontSize: 12,
+                  color: themeTokens.textSecondary,
+                  marginBottom: 10,
+                  maxHeight: 120,
+                  overflow: 'auto',
+                  border: `1px solid ${themeTokens.inputBorder}`,
+                  borderRadius: 6,
+                  padding: 6,
+                  background: themeTokens.workspacePanelBackground,
+                }}
+              >
+                {knowledgeRebuildProgress.preprocessCurrent ? (
+                  <div
+                    key={`pre-current-${knowledgeRebuildProgress.preprocessCurrent}`}
+                    style={{ marginBottom: 4, wordBreak: 'break-all', color: themeTokens.statusSuccess }}
+                  >
+                    [处理中] {knowledgeRebuildProgress.preprocessCurrent}
+                  </div>
+                ) : null}
+                {knowledgeRebuildProgress.preprocessDone.map((item) => (
+                  <div key={`pre-${item.doc}`} style={{ marginBottom: 4, wordBreak: 'break-all' }}>
+                    {item.status === 'reused' ? '[复用] ' : '[已处理] '}
+                    {item.doc}
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div style={{ fontSize: 12, color: themeTokens.textSecondary, marginBottom: 10 }}>暂无</div>
+            )}
+            <div style={{ fontSize: 12, color: themeTokens.textPrimary, marginBottom: 8 }}>
+              <strong>向量索引文档：</strong>
+              <span style={{ color: themeTokens.textSecondary, marginLeft: 6 }}>历史已缓存 {knowledgeRebuildProgress.cacheTotal}</span>
+              <span style={{ color: themeTokens.textSecondary, marginLeft: 8 }}>本次已完成 {knowledgeRebuildProgress.vectorDone.length}</span>
+              {knowledgeRebuildProgress.vectorCurrent ? (
+                <span style={{ color: themeTokens.statusSuccess, marginLeft: 8 }}>
+                  处理中：{knowledgeRebuildProgress.vectorCurrent}
+                </span>
+              ) : null}
+            </div>
+            <div style={{ fontSize: 11, color: themeTokens.textSecondary, marginBottom: 6 }}>已处理列表（含实时处理中）</div>
+            {knowledgeRebuildProgress.vectorDone.length > 0 || knowledgeRebuildProgress.vectorCurrent ? (
+              <div
+                style={{
+                  fontSize: 12,
+                  color: themeTokens.textSecondary,
+                  maxHeight: 120,
+                  overflow: 'auto',
+                  border: `1px solid ${themeTokens.inputBorder}`,
+                  borderRadius: 6,
+                  padding: 6,
+                  background: themeTokens.workspacePanelBackground,
+                }}
+              >
+                {knowledgeRebuildProgress.vectorCurrent ? (
+                  <div
+                    key={`vec-current-${knowledgeRebuildProgress.vectorCurrent}`}
+                    style={{ marginBottom: 4, wordBreak: 'break-all', color: themeTokens.statusSuccess }}
+                  >
+                    [处理中] {knowledgeRebuildProgress.vectorCurrent}
+                  </div>
+                ) : null}
+                {knowledgeRebuildProgress.vectorDone.map((doc) => (
+                  <div key={`vec-${doc}`} style={{ marginBottom: 4, wordBreak: 'break-all' }}>
+                    {doc}
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div style={{ fontSize: 12, color: themeTokens.textSecondary }}>暂无</div>
+            )}
+          </div>
+        )}
         {loading && (
           <p style={{ color: themeTokens.textSecondary }}>
             {toolStreamLive && (toolStreamLive.thinking || toolStreamLive.content)
               ? '流式输出中（见上方「工具内流式输出」）…'
               : streamLive
-                ? '连接模型并处理中…'
+                ? '思考中…'
                 : '处理中…'}
           </p>
         )}

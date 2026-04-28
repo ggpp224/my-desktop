@@ -89,7 +89,7 @@ export const config = {
     /** 是否启用 Flash Attention */
     flashAttention: ['1', 'true', 'yes', 'on'].includes(String(process.env.KB_FLASH_ATTENTION || '1').toLowerCase()),
     /** 检索召回条数 */
-    topK: Math.max(1, Number(process.env.KB_TOP_K) || 3),
+    topK: Math.max(1, Number(process.env.KB_TOP_K) || 7),
     /** 混合检索候选数量 */
     hybridTopK: Math.max(2, Number(process.env.KB_HYBRID_TOP_K) || 4),
     /** RRF 融合参数（越大越平滑） */

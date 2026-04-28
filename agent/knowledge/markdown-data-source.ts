@@ -39,9 +39,14 @@ async function walkMarkdownFiles(dirAbs: string): Promise<string[]> {
   return files;
 }
 
-function buildStableId(rootAbs: string, fileAbs: string): string {
-  const rel = path.relative(rootAbs, fileAbs).split(path.sep).join('/');
-  return rel || fileAbs;
+function buildStableId(dirRaw: string, dirAbs: string, fileAbs: string): string {
+  const relInDir = path.relative(dirAbs, fileAbs).split(path.sep).join('/');
+  const dirNorm = dirRaw.split(path.sep).join('/').replace(/^\/+|\/+$/g, '');
+  const joined = `${dirNorm}/${relInDir}`.replace(/\/+/g, '/');
+  if (!joined) return fileAbs;
+  // AI 生成 By Peng.Guo：导入目录默认含时间戳（import-<ts>），若直接参与 id 会导致同文档每次都被判定为新文档
+  // 这里将 volatile 目录名归一化，确保增量重建可稳定复用缓存
+  return joined.replace(/(^|\/)runtime\/private-kb\/import-\d+(?=\/)/, '$1runtime/private-kb/import-latest');
 }
 
 export async function loadMarkdownKnowledgeDocs(rootDirAbs: string, docDirs: string[]): Promise<KnowledgeDoc[]> {
@@ -58,7 +63,7 @@ export async function loadMarkdownKnowledgeDocs(rootDirAbs: string, docDirs: str
       const stat = await fs.stat(fileAbs);
       const text = await fs.readFile(fileAbs, 'utf-8');
       docs.push({
-        id: buildStableId(rootDirAbs, fileAbs),
+        id: buildStableId(clean, dirAbs, fileAbs),
         filePath: fileAbs,
         text,
         mtimeMs: stat.mtimeMs,

@@ -2,7 +2,14 @@
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
 import { config } from '../../config/default.js';
-import { clearKnowledgeIndexStorage, forceRebuildKnowledgeIndex, ingestDocument, queryKnowledgeIndex, rebuildKnowledgeIndex } from './llamaindex-retriever.js';
+import {
+  clearKnowledgeIndexStorage,
+  forceRebuildKnowledgeIndex,
+  incrementalRebuildKnowledgeIndex,
+  ingestDocument,
+  queryKnowledgeIndex,
+  rebuildKnowledgeIndex,
+} from './llamaindex-retriever.js';
 import { getKnowledgeDocDirs, loadMarkdownKnowledgeDocs } from './markdown-data-source.js';
 
 export type KnowledgeAnswerPayload = {
@@ -186,13 +193,13 @@ export async function incrementalRebuildKnowledgeBaseIndex(
   preferredModel?: string
 ): Promise<{ success: boolean; docsCount?: number; error?: string }> {
   try {
-    onProgress?.('开始增量重建知识库索引（仅重算变更文档预处理）...');
+    onProgress?.('开始增量重建知识库索引（变更文档预处理增量，无变更时复用已有向量索引）...');
     const installedNames = await ensureKnowledgeModelsInstalled();
     const resolvedIngest = resolveInstalledOllamaModel(installedNames, preferredModel, config.knowledgeBase.ingestModel);
     if (resolvedIngest.fallbackFrom) {
       onProgress?.(`当前模型 ${resolvedIngest.fallbackFrom} 非本地 Ollama 模型，增量重建已回退为 ${resolvedIngest.model}`);
     }
-    const result = await rebuildKnowledgeIndex(onProgress, resolvedIngest.model);
+    const result = await incrementalRebuildKnowledgeIndex(onProgress, resolvedIngest.model);
     return { success: true, docsCount: result.docsCount };
   } catch (err) {
     return { success: false, error: err instanceof Error ? err.message : String(err) };

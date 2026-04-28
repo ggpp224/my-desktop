@@ -120,6 +120,17 @@ function buildKnowledgeDocPathCandidates(inputPath: string): string[] {
       if (restStripped) candidates.add(prefix + restStripped);
     }
   }
+  // AI 生成 By Peng.Guo：目录链接兜底，自动尝试常见文档入口文件
+  const snapshot = Array.from(candidates);
+  const indexNames = ['README.md', 'QUICK_START.md', 'USAGE.md', 'SUMMARY.md', 'index.md'];
+  for (const item of snapshot) {
+    const clean = item.replace(/\/+$/, '');
+    const hasExt = /\.[a-zA-Z0-9]+$/.test(clean);
+    if (!clean || hasExt) continue;
+    for (const indexName of indexNames) {
+      candidates.add(`${clean}/${indexName}`);
+    }
+  }
   return Array.from(candidates);
 }
 
@@ -294,16 +305,18 @@ app.post('/agent/history', async (req, res) => {
 
 /** 私人知识库：导入目录中的 Markdown 文档（前端选择目录后传文件列表） */
 app.post('/knowledge-base/import', async (req, res) => {
-  const sourceNameRaw = String(req.body?.sourceName ?? '').trim() || `import-${Date.now()}`;
+  const sourceNameRaw = String(req.body?.sourceName ?? '').trim() || 'import-latest';
   const files = Array.isArray(req.body?.files) ? (req.body.files as KnowledgeImportFile[]) : [];
   if (!files.length) {
     res.status(400).json({ success: false, error: '缺少 files' });
     return;
   }
-  const sourceName = sourceNameRaw.replace(/[^a-zA-Z0-9._-]/g, '_').slice(0, 80) || `import-${Date.now()}`;
+  const sourceName = sourceNameRaw.replace(/[^a-zA-Z0-9._-]/g, '_').slice(0, 80) || 'import-latest';
   const targetRoot = path.join(PRIVATE_KB_BASE_DIR, sourceName);
   let imported = 0;
   try {
+    // AI 生成 By Peng.Guo：默认导入目录复用时先清理，避免旧文件残留影响增量判断
+    await fs.rm(targetRoot, { recursive: true, force: true });
     await fs.mkdir(targetRoot, { recursive: true });
     for (const file of files) {
       const rawPath = String(file.path ?? '').trim();
