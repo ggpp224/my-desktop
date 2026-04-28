@@ -8,7 +8,7 @@ const TOOL_GROUPS: ToolGroup[] = [
   {
     title: '工作流 / 项目操作',
     tools: [
-      { name: 'run_workflow', desc: '执行工作流（如：开始工作、执行 start-work）' },
+      { name: 'run_workflow', desc: '执行工作流（如：开始工作、开始工作，使用外部终端、执行 start-work）' },
       { name: 'run_workflow_step', desc: '执行工作流单步（如：启动 cpxy、启动 react18、启动 scm）' },
       { name: 'open_terminal', desc: '在「我的工作」打开终端页签（如：终端打开 react18）' },
       { name: 'deploy_jenkins', desc: '触发 Jenkins 部署（如：部署 nova、部署 base）' },

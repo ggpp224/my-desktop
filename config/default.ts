@@ -69,7 +69,7 @@ export const config = {
   },
   knowledgeBase: {
     /** 问答模型（Ollama） */
-    chatModel: process.env.KB_CHAT_MODEL || 'qwen2.5-coder:14b',
+    chatModel: process.env.KB_CHAT_MODEL || 'qwen2.5:7b',
     /** 预处理模型（用于 metadata extraction，速度/质量平衡默认 14B） */
     ingestModel: process.env.KB_INGEST_MODEL || 'qwen2.5-coder:14b',
     /** 嵌入模型（Ollama） */
@@ -89,14 +89,14 @@ export const config = {
     /** 是否启用 Flash Attention */
     flashAttention: ['1', 'true', 'yes', 'on'].includes(String(process.env.KB_FLASH_ATTENTION || '1').toLowerCase()),
     /** 检索召回条数 */
-    topK: Math.max(1, Number(process.env.KB_TOP_K) || 4),
+    topK: Math.max(1, Number(process.env.KB_TOP_K) || 3),
     /** 混合检索候选数量 */
-    hybridTopK: Math.max(2, Number(process.env.KB_HYBRID_TOP_K) || 6),
+    hybridTopK: Math.max(2, Number(process.env.KB_HYBRID_TOP_K) || 4),
     /** RRF 融合参数（越大越平滑） */
     rrfK: Math.max(10, Number(process.env.KB_RRF_K) || 50),
     /** 引用片段最大字符数 */
     maxSnippetChars: Math.max(80, Number(process.env.KB_MAX_SNIPPET_CHARS) || 280),
     /** 单次知识库查询超时（毫秒），避免工具阶段长时间无响应 */
-    queryTimeoutMs: Math.max(5000, Number(process.env.KB_QUERY_TIMEOUT_MS) || 45000),
+    queryTimeoutMs: Math.max(5000, Number(process.env.KB_QUERY_TIMEOUT_MS) || 120000),
   },
 };

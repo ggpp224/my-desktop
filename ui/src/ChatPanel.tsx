@@ -185,6 +185,7 @@ interface ChatPanelProps {
 
 const QUICK_ACTIONS: Array<{ label: string; message: string }> = [
   { label: '开始工作', message: '开始工作' },
+  { label: '开始工作（外部终端）', message: '开始工作，使用外部终端' },
   { label: '打开终端', message: '打开终端' },
   { label: '我的bug', message: '我的bug' },
   { label: '线上bug', message: '线上bug' },
@@ -242,6 +243,7 @@ type ProjectInfo = {
 function buildCommandHints(projects: ProjectInfo[], inputHistory: string[]): string[] {
   const workflowHints = [
     '执行工作流 start-work',
+    '执行工作流 start-work-external-terminal',
     '执行工作流 standalone',
     '执行工作流 upgrade-react18-nova',
     '执行工作流 upgrade-cc-web-nova',

@@ -46,7 +46,7 @@ const AGENT_SYSTEM_PROMPT = `你是开发流程助手，根据用户意图选择
 
 知识库：当用户询问「如何使用」「怎么配置」「文档中怎么说」「某组件怎么接入」等说明类问题时，优先调用 query_knowledge_base(question=用户原问题) 从本地 Markdown（仅 runtime/private-kb，即显式导入内容）检索答案，再基于检索结果回答。若 query_knowledge_base 返回 success=false，要明确给出失败原因并提示检查模型/文档目录。
 
-工作流：开始工作/执行 start-work → run_workflow(name=start-work)。打开终端/新建终端（不执行开始工作）→ open_terminal()；终端打开某项目目录（内嵌新页签）→ open_terminal(code=项目代号)，如终端打开 react18、终端打开 cc-web2。standalone → run_workflow(name=standalone)。启动 cpxy/react18/scm/cc-web/biz-solution/uikit/shared → run_workflow_step(workflow=start-work 或 standalone，taskKey=对应 key)；start-work 不含 base18，需启动 base18 时用 run_shell 进入项目目录执行。升级集测react18的nova版本 → run_workflow(name=upgrade-react18-nova)。升级集测cc-web的nova版本 → run_workflow(name=upgrade-cc-web-nova)。
+工作流：开始工作/执行 start-work → run_workflow(name=start-work)。开始工作，使用外部终端/开始工作使用外部终端 → run_workflow(name=start-work-external-terminal)（使用系统终端打开任务）。打开终端/新建终端（不执行开始工作）→ open_terminal()；终端打开某项目目录（内嵌新页签）→ open_terminal(code=项目代号)，如终端打开 react18、终端打开 cc-web2。standalone → run_workflow(name=standalone)。启动 cpxy/react18/scm/cc-web/biz-solution/uikit/shared → run_workflow_step(workflow=start-work 或 standalone，taskKey=对应 key)；start-work 不含 base18，需启动 base18 时用 run_shell 进入项目目录执行。升级集测react18的nova版本 → run_workflow(name=upgrade-react18-nova)。升级集测cc-web的nova版本 → run_workflow(name=upgrade-cc-web-nova)。
 部署：部署 xxx → deploy_jenkins(job=…)。可指定分支，如「部署nova 分支是sprint-260326」→ deploy_jenkins(job=nova, branch=sprint-260326)。合并 xxx → merge_repo(repo=nova|biz-solution|scm)。
 IDE：ws打开base、cursor打开scm → open_in_ide(app=ws|webstorm|cursor|vscode|code，code=项目代号)。关闭 → close_ide_project(app=ws|cursor，code=项目代号)。
 浏览器：打开 Jenkins/URL → open_browser(url=完整 URL)。打开集测环境 → open_jice_env()。打开测试环境 → open_test_env()。打开json配置中心 → open_json_config_center()。打开某项目 Jenkins 任务页 → open_jenkins_job(job=nova|cc-web|cc-node|react18|base|base18|biz-solution|biz-guide|scm)。周报：用户说「周报」→ open_weekly_report()（按低代码单据前端空间的“最近季度+最近日期区间”定位）；抓取周报信息/拉取周报页 → fetch_weekly_report_info()（与「周报」同页，REST 抓取正文）；用户说「写周报」→ write_weekly_report(maxResults=可选)（合并本周已完成与本周经我手的 bug 标题后再生成周报）；本周组内总结/组内总结 → generate_weekly_team_summary()（先拉取与「周报」同页的 wiki HTML，再按提示词生成五段式组内总结）。Jira：我的bug/查询我的bug → search_my_bugs(maxResults=可选)；线上bug/查询线上bug → search_online_bugs(maxResults=可选)；本周已完成任务/查询本周已完成任务 → search_weekly_done_tasks(maxResults=可选)；本周经我手的bug/经我手的bug（本周经办人曾是我、现经办与开发都不是我）→ search_weekly_handoff_bugs(maxResults=可选)。Cursor：cursor用量/查询cursor用量 → get_cursor_usage()（若无 token/cookie 会自动尝试同步本机 Chrome 登录态）；cursor今日用量/查询cursor今日用量 → get_cursor_today_usage()；同步cursor登录态 → sync_cursor_cookie()。Shell：执行命令 → run_shell(command=命令)。`;
@@ -95,6 +95,13 @@ function normalizeToolCallWithExplicitCode(call: ToolCall, explicitCode: string 
     return { ...call, arguments: { ...args, code: explicitCode } };
   }
   return call;
+}
+
+// AI 生成 By Peng.Guo：关键口令「开始工作，使用外部终端」优先级最高，避免被误判为 run_workflow_step
+function isStartWorkExternalTerminalIntent(userMessage: string): boolean {
+  const text = (userMessage ?? '').trim().toLowerCase();
+  if (!text) return false;
+  return /开始工作/.test(text) && /外部终端/.test(text);
 }
 
 /** Agent 使用的 LLM：默认本地 Ollama；外部模式由前端传入密钥（经本机后端转发，不落盘） */
@@ -206,7 +213,10 @@ export async function runAgent(userMessage: string, options?: RunAgentOptions): 
     }
 
     const explicitCode = extractExplicitProjectCode(userMessage);
-    const calls = parseToolCalls(message).map((call) => normalizeToolCallWithExplicitCode(call, explicitCode, userMessage));
+    let calls = parseToolCalls(message).map((call) => normalizeToolCallWithExplicitCode(call, explicitCode, userMessage));
+    if (isStartWorkExternalTerminalIntent(userMessage)) {
+      calls = [{ name: 'run_workflow', arguments: { name: 'start-work-external-terminal' } }];
+    }
 
     if (calls.length === 0) {
       const text = (message.content ?? '').trim() || '未解析到可执行操作，请换一种说法试试。';

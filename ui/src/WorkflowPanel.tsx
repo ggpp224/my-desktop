@@ -15,6 +15,7 @@ interface WorkflowPanelProps {
 export function WorkflowPanel({ apiBase, addLog, onStartWorkEmbedded, themeTokens }: WorkflowPanelProps) {
   const [workflows] = useState<Array<{ name: string; label: string; desc: string }>>([
     { name: 'start-work', label: '开始工作', desc: '一键启动常用研发环境（内嵌终端）' },
+    { name: 'start-work-external-terminal', label: '开始工作（外部终端）', desc: '一键启动常用研发环境（系统终端）' },
     { name: 'upgrade-react18-nova', label: '升级集测 react18 的 nova 版本', desc: '自动切 sprint、更新依赖并提交推送' },
     { name: 'upgrade-cc-web-nova', label: '升级集测 cc-web 的 nova 版本', desc: '自动切 sprint、更新依赖并提交推送' },
   ]);

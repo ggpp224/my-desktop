@@ -10,6 +10,11 @@ export function getHelpCommands(): HelpCommandItem[] {
     },
     {
       section: '快速开始',
+      command: '开始工作，使用外部终端',
+      description: '一键启动常用开发环境（系统终端分支，不影响原“开始工作”内嵌终端流程）',
+    },
+    {
+      section: '快速开始',
       command: '部署 nova 分支是 sprint-260326',
       description: '按指定分支触发 Jenkins 部署；不写分支时自动使用项目默认分支',
     },
@@ -20,8 +25,8 @@ export function getHelpCommands(): HelpCommandItem[] {
     },
     {
       section: '工作流',
-      command: '执行工作流 start-work / standalone',
-      description: '按预设 workflow 顺序执行任务；适合标准开工或仅启动 scm 的场景',
+      command: '执行工作流 start-work / start-work-external-terminal / standalone',
+      description: '按预设 workflow 顺序执行任务；支持内嵌终端或系统终端两种开工分支',
     },
     {
       section: '工作流',

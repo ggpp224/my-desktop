@@ -676,29 +676,24 @@ async function tryLoadPersistedState(expectedSignature: string, docs: KnowledgeD
   }
 }
 
-async function ensureIndexState(onProgress?: RebuildProgressCallback): Promise<CachedIndexState> {
+// AI 生成 By Peng.Guo：查询阶段严格只读，不再触发隐式重建
+async function ensureReadonlyIndexState(): Promise<CachedIndexState> {
   const docDirs = getKnowledgeDocDirs();
   const docs = await loadMarkdownKnowledgeDocs(process.cwd(), docDirs);
   if (docs.length === 0) throw new Error(`知识库目录无 Markdown 文档，请先导入私人知识库文档：${docDirs.join(',')}`);
   const fingerprints = docs.map((doc) => ({ docId: doc.id, md5: md5Text(doc.text), updatedAt: new Date(doc.mtimeMs).toISOString() }));
   const signature = buildSignatureFromFingerprints(fingerprints);
   if (cachedState && cachedState.signature === signature) return cachedState;
-  if (rebuildingPromise) return rebuildingPromise;
-  rebuildingPromise = (async () => {
-    const loaded = await tryLoadPersistedState(signature, docs);
-    if (loaded) {
-      cachedState = loaded;
-      return loaded;
-    }
-    const created = await createStateFromDocs(docs, onProgress);
-    cachedState = created;
-    return created;
-  })();
-  try {
-    return await rebuildingPromise;
-  } finally {
-    rebuildingPromise = null;
+  const loaded = await tryLoadPersistedState(signature, docs);
+  if (loaded) {
+    cachedState = loaded;
+    return loaded;
   }
+  const persistedMeta = await readPersistMeta();
+  if (persistedMeta) {
+    throw new Error('检测到知识库文档已变化，查询模式为只读，不再自动重建。请先执行“重建知识库索引”后再查询。');
+  }
+  throw new Error('知识库索引尚未构建。请先导入文档并执行“重建知识库索引”后再查询。');
 }
 
 function mapVectorResults(raw: unknown): RankedNode[] {
@@ -922,7 +917,7 @@ export async function queryKnowledgeIndex(question: string, chatModel?: string, 
     callbacks?.onProgress?.('正在检索高价值知识点，请稍候...');
     console.log(`[KB][${nowTag()}] 正在检索高价值知识点，请稍候...`);
   }, 5000);
-  const state = await ensureIndexState(callbacks?.onProgress);
+  const state = await ensureReadonlyIndexState();
   const filter = buildFilterStrategy(q);
   const relaxedFilter: FilterStrategy = { query: q, queryTokens: filter.queryTokens, possibleEntities: [] };
 
