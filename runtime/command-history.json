@@ -1,7 +1,5 @@
 {
   "items": [
-    "知识库有哪些文档",
-    "重建知识库索引",
     "AdvanceGrid的主从合并怎么用",
     "cursor用量",
     "AdvanceGrid的主从合并怎么用",
@@ -9,6 +7,8 @@
     "AdvanceGrid的主从合并怎么用",
     "部署cc-node",
     "部署cc-web",
+    "AdvanceGrid的主从合并怎么用",
+    "AdvanceGrid 条件格式化怎么接入",
     "AdvanceGrid的主从合并怎么用"
   ]
 }

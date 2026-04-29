@@ -197,17 +197,46 @@ function isUsageIntentQuery(query: string): boolean {
   return hints.some((k) => q.includes(k));
 }
 
+// AI 生成 By Peng.Guo：按问题主题动态注入锚点与可执行信号，避免“主从合并”特征污染其它问题
+function buildQueryProfile(query: string): { anchors: string[]; actionSignals: RegExp[] } {
+  const lower = query.toLowerCase();
+  const anchors = ['快速开始', '使用说明', '示例', '配置', '接入'];
+  const actionSignals: RegExp[] = [
+    /示例|步骤|配置|开关|使用说明|快速开始|接入|api|interface/i,
+    /import\s+\{[^}]+\}\s+from/i,
+    /props?|参数|选项|默认值|mode|profile/i,
+  ];
+
+  if (lower.includes('主从合并') || /\bslave\b/.test(lower)) {
+    anchors.push('slaveMergeConfig', 'masterField', 'slaveFields', 'displayMode', 'defaultEnableSlaveMerge', 'detailListDisplayMode');
+    actionSignals.push(
+      /masterfield/i,
+      /slavefields?/i,
+      /slavemergeconfig/i,
+      /displaymode/i,
+      /defaultenableslavemerge/i,
+      /detaillistdisplaymode/i,
+      /split|merge-center|merge-top|hidden/i
+    );
+  }
+  if (lower.includes('条件格式化') || lower.includes('conditional formatting') || lower.includes('conditionalformatting')) {
+    anchors.push('conditionalFormatting', 'formatRules', 'rowData', 'processedData');
+    actionSignals.push(/conditionalformatting|formatrules?|rowdata|processeddata/i);
+  }
+  if (lower.includes('化清空选中') || lower.includes('selection') || lower.includes('选中')) {
+    anchors.push('selection memory', 'clearSelectionMemory', 'gridRef.current?.api');
+    actionSignals.push(/selectionmemory|clearselectionmemory|gridref\.current\?\.api/i);
+  }
+
+  return { anchors: Array.from(new Set(anchors)), actionSignals };
+}
+
 function buildExpandedHybridQuery(query: string): string {
   const q = query.trim();
   if (!q) return q;
   if (!isUsageIntentQuery(q)) return q;
-  const anchors = ['快速开始', '使用说明', '示例', '配置', '接入'];
-  const lower = q.toLowerCase();
-  // AI 生成 By Peng.Guo：主从合并场景补齐关键配置锚点，提升 QUICK_START / USAGE 召回概率
-  if (lower.includes('主从合并') || lower.includes('slave')) {
-    anchors.push('slaveMergeConfig', 'masterField', 'slaveFields', 'displayMode', 'defaultEnableSlaveMerge', 'detailListDisplayMode');
-  }
-  return `${q} ${anchors.join(' ')}`;
+  const profile = buildQueryProfile(q);
+  return `${q} ${profile.anchors.join(' ')}`;
 }
 
 function calcUsageIntentContentBoost(node: ChildNodeRecord, query: string): number {
@@ -223,19 +252,8 @@ function calcUsageIntentContentBoost(node: ChildNodeRecord, query: string): numb
   const summaryHit = qTokens.filter((t) => summary.includes(t)).length;
   const questionHit = qTokens.filter((t) => questions.includes(t)).length;
 
-  // 2) “怎么用”类可执行信号：配置键、示例代码、步骤/开关等
-  const actionSignals = [
-    /masterfield/i,
-    /slavefields?/i,
-    /slavemergeconfig/i,
-    /displaymode/i,
-    /defaultenableslavemerge/i,
-    /detaillistdisplaymode/i,
-    /profile/i,
-    /split|merge-center|merge-top|hidden/i,
-    /示例|步骤|配置|开关|使用说明|快速开始/,
-    /import\s+\{[^}]+\}\s+from/i,
-  ];
+  // 2) “怎么用”类可执行信号：通用规则 + 问题主题特有规则
+  const { actionSignals } = buildQueryProfile(query);
   const actionability = actionSignals.reduce((acc, re) => acc + (re.test(lex) ? 1 : 0), 0);
 
   // 3) 导航/入口页惩罚（不是文件名规则，而是内容形态规则）
@@ -265,23 +283,12 @@ function isNavigationLike(node: ChildNodeRecord): boolean {
   return navSignals.some((re) => re.test(lex));
 }
 
-function hasExecutableSignal(node: ChildNodeRecord): boolean {
+function hasExecutableSignal(node: ChildNodeRecord, query: string): boolean {
   const title = (node.metadata.title || '').toLowerCase();
   const summary = (node.metadata.summary || '').toLowerCase();
   const text = (node.text || '').toLowerCase();
   const lex = `${title}\n${summary}\n${text}`;
-  const actionSignals = [
-    /masterfield/i,
-    /slavefields?/i,
-    /slavemergeconfig/i,
-    /displaymode/i,
-    /defaultenableslavemerge/i,
-    /detaillistdisplaymode/i,
-    /profile/i,
-    /split|merge-center|merge-top|hidden/i,
-    /示例|步骤|配置|开关|使用说明|快速开始/,
-    /import\s+\{[^}]+\}\s+from/i,
-  ];
+  const { actionSignals } = buildQueryProfile(query);
   return actionSignals.some((re) => re.test(lex));
 }
 
@@ -440,10 +447,10 @@ async function rerankCandidates(
 
 function applyUsageIntentGuard(ranked: RankedNode[], query: string, topK: number): RankedNode[] {
   if (!isUsageIntentQuery(query)) return ranked;
-  const weakNavigation = ranked.filter((item) => isNavigationLike(item.node) && !hasExecutableSignal(item.node));
+  const weakNavigation = ranked.filter((item) => isNavigationLike(item.node) && !hasExecutableSignal(item.node, query));
   const strongOrNormal = ranked.filter((item) => !weakNavigation.includes(item));
-  const executableStrong = strongOrNormal.filter((item) => hasExecutableSignal(item.node));
-  const nonExecutableStrong = strongOrNormal.filter((item) => !hasExecutableSignal(item.node));
+  const executableStrong = strongOrNormal.filter((item) => hasExecutableSignal(item.node, query));
+  const nonExecutableStrong = strongOrNormal.filter((item) => !hasExecutableSignal(item.node, query));
   const prioritized = [...executableStrong, ...nonExecutableStrong];
   // 硬约束：只有前面候选不足 topK 时，才允许入口/导航片段补位
   const needFallback = Math.max(0, topK - prioritized.length);

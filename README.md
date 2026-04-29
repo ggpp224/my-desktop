@@ -82,7 +82,7 @@ npm run pack
 - **模型**
   - `OLLAMA_BASE`、`OLLAMA_MODEL`
   - `GEMINI_API_KEY` 或 `GOOGLE_API_KEY`
-  - 知识库：`KB_CHAT_MODEL`、`KB_INGEST_MODEL`、`KB_EMBED_MODEL`、`KB_CONTEXT_WINDOW`、`KB_FLASH_ATTENTION`
+  - 知识库：`KB_CHAT_MODEL`、`KB_INGEST_MODEL`、`KB_EMBED_MODEL`
 - **服务**
   - `PORT`、`SHELL_CWD`
 - **Jenkins**
@@ -96,6 +96,43 @@ npm run pack
   - `CURSOR_API_TOKEN` 或 `CURSOR_COOKIE`（未配置时可尝试自动同步 Chrome 登录态）
 
 完整环境变量说明见：`.cursor/rules/env-constants.mdc`。
+
+## 知识库（重点）
+
+知识库链路为：Markdown 导入 -> 预处理（抽取 metadata）-> 向量索引 -> 混合检索（向量+关键词）-> 重排 -> 引用回传。
+
+### 1) 数据来源与索引目录
+
+- 文档来源目录：`KB_DOC_DIRS`（默认 `doc,docs,runtime/private-kb`）
+- 索引持久化目录：`KB_PERSIST_DIR`（默认 `runtime/knowledge-index`）
+- 导入私人知识库：`POST /knowledge-base/import`
+  - 默认会导入到 `runtime/private-kb/import-latest`
+  - 同一导入目录会先清理再写入，避免历史脏文件干扰
+
+### 2) 全量重建 vs 增量重建
+
+- `重建知识库索引`：全量重建；所有文档重走预处理 + 向量构建。
+- `增量重建知识库索引`：按文档指纹增量预处理。
+  - 未变化文档复用缓存（`ingestion-cache.json`）
+  - 仍会重建当前索引快照（保证结果一致性）
+  - UI 会显示历史缓存数、本次已处理/复用、处理中项
+
+### 3) 查询策略（当前默认）
+
+- `KB_TOP_K=7`：最终引用条数上限
+- `KB_HYBRID_TOP_K=4`：向量/关键词各自候选规模
+- `KB_HYBRID_ALPHA=0.4`：向量权重 0.4，关键词权重 0.6
+- `KB_RERANK_MODE=rule`：默认规则重排（本地稳定）
+- `KB_RERANK_POOL_SIZE=24`：重排候选池大小
+- `KB_QUERY_ALLOW_STALE_INDEX=1`（默认）：签名不一致时允许回退上次可用索引，避免重启后直接查询失败
+
+### 4) 调试与排障（建议保留）
+
+- `KB_RULE_PATCH_DEBUG=1`：输出关键规则补丁候选、入选、missing 判定日志
+- 常见失败与处理：
+  - 报“检测到知识库文档已变化”：先执行一次索引重建；如仅重启后出现，确认索引目录与文档目录未漂移
+  - 引用来源偏题：先看 `KB_HYBRID_ALPHA` 与重排模式，再看日志中 Top candidates 是否被入口文档挤占
+  - 模型重排不可用：`KB_RERANK_MODE=rule` 可稳定回退
 
 ## RAG 性能优化建议
 
