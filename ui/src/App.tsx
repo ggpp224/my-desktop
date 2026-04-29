@@ -413,18 +413,8 @@ export default function App() {
           )}
         </aside>
         <main style={{ flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0, borderRight: `1px solid ${themeTokens.panelBorder}` }}>
-          {activeHeaderTab === 'knowledge-base' ? (
-            <KnowledgeBasePanel apiBase={apiBase} addLog={addLog} themeTokens={themeTokens} />
-          ) : activeHeaderTab.startsWith('knowledge-doc:') ? (
-            <KnowledgeDocPanel
-              apiBase={apiBase}
-              sourcePath={headerTabs.find((tab) => tab.key === activeHeaderTab)?.docPath ?? ''}
-              themeTokens={themeTokens}
-              onOpenKnowledgeDoc={openKnowledgeDocTab}
-            />
-          ) : activeHeaderTab === 'my-work' && myWorkSessionId ? (
-            <MyWorkPanel apiBase={apiBase} sessionId={myWorkSessionId} initialTerminals={myWorkTerminals} themeTokens={themeTokens} />
-          ) : (
+          {/* AI 生成 By Peng.Guo：ChatPanel 常驻挂载，避免切换“终端”页签后状态被重置 */}
+          <div style={{ display: activeHeaderTab === 'workspace' ? 'flex' : 'none', flex: 1, minHeight: 0 }}>
             <ChatPanel
               apiBase={apiBase}
               addLog={addLog}
@@ -435,6 +425,20 @@ export default function App() {
               agentChatLlmBody={agentChatLlmBody}
               themeTokens={themeTokens}
             />
+          </div>
+          <div style={{ display: activeHeaderTab === 'knowledge-base' ? 'flex' : 'none', flex: 1, minHeight: 0 }}>
+            <KnowledgeBasePanel apiBase={apiBase} addLog={addLog} themeTokens={themeTokens} />
+          </div>
+          {activeHeaderTab.startsWith('knowledge-doc:') && (
+            <KnowledgeDocPanel
+              apiBase={apiBase}
+              sourcePath={headerTabs.find((tab) => tab.key === activeHeaderTab)?.docPath ?? ''}
+              themeTokens={themeTokens}
+              onOpenKnowledgeDoc={openKnowledgeDocTab}
+            />
+          )}
+          {activeHeaderTab === 'my-work' && myWorkSessionId && (
+            <MyWorkPanel apiBase={apiBase} sessionId={myWorkSessionId} initialTerminals={myWorkTerminals} themeTokens={themeTokens} />
           )}
         </main>
         <div
