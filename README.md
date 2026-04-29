@@ -28,6 +28,10 @@
 - Node.js `>=18`
 - macOS（主流程优先；部分能力依赖本机客户端与 `open -a`）
 - Ollama（本地模式）
+- 知识库必备 Ollama 模型：
+  - `bge-m3`（向量嵌入，必需）
+  - `qwen2.5-coder:14b`（预处理抽取 metadata，推荐）
+  - `qwen2.5:7b`（知识库问答，默认）
 - 可选：Gemini API Key（外部模型模式）
 
 ## 快速开始
@@ -44,6 +48,40 @@ npm install
 
 ```bash
 npm run verify-ollama
+```
+
+### 2.1)（强烈建议）预拉取知识库模型
+
+```bash
+# 知识库向量模型（必需）
+ollama pull bge-m3
+
+# 知识库默认问答模型
+ollama pull qwen2.5:7b
+
+# 知识库默认预处理模型（推荐）
+ollama pull qwen2.5-coder:14b
+```
+
+### 2.2) 一键自检知识库模型是否齐全
+
+```bash
+# AI 生成 By Peng.Guo
+required_models=("bge-m3" "qwen2.5:7b" "qwen2.5-coder:14b")
+installed="$(ollama list | awk 'NR>1 {print $1}')"
+missing=()
+for model in "${required_models[@]}"; do
+  echo "$installed" | rg -q "^${model}$" || missing+=("$model")
+done
+if [ ${#missing[@]} -eq 0 ]; then
+  echo "知识库模型检查通过：全部已安装"
+else
+  echo "缺少模型：${missing[*]}"
+  echo "请执行："
+  for model in "${missing[@]}"; do
+    echo "  ollama pull ${model}"
+  done
+fi
 ```
 
 ### 3) 启动开发模式
