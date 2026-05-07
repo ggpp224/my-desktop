@@ -14,6 +14,7 @@
 - **知识库能力**：支持私人知识库目录导入、索引重建、来源文档打开与文档内相对链接跳转。
 - **协同能力**：Jira 固定查询（我的 bug / 线上 bug / 本周完成 / 本周经我手 bug）、Wiki 周报定位/抓取、周报自动编写、组内总结生成。
 - **工程辅助能力**：Cursor 用量查询与 Cookie 自动同步；命令历史持久化（`runtime/command-history.json`）；主题持久化。
+- **SDK 自动化能力（PoC）**：支持基于 Cursor SDK 的仓库健康检查与 PR 自动审查脚本（本地运行，可落盘审查报告）。
 
 ## 近期新增能力（2026-04）
 
@@ -111,6 +112,39 @@ npm run pack
 
 产物目录：`release/`。
 
+### 6) Cursor SDK PoC（可选）
+
+> 该部分仅用于 `scripts/sdk-*.ts` 自动化脚本，不影响主应用运行。
+
+先在 `.env` 配置（最少）：
+
+```bash
+CURSOR_API_KEY=你的_key
+CURSOR_SDK_MODEL=default
+```
+
+执行健康检查：
+
+```bash
+npm run sdk:health
+```
+
+执行 PR 自动审查（默认对 `main`）：
+
+```bash
+npm run sdk:pr-review
+```
+
+带参数覆盖（优先级高于 `.env`）：
+
+```bash
+npm run sdk:pr-review -- --base main --model default
+```
+
+审查结果会落盘到：
+
+- `runtime/sdk-pr-review-*.md`
+
 ## 配置说明
 
 建议先复制 `.env.example` 为 `.env`，再按本机环境配置。
@@ -132,6 +166,11 @@ npm run pack
   - `WIKI_BASE_URL`、`WIKI_TOKEN`、`WIKI_WEEKLY_SPACE_NAME`、`WIKI_WEEKLY_ROOT_PAGE_ID`
 - **Cursor 用量**
   - `CURSOR_API_TOKEN` 或 `CURSOR_COOKIE`（未配置时可尝试自动同步 Chrome 登录态）
+- **Cursor SDK（仅 sdk 脚本）**
+  - `CURSOR_API_KEY`
+  - `CURSOR_SDK_MODEL`
+  - `CURSOR_SDK_REVIEW_MODEL`
+  - `CURSOR_SDK_REVIEW_BASE`
 
 完整环境变量说明见：`.cursor/rules/env-constants.mdc`。
 
