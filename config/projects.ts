@@ -32,6 +32,9 @@ export interface ProjectEntry {
   merge?: ProjectMerge;
 }
 
+// AI 生成 By Peng.Guo
+const PRETEST_BRANCH = 'test-260423';
+
 /** 项目列表：路径与 Jenkins/merge 均来自 .env 常量 */
 const PROJECT_ENTRIES: ProjectEntry[] = [
   {
@@ -109,7 +112,7 @@ const PROJECT_ENTRIES: ProjectEntry[] = [
     path: process.env.PROJECT_PATH_CC_NODE!,
     jenkins: {
       jobName: process.env.JENKINS_JOB_CC_NODE || 'BUILD-to-HSY_PRETEST__saas-cc-node',
-      defaultBranch: 'test-260127',
+      defaultBranch: PRETEST_BRANCH,
       branchParam: 'BRANCH',
     },
   },

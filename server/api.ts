@@ -764,7 +764,7 @@ app.post('/merge/nova', async (_req, res) => {
   res.end();
 });
 
-/** 合并 biz-solution：目标分支 test-260127，无 pnpm run release，SSE 流式输出 */
+/** 合并 biz-solution：目标分支 test-260423，无 pnpm run release，SSE 流式输出 */
 app.post('/merge/biz-solution', async (_req, res) => {
   res.setHeader('Content-Type', 'text/event-stream');
   res.setHeader('Cache-Control', 'no-cache');
@@ -790,7 +790,7 @@ app.post('/merge/biz-solution', async (_req, res) => {
   res.end();
 });
 
-/** 合并 scm：目标分支 test-260127，无 pnpm run release，SSE 流式输出 */
+/** 合并 scm：目标分支 test-260423，无 pnpm run release，SSE 流式输出 */
 app.post('/merge/scm', async (_req, res) => {
   res.setHeader('Content-Type', 'text/event-stream');
   res.setHeader('Cache-Control', 'no-cache');

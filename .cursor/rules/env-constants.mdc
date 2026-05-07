@@ -31,7 +31,7 @@ alwaysApply: false
 
 | 变量 | 用途 |
 |------|------|
-| `JENKINS_DEFAULT_BRANCH_PRETEST` | 预发/测试线项目部署默认分支（如 test-260127） |
+| `JENKINS_DEFAULT_BRANCH_PRETEST` | 预发/测试线项目部署默认分支（如 test-260423） |
 | `JENKINS_DEFAULT_BRANCH_NOVA` | Nova 项目部署默认分支（如 test） |
 
 ## 三、合并目标分支（config/projects.ts → merge 接口）
