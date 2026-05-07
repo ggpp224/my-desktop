@@ -16,6 +16,8 @@
     "version:bump": "npm version patch --no-git-tag-version",
     "pack": "npm run version:bump && npm run build && npx electron-builder --mac",
     "pack:mac": "npm run version:bump && npm run build && npx electron-builder --mac",
+    "sdk:health": "tsx scripts/sdk-health-check.ts",
+    "sdk:pr-review": "tsx scripts/sdk-pr-review.ts",
     "postinstall": "cd ui && npm install"
   },
   "build": {
@@ -42,6 +44,7 @@
     }
   },
   "dependencies": {
+    "@cursor/sdk": "^1.0.12",
     "@google/genai": "^1.50.1",
     "@llamaindex/ollama": "^0.1.23",
     "cors": "^2.8.5",

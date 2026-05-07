@@ -12,3 +12,4 @@ node_modules
 /runtime/private-kb/
 storage/
 /ui/.npm-cache/
+/.npm-cache/
