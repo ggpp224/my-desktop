@@ -306,7 +306,7 @@ export const toolsSchema = [
     function: {
       name: 'open_terminal',
       description:
-        '打开内嵌终端工作区（我的工作），新建一个终端页签，不执行开始工作流。用户说「终端打开 react18」「终端打开 cc-web」等 → 必传 code=项目代号，cwd 为该代号在 config/projects 中的路径；仅「打开终端/新建终端」不传 code，cwd 为用户主目录。代号示例：react18、cc-web、cc-web2、biz-solution、biz-guide、uikit、shared、scm、scm18、nova、nova-next、base、base18、ai-import、uikit-compat、cc-node、app-service、biz-framework、front-entity、front-pub、evoui、chanjet-grid、nova-form、nova-grid、nova-server、nova-ui、chanjet-nova、h5-biz-common、cc-web-hkj',
+        '打开内嵌终端工作区（我的工作），新建一个终端页签，不执行开始工作流。用户说「终端打开 react18」「终端打开 cc-web」「终端打开 mdf-ui」等 → 必传 code=项目代号，cwd 为该代号在 config/projects 中的路径；仅「打开终端/新建终端」不传 code，cwd 为用户主目录。代号示例：react18、cc-web、cc-web2、biz-solution、biz-guide、uikit、shared、scm、scm18、nova、nova-next、base、base18、mdf-ui、mdf-biz、ai-import、uikit-compat、cc-node、app-service、biz-framework、front-entity、front-pub、evoui、chanjet-grid、nova-form、nova-grid、nova-server、nova-ui、chanjet-nova、h5-biz-common、cc-web-hkj',
       parameters: {
         type: 'object',
         properties: {
@@ -335,13 +335,13 @@ export const toolsSchema = [
     type: 'function' as const,
     function: {
       name: 'run_workflow_step',
-      description: '执行工作流单步。启动 cpxy/react18/scm 等 → workflow=start-work 或 standalone，taskKey=对应 key',
+      description: '启动开发项目。工作流内项目（cpxy/react18/cc-web/biz-solution/uikit/shared/scm）或工作流外项目（base/base18/nova/mdf-ui/mdf-biz 等）均传 taskKey=项目代号；工作流外项目自动 cd 到项目目录执行开发命令（mdf-ui/mdf-biz 为 yarn w，其余默认 yarn dev）',
       parameters: {
         type: 'object',
         required: ['workflow', 'taskKey'],
         properties: {
           workflow: { type: 'string', description: 'start-work 或 standalone' },
-          taskKey: { type: 'string', description: 'cpxy/react18/cc-web/biz-solution/uikit/shared/scm（start-work 不含 base18）' },
+          taskKey: { type: 'string', description: '项目代号：工作流内如 cpxy/react18/scm；工作流外如 base/base18/nova/mdf-ui/mdf-biz' },
         },
       },
     },

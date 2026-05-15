@@ -19,7 +19,14 @@ export interface HelpCommandItem {
   description: string;
 }
 
+export interface HelpProjectDevCmdOverride {
+  codes: string[];
+  cmd: string;
+}
+
 export interface HelpCodebook {
   projectCodes: string[];
   ideAliases: string[];
+  /** 工作流外「启动 xxx」使用的非默认命令（默认 yarn dev） */
+  projectDevCmdOverrides?: HelpProjectDevCmdOverride[];
 }

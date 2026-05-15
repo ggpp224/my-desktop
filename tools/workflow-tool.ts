@@ -6,6 +6,7 @@ import { run as shellRun, runInTerminal } from './shell-tool.js';
 import { open as browserOpen } from './browser-tool.js';
 import { deploy as jenkinsDeploy } from './jenkins-tool.js';
 import { getProjectPath } from '../config/projects.js';
+import { resolveWorkflowForTaskKey } from '../config/workflow-task-registry.js';
 
 const require = createRequire(import.meta.url);
 
@@ -44,7 +45,9 @@ export async function runWorkflowStep(
   name: string,
   options: { stepIndex?: number; taskKey?: string }
 ): Promise<{ success: boolean; results: unknown[]; error?: string }> {
-  const baseName = name.replace(/\.json$/i, '');
+  const taskKey = (options.taskKey ?? '').trim();
+  const resolvedName = (taskKey && resolveWorkflowForTaskKey(taskKey, name)) || name;
+  const baseName = resolvedName.replace(/\.json$/i, '');
   const workflowsDir = getWorkflowsDir();
   let filePath = path.join(workflowsDir, `${baseName}.json`);
   let raw: string;

@@ -63,6 +63,15 @@ alwaysApply: false
 - 路径可分散在不同盘/不同目录，无统一前缀要求。
 - 完整列表见 `.env.example` 中 “项目路径” 段。
 
+### 项目开发启动命令（可选）
+
+| 变量 | 用途 |
+|------|------|
+| `PROJECT_DEV_CMD_MDF_UI` | mdf-ui 的「启动 mdf-ui」命令，默认 `yarn w` |
+| `PROJECT_DEV_CMD_MDF_BIZ` | mdf-biz 的「启动 mdf-biz」命令，默认 `yarn w` |
+
+未配置时，工作流外项目默认 `yarn dev`；mdf 系列在 `config/projects.ts` 中已默认 `yarn w`。
+
 ## 使用约定
 
 - 修改或新增项目时：在 `config/projects.ts` 增加/调整条目，并在 `.env.example` 与本文档中同步变量名与说明。

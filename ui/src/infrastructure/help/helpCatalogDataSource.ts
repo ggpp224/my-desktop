@@ -11,7 +11,7 @@ export function getHelpCommands(): HelpCommandItem[] {
     {
       section: '快速开始',
       command: '开始工作，使用外部终端',
-      description: '一键启动常用开发环境（系统终端分支，不影响原“开始工作”内嵌终端流程）',
+      description: '一键启动常用开发环境（系统终端分支，不影响原「开始工作」内嵌终端流程）',
     },
     {
       section: '快速开始',
@@ -40,13 +40,24 @@ export function getHelpCommands(): HelpCommandItem[] {
     },
     {
       section: '工作流',
-      command: '启动 cpxy / 启动 react18 / 启动 cc-web / 启动 scm',
-      description: '单独执行工作流中的某一步，适合局部调试',
+      command: '启动 cpxy / 启动 react18 / 启动 cc-web / 启动 biz-solution / 启动 uikit / 启动 shared',
+      description: '执行 start-work 工作流中的对应步骤（多为 cd 项目目录后 yarn dev，系统终端）',
+    },
+    {
+      section: '工作流',
+      command: '启动 scm',
+      description: '执行 standalone 工作流中的 scm 步骤（yarn dev）',
+    },
+    {
+      section: '工作流',
+      command: '启动 base / 启动 base18 / 启动 nova / 启动 mdf-ui / 启动 mdf-biz',
+      description:
+        '工作流未收录的项目：在 config/projects 对应目录执行开发命令（默认 yarn dev；mdf-ui、mdf-biz 为 yarn w）',
     },
     {
       section: '终端',
-      command: '终端打开 react18 / 终端打开 cc-web2 / 终端打开 nova',
-      description: '在「我的工作」中新建终端页签，目录来自 config/projects 与环境配置',
+      command: '终端打开 react18 / 终端打开 cc-web2 / 终端打开 mdf-ui',
+      description: '在「我的工作」中新建终端页签，目录来自 config/projects 与 .env 中的 PROJECT_PATH_*',
     },
     {
       section: '浏览器 / Wiki',
@@ -56,7 +67,7 @@ export function getHelpCommands(): HelpCommandItem[] {
     {
       section: '浏览器 / Wiki',
       command: '周报 / 打开周报 / 打开wiki周报',
-      description: '用 WIKI_TOKEN 自动定位“最新季度 + 最新周报页”；失败时回退搜索页',
+      description: '用 WIKI_TOKEN 自动定位「最新季度 + 最新周报页」；失败时回退搜索页',
     },
     {
       section: '浏览器 / Wiki',
@@ -133,6 +144,8 @@ export function getHelpCodebook(): HelpCodebook {
       'nova-next',
       'base',
       'base18',
+      'mdf-ui',
+      'mdf-biz',
       'ai-import',
       'uikit-compat',
       'cc-node',
@@ -151,5 +164,6 @@ export function getHelpCodebook(): HelpCodebook {
       'cc-web-hkj',
     ],
     ideAliases: ['ws / webstorm -> WebStorm', 'cursor -> Cursor', 'code / vscode -> VS Code'],
+    projectDevCmdOverrides: [{ codes: ['mdf-ui', 'mdf-biz'], cmd: 'yarn w' }],
   };
 }

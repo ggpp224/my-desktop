@@ -12,10 +12,12 @@ import { config } from '../config/default.js';
 import { getJenkinsPreset } from '../config/jenkins-presets.js';
 import { existsSync, statSync } from 'fs';
 import { getProjectByCode, getProjectPath } from '../config/projects.js';
+import { resolveWorkflowForTaskKey } from '../config/workflow-task-registry.js';
 import { run as shellRun } from '../tools/shell-tool.js';
 import { open as browserOpen } from '../tools/browser-tool.js';
 import { deploy as jenkinsDeploy } from '../tools/jenkins-tool.js';
 import { runWorkflow, runWorkflowStep } from '../tools/workflow-tool.js';
+import { startProjectDev } from '../tools/project-start-tool.js';
 import { openEmbeddedTerminalWorkspace, startEmbeddedWorkflow } from '../tools/workflow-embedded-service.js';
 import { mergeNova, mergeBizSolution, mergeScm } from '../tools/merge-tool.js';
 import { openInIde } from '../tools/open-ide-tool.js';
@@ -255,8 +257,15 @@ export async function routeAndExecute(call: ToolCall, ctx?: RouteExecuteContext)
           }),
       });
     case 'run_workflow_step': {
-      const workflow = (args?.workflow as string) ?? 'start-work';
-      const taskKey = (args?.taskKey as string) ?? '';
+      const taskKey = ((args?.taskKey as string) ?? '').trim();
+      if (!taskKey) {
+        return { success: false, results: [], error: '缺少 taskKey' };
+      }
+      const hint = ((args?.workflow as string) ?? '').trim() || 'start-work';
+      const workflow = resolveWorkflowForTaskKey(taskKey, hint);
+      if (!workflow) {
+        return startProjectDev(taskKey);
+      }
       return runWorkflowStep(workflow, { taskKey });
     }
     case 'merge_repo': {

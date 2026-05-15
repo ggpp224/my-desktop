@@ -26,6 +26,8 @@ export interface ProjectEntry {
   codes: string[];
   /** 项目本地目录地址 */
   path: string;
+  /** 「启动 xxx」时执行的开发命令，默认 yarn dev */
+  devCmd?: string;
   /** Jenkins 部署配置（可选） */
   jenkins?: ProjectJenkins;
   /** 合并到测试分支的配置（可选，用于 merge 接口） */
@@ -98,6 +100,16 @@ const PROJECT_ENTRIES: ProjectEntry[] = [
   {
     codes: ['shared'],
     path: process.env.PROJECT_PATH_SHARED!,
+  },
+  {
+    codes: ['mdf-ui'],
+    path: process.env.PROJECT_PATH_MDF_UI!,
+    devCmd: process.env.PROJECT_DEV_CMD_MDF_UI || 'yarn w',
+  },
+  {
+    codes: ['mdf-biz'],
+    path: process.env.PROJECT_PATH_MDF_BIZ!,
+    devCmd: process.env.PROJECT_DEV_CMD_MDF_BIZ || 'yarn w',
   },
   {
     codes: ['ai-import'],
@@ -187,6 +199,13 @@ export function getProjectByCode(code: string): ProjectEntry | null {
 export function getProjectPath(code: string): string | null {
   const p = getProjectByCode(code);
   return p ? p.path : null;
+}
+
+/** 按代号查开发启动命令（「启动 xxx」），默认 yarn dev */
+export function getProjectDevCmd(code: string): string {
+  const p = getProjectByCode(code);
+  const cmd = (p?.devCmd ?? '').trim();
+  return cmd || 'yarn dev';
 }
 
 /** 所有项目列表（用于展示/扩展） */

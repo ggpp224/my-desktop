@@ -365,10 +365,19 @@ export default function App() {
                   <span style={{ color: themeTokens.textSecondary }}>项目代号：</span>
                   <span style={{ color: themeTokens.textPrimary, wordBreak: 'break-all' }}>{HELP_CODES.projectCodes.join('、')}</span>
                 </div>
-                <div>
+                <div style={{ marginBottom: 6 }}>
                   <span style={{ color: themeTokens.textSecondary }}>IDE 代号：</span>
                   <span style={{ color: themeTokens.textPrimary }}>{HELP_CODES.ideAliases.join('；')}</span>
                 </div>
+                {HELP_CODES.projectDevCmdOverrides && HELP_CODES.projectDevCmdOverrides.length > 0 && (
+                  <div>
+                    <span style={{ color: themeTokens.textSecondary }}>启动命令：</span>
+                    <span style={{ color: themeTokens.textPrimary }}>
+                      默认 yarn dev；
+                      {HELP_CODES.projectDevCmdOverrides.map((o) => `${o.codes.join('、')} → ${o.cmd}`).join('；')}
+                    </span>
+                  </div>
+                )}
               </div>
             </div>
           )}

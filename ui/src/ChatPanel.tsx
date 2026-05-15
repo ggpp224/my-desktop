@@ -1859,7 +1859,7 @@ export function ChatPanel({ apiBase, addLog, onStartWorkEmbedded, onOpenKnowledg
       >
         {messages.length === 0 && (
           <p style={{ color: themeTokens.textSecondary }}>
-            [Chat] 输入指令或点击上方快捷按钮，例如：开始工作、终端打开 react18、升级集测react18的nova版本、启动 react18、打开 Jenkins、部署order-service
+            [Chat] 输入指令或点击上方快捷按钮，例如：开始工作、终端打开 react18、启动 mdf-ui、启动 base、升级集测react18的nova版本、打开 Jenkins、部署 nova
           </p>
         )}
         {messages.map((m, i) => (
