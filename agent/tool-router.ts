@@ -20,7 +20,13 @@ import { runWorkflow, runWorkflowStep } from '../tools/workflow-tool.js';
 import { startProjectDev } from '../tools/project-start-tool.js';
 import { openEmbeddedTerminalWorkspace, startEmbeddedWorkflow } from '../tools/workflow-embedded-service.js';
 import { deployNovaPretest, deployByJobKey } from '../tools/deploy-jenkins-helper.js';
-import { mergeNova, mergeNovaPretest, mergeBizSolution, mergeScm } from '../tools/merge-tool.js';
+import {
+  mergeNova,
+  mergeNovaPretest,
+  mergeBizSolution,
+  mergeBizSolutionPretest,
+  mergeScm,
+} from '../tools/merge-tool.js';
 import { openInIde } from '../tools/open-ide-tool.js';
 import { closeIdeProject } from '../tools/close-ide-tool.js';
 import { searchMyBugs, searchOnlineBugs, searchWeeklyDoneTasks, searchWeeklyHandoffBugs } from '../tools/jira-tool.js';
@@ -270,15 +276,22 @@ export async function routeAndExecute(call: ToolCall, ctx?: RouteExecuteContext)
     case 'merge_repo': {
       const repo = ((args?.repo as string) ?? '').trim().toLowerCase();
       const intent = ((args?.intent as string) ?? (args?.message as string) ?? '').trim();
-      const pretest =
+      const novaPretest =
         repo === 'nova-pretest' ||
         repo === 'nova集测' ||
         (repo === 'nova' && /集测/.test(intent));
-      if (pretest) return mergeNovaPretest();
+      const bizSolutionPretest =
+        repo === 'biz-solution-pretest' ||
+        repo === 'biz-solution集测' ||
+        (repo === 'biz-solution' && /集测/.test(intent));
+      if (novaPretest) return mergeNovaPretest();
+      if (bizSolutionPretest) return mergeBizSolutionPretest();
       if (repo === 'nova') return mergeNova();
       if (repo === 'biz-solution') return mergeBizSolution();
       if (repo === 'scm') return mergeScm();
-      throw new Error(`不支持的 merge_repo: ${repo}，应为 nova、nova-pretest、biz-solution 或 scm`);
+      throw new Error(
+        `不支持的 merge_repo: ${repo}，应为 nova、nova-pretest、biz-solution、biz-solution-pretest 或 scm`
+      );
     }
     case 'open_in_ide': {
       const app = (args?.app as string) ?? '';

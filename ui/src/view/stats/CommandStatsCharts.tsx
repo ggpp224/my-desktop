@@ -122,7 +122,10 @@ export function CommandStatsCharts({
             innerRadius={56}
             outerRadius={100}
             paddingAngle={2}
-            label={({ name, percent }) => `${name} ${((percent ?? 0) * 100).toFixed(0)}%`}
+            label={({ name, payload }) => {
+              const pct = (payload as PieChartSlice | undefined)?.percent ?? 0;
+              return `${name} ${pct.toFixed(0)}%`;
+            }}
             labelLine={{ stroke: themeTextSecondary }}
           >
             {pieSlices.map((_, index) => (

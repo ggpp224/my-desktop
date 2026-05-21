@@ -224,9 +224,12 @@ export async function mergeNova(options?: MergeOptions): Promise<MergeResult> {
 }
 
 /**
- * 合并 nova 到集测 sprint 分支：目标分支算法与 upgrade-react18-nova 一致（在 react18 仓库解析最大 origin/sprint-N）。
+ * 合并到集测 sprint 分支：目标分支算法与 upgrade-react18-nova 一致（在 react18 仓库解析最大 origin/sprint-N）。
  */
-export async function mergeNovaPretest(options?: MergeOptions): Promise<MergeResult> {
+export async function mergeByCodeToReact18MaxSprint(
+  targetCode: string,
+  options?: MergeOptions
+): Promise<MergeResult> {
   const steps: string[] = [];
   const onStep = options?.onStep;
   const add = (msg: string) => {
@@ -234,10 +237,11 @@ export async function mergeNovaPretest(options?: MergeOptions): Promise<MergeRes
     onStep?.(msg);
   };
 
-  const novaEntry = getProjectByCode('nova');
+  const targetEntry = getProjectByCode(targetCode);
   const react18Entry = getProjectByCode('react18');
-  if (!novaEntry?.merge) {
-    return { success: false, steps, error: 'nova 未配置 merge' };
+  const label = targetEntry?.codes[0] ?? targetCode;
+  if (!targetEntry?.merge) {
+    return { success: false, steps, error: `${label} 未配置 merge` };
   }
   if (!react18Entry?.path) {
     return { success: false, steps, error: '未找到 react18 项目路径' };
@@ -252,24 +256,34 @@ export async function mergeNovaPretest(options?: MergeOptions): Promise<MergeRes
   }
 
   const { branch: targetBranch } = resolved.result;
-  add(`集测合并目标: ${targetBranch}（nova 仓库）`);
+  add(`集测合并目标: ${targetBranch}（${label} 仓库）`);
 
-  add('正在 nova 仓库 fetch…');
-  const fetchNova = run('git fetch', novaEntry.path);
-  if (fetchNova.code !== 0) {
-    if (fetchNova.stdout) add(fetchNova.stdout);
-    if (fetchNova.stderr) add(fetchNova.stderr);
-    return { success: false, steps, error: fetchNova.stderr || 'nova 仓库 git fetch 失败' };
+  add(`正在 ${label} 仓库 fetch…`);
+  const fetchTarget = run('git fetch', targetEntry.path);
+  if (fetchTarget.code !== 0) {
+    if (fetchTarget.stdout) add(fetchTarget.stdout);
+    if (fetchTarget.stderr) add(fetchTarget.stderr);
+    return { success: false, steps, error: fetchTarget.stderr || `${label} 仓库 git fetch 失败` };
   }
 
   return mergeMerge(
     {
-      projectPath: novaEntry.path,
+      projectPath: targetEntry.path,
       targetBranch,
-      runRelease: novaEntry.merge.runRelease,
+      runRelease: targetEntry.merge.runRelease,
     },
     options
   );
+}
+
+/** 合并 nova 到集测 sprint 分支（含 pnpm run release） */
+export async function mergeNovaPretest(options?: MergeOptions): Promise<MergeResult> {
+  return mergeByCodeToReact18MaxSprint('nova', options);
+}
+
+/** 合并 biz-solution 到集测 sprint 分支（无 release，流程同「合并 biz-solution」） */
+export async function mergeBizSolutionPretest(options?: MergeOptions): Promise<MergeResult> {
+  return mergeByCodeToReact18MaxSprint('biz-solution', options);
 }
 
 export async function mergeBizSolution(options?: MergeOptions): Promise<MergeResult> {

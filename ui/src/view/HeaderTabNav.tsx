@@ -21,6 +21,7 @@ function resolveTabIcon(tabKey: string): string {
   if (tabKey === 'my-work') return '⌘';
   if (tabKey === 'knowledge-base') return '◫';
   if (tabKey === 'command-stats') return '▥';
+  if (tabKey === 'command-capability') return '☰';
   if (tabKey.startsWith('knowledge-doc:')) return '◧';
   return '◦';
 }

@@ -12,7 +12,10 @@ const TOOL_GROUPS: ToolGroup[] = [
       { name: 'run_workflow_step', desc: '启动项目：工作流内（cpxy/react18/scm 等）或工作流外（base/mdf-ui/mdf-biz 等，mdf 为 yarn w）' },
       { name: 'open_terminal', desc: '在「我的工作」打开终端页签（如：终端打开 react18）' },
       { name: 'deploy_jenkins', desc: '触发 Jenkins 部署（如：部署 nova、部署 nova 集测、部署 base）' },
-      { name: 'merge_repo', desc: '合并代码到测试分支（如：合并 nova、合并 nova 集测、合并 scm）' },
+      {
+        name: 'merge_repo',
+        desc: '合并代码到测试/集测分支（如：合并 nova、合并 nova 集测、合并 biz-solution 集测、合并 scm）',
+      },
       { name: 'open_in_ide', desc: '用 IDE 打开项目（如：ws打开base、cursor打开scm）' },
       { name: 'close_ide_project', desc: '关闭 IDE 项目窗口（如：关闭ws的nova、关闭cursor的base）' },
     ],

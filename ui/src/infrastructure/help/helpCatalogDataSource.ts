@@ -88,9 +88,9 @@ export function getHelpCommands(): HelpCommandItem[] {
     },
     {
       section: '合并',
-      command: '合并 nova / 合并 nova 集测 / 合并 biz-solution / 合并 scm',
+      command: '合并 nova / 合并 nova 集测 / 合并 biz-solution / 合并 biz-solution 集测 / 合并 scm',
       description:
-        '将当前分支合并到测试分支；nova 集测合并到 react18 最大 sprint 分支（算法同升级集测 react18 nova 版本）',
+        '将当前分支合并到测试或集测分支；nova/biz-solution 集测合并到 react18 最大 sprint 分支（算法同升级集测 react18 nova 版本）',
     },
     {
       section: 'Jira',

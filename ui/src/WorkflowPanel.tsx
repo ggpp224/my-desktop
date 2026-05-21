@@ -1,5 +1,5 @@
 /* AI 生成 By Peng.Guo */
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { appendToolResultsToLogs } from './log-tools';
 import type { WorkTerminal } from './MyWorkPanel';
 import type { AppThemeTokens } from './domain/theme/appTheme';
@@ -9,17 +9,55 @@ interface WorkflowPanelProps {
   apiBase: string;
   addLog: (line: string) => void;
   onStartWorkEmbedded: (payload: { sessionId: string; terminals: WorkTerminal[] }) => void;
+  onOpenCommandCapability: () => void;
   themeTokens: AppThemeTokens;
 }
 
-export function WorkflowPanel({ apiBase, addLog, onStartWorkEmbedded, themeTokens }: WorkflowPanelProps) {
-  const [workflows] = useState<Array<{ name: string; label: string; desc: string }>>([
-    { name: 'start-work', label: '开始工作', desc: '一键启动常用研发环境（内嵌终端）' },
-    { name: 'start-work-external-terminal', label: '开始工作（外部终端）', desc: '一键启动常用研发环境（系统终端）' },
-    { name: 'upgrade-react18-nova', label: '升级集测 react18 的 nova 版本', desc: '自动切 sprint、更新依赖并提交推送' },
-    { name: 'upgrade-cc-web-nova', label: '升级集测 cc-web 的 nova 版本', desc: '自动切 sprint、更新依赖并提交推送' },
-  ]);
+type WorkflowItem = {
+  name: string;
+  label: string;
+  desc: string;
+  embedded?: boolean;
+  stepCount?: number;
+};
+
+const FALLBACK_WORKFLOWS: WorkflowItem[] = [
+  { name: 'start-work', label: '开始工作', desc: '一键启动常用研发环境（内嵌终端）', embedded: true },
+  { name: 'start-work-external-terminal', label: '开始工作（外部终端）', desc: '一键启动常用研发环境（系统终端）' },
+  { name: 'upgrade-react18-nova', label: '升级集测 react18 的 nova 版本', desc: '自动切 sprint、更新依赖并提交推送' },
+  { name: 'upgrade-cc-web-nova', label: '升级集测 cc-web 的 nova 版本', desc: '自动切 sprint、更新依赖并提交推送' },
+  { name: 'standalone', label: '启动 scm（standalone）', desc: '单独启动 scm 微应用（yarn dev）' },
+];
+
+export function WorkflowPanel({ apiBase, addLog, onStartWorkEmbedded, onOpenCommandCapability, themeTokens }: WorkflowPanelProps) {
+  const [workflows, setWorkflows] = useState<WorkflowItem[]>(FALLBACK_WORKFLOWS);
+  const [totalSupported, setTotalSupported] = useState<number | null>(null);
   const [running, setRunning] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await fetch(`${apiBase}/workflows`);
+        if (!res.ok) return;
+        const data = (await res.json()) as {
+          panelWorkflows?: WorkflowItem[];
+          commandCapabilityTotal?: number;
+        };
+        if (cancelled) return;
+        const panel = data.panelWorkflows ?? [];
+        if (panel.length > 0) setWorkflows(panel);
+        if (typeof data.commandCapabilityTotal === 'number') {
+          setTotalSupported(data.commandCapabilityTotal);
+        }
+      } catch {
+        /* 使用 FALLBACK */
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [apiBase]);
 
   const runWorkflow = async (name: string, label: string) => {
     setRunning(true);
@@ -57,9 +95,33 @@ export function WorkflowPanel({ apiBase, addLog, onStartWorkEmbedded, themeToken
 
   return (
     <section style={{ padding: 16, borderBottom: `1px solid ${themeTokens.panelBorder}` }}>
-      <h3 style={{ margin: '0 0 12px', fontSize: 14, color: themeTokens.textSecondary }}>Workflow</h3>
+      <h3 style={{ margin: '0 0 4px', fontSize: 14, color: themeTokens.textSecondary }}>
+        Workflow（
+        <button
+          type="button"
+          onClick={onOpenCommandCapability}
+          disabled={totalSupported == null}
+          title="查看支持指令明细"
+          style={{
+            margin: 0,
+            padding: 0,
+            border: 'none',
+            background: 'none',
+            font: 'inherit',
+            color: themeTokens.tabActiveBorder,
+            cursor: totalSupported == null ? 'default' : 'pointer',
+            textDecoration: totalSupported == null ? 'none' : 'underline',
+          }}
+        >
+          {totalSupported ?? '…'}
+        </button>
+        ）
+      </h3>
+      <p style={{ margin: '0 0 12px', fontSize: 11, color: themeTokens.textSecondary, lineHeight: 1.4 }}>
+        独立指令总数（整段流程、工具、按项目部署/合并等）；流程内单步（如启动 react18）不计入
+      </p>
       <ul style={{ listStyle: 'none', padding: 0, margin: 0 }}>
-        {workflows.map(({ name, label, desc }) => (
+        {workflows.map(({ name, label, desc, stepCount }) => (
           <li key={name} style={{ marginBottom: 8 }}>
             <Button
               themeTokens={themeTokens}
@@ -73,7 +135,10 @@ export function WorkflowPanel({ apiBase, addLog, onStartWorkEmbedded, themeToken
             >
               {label}
             </Button>
-            <div style={{ fontSize: 12, color: themeTokens.textSecondary, marginTop: 4, paddingLeft: 4 }}>{desc}</div>
+            <div style={{ fontSize: 12, color: themeTokens.textSecondary, marginTop: 4, paddingLeft: 4 }}>
+              {desc}
+              {typeof stepCount === 'number' && stepCount > 0 ? ` · ${stepCount} 步` : ''}
+            </div>
           </li>
         ))}
       </ul>

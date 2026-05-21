@@ -1,5 +1,6 @@
 /* AI 生成 By Peng.Guo */
 import { useState, useRef, useEffect, useLayoutEffect, useMemo } from 'react';
+import { buildSupportedCommandHints } from '@app-config/command-hints';
 import { appendToolResultsToLogs } from './log-tools';
 import { withJenkinsMarkdownLink } from './domain/deploy/jenkinsDeployDisplay';
 import type { DeployPollingTarget } from './domain/deploy/models';
@@ -251,6 +252,11 @@ function isNovaPretestMergeMessage(msg: string): boolean {
   return /合并\s*nova\s*集测/i.test(msg.trim());
 }
 
+/** 集测合并须优先于「合并 biz-solution」，避免误匹配 test 分支合并 */
+function isBizSolutionPretestMergeMessage(msg: string): boolean {
+  return /合并\s*biz-solution\s*集测/i.test(msg.trim());
+}
+
 /** 集测部署须优先于「部署 nova」，避免误用 test 分支 */
 function isNovaPretestDeployMessage(msg: string): boolean {
   return /部署\s*nova(?:\s*集测|集测)/i.test(msg.trim());
@@ -264,6 +270,12 @@ const MERGE_TASKS: MergeTaskItem[] = [
     patterns: [/合并\s*nova\s*集测/i],
   },
   { key: 'nova', label: '合并 nova', path: '/merge/nova' },
+  {
+    key: 'biz-solution-pretest',
+    label: '合并 biz-solution 集测',
+    path: '/merge/biz-solution-pretest',
+    patterns: [/合并\s*biz-solution\s*集测/i],
+  },
   { key: 'biz-solution', label: '合并 biz-solution', path: '/merge/biz-solution' },
   { key: 'scm', label: '合并 scm', path: '/merge/scm' },
 ];
@@ -271,9 +283,12 @@ const MERGE_TASKS: MergeTaskItem[] = [
 function matchesMergeTaskMessage(msg: string, task: MergeTaskItem): boolean {
   const trimmed = msg.trim();
   if (task.key === 'nova' && isNovaPretestMergeMessage(trimmed)) return false;
+  if (task.key === 'biz-solution' && isBizSolutionPretestMergeMessage(trimmed)) return false;
   if (msg === task.label) return true;
   if (task.key === 'nova-pretest') return isNovaPretestMergeMessage(trimmed);
+  if (task.key === 'biz-solution-pretest') return isBizSolutionPretestMergeMessage(trimmed);
   if (task.key === 'nova') return /合并\s*nova(?!\s*集测)/i.test(trimmed);
+  if (task.key === 'biz-solution') return /合并\s*biz-solution(?!\s*集测)/i.test(trimmed);
   if (new RegExp(`合并\\s*${task.key.replace(/-/g, '\\-')}`, 'i').test(trimmed)) return true;
   return (task.patterns ?? []).some((p) => p.test(trimmed));
 }
@@ -282,22 +297,11 @@ function resolveMergeTask(msg: string): MergeTaskItem | undefined {
   if (isNovaPretestMergeMessage(msg)) {
     return MERGE_TASKS.find((t) => t.key === 'nova-pretest');
   }
+  if (isBizSolutionPretestMergeMessage(msg)) {
+    return MERGE_TASKS.find((t) => t.key === 'biz-solution-pretest');
+  }
   return MERGE_TASKS.find((t) => matchesMergeTaskMessage(msg, t));
 }
-
-/** 下拉列表：快捷部署 Jenkins 任务（与 config/projects 中有 jenkins 的代号一致） */
-const DEPLOY_OPTIONS = [
-  { value: '', label: '快捷部署...' },
-  { value: 'nova-pretest', label: '部署nova集测' },
-  { value: 'nova', label: '部署nova' },
-  { value: 'cc-web', label: '部署cc-web' },
-  { value: 'react18', label: '部署react18' },
-  { value: 'base', label: '部署base' },
-  { value: 'base18', label: '部署base18' },
-  { value: 'biz-solution', label: '部署biz-solution' },
-  { value: 'biz-guide', label: '部署biz-guide' },
-  { value: 'scm', label: '部署scm' },
-];
 
 /** 指令输入历史最多条数，支持 ↑↓ 切换 */
 const INPUT_HISTORY_MAX = 10;
@@ -327,83 +331,7 @@ type ProjectInfo = {
 };
 
 function buildCommandHints(projects: ProjectInfo[], inputHistory: string[]): string[] {
-  const workflowHints = [
-    '执行工作流 start-work',
-    '执行工作流 start-work-external-terminal',
-    '执行工作流 standalone',
-    '执行工作流 upgrade-react18-nova',
-    '执行工作流 upgrade-cc-web-nova',
-  ];
-  const fixedHints = [
-    ...QUICK_ACTIONS.map((a) => a.message),
-    '升级集测react18的nova版本',
-    '升级集测cc-web的nova版本',
-    ...MERGE_TASKS.map((t) => t.label),
-    ...DEPLOY_OPTIONS.filter((o) => o.value).map((o) => o.label),
-    '打开集测环境',
-    '打开测试环境',
-    '打开json配置中心',
-    '打开 Jenkins',
-    '我的bug',
-    '线上bug',
-    '本周已完成任务',
-    '本周经我手的bug',
-    '写周报',
-    '抓取周报信息',
-    '本周组内总结',
-    'cursor用量',
-    '同步cursor登录态',
-    'cursor今日用量',
-    '添加私人知识库',
-    '清除私人知识库',
-    '重建知识库索引',
-    '增量重建知识库索引',
-    '已添加到知识库的文档',
-    '知识库有哪些文档',
-  ];
-  const allCodes = Array.from(new Set(projects.flatMap((p) => p.codes)));
-  const jenkinsCodes = Array.from(new Set(projects.filter((p) => p.jenkins).flatMap((p) => p.codes)));
-  const mergeCodes = Array.from(new Set(projects.filter((p) => p.merge).flatMap((p) => p.codes)));
-  const startHints = allCodes.map((code) => `启动 ${code}`);
-  const deployHints = jenkinsCodes.flatMap((code) => [`部署 ${code}`, `部署 ${code} 分支是 test`]);
-  const jenkinsOpenHints = jenkinsCodes.flatMap((code) => [`打开 Jenkins 的 ${code}`, `打开jenkins ${code}`]);
-  const openIdeHints = allCodes.flatMap((code) => [
-    `ws打开${code}`,
-    `cursor打开${code}`,
-    `code打开${code}`,
-    `用 WebStorm 打开 ${code}`,
-    `用 Cursor 打开 ${code}`,
-    `用 VS Code 打开 ${code}`,
-  ]);
-  const closeIdeHints = allCodes.flatMap((code) => [
-    `关闭ws的${code}`,
-    `关闭cursor的${code}`,
-    `关闭code的${code}`,
-    `关闭 WebStorm 的 ${code}`,
-    `关闭 Cursor 的 ${code}`,
-    `关闭 VS Code 的 ${code}`,
-  ]);
-  const mergeHints = [
-    ...mergeCodes.map((code) => `合并 ${code}`),
-    ...(mergeCodes.includes('nova') ? ['合并 nova 集测'] : []),
-  ];
-  const deployPretestHints = jenkinsCodes.includes('nova') ? ['部署 nova 集测', '部署nova集测'] : [];
-  const openProjectTerminalHints = allCodes.map((code) => `终端打开 ${code}`);
-  return Array.from(
-    new Set([
-      ...fixedHints,
-      ...workflowHints,
-      ...startHints,
-      ...deployHints,
-      ...deployPretestHints,
-      ...jenkinsOpenHints,
-      ...openIdeHints,
-      ...closeIdeHints,
-      ...mergeHints,
-      ...openProjectTerminalHints,
-      ...inputHistory,
-    ])
-  );
+  return buildSupportedCommandHints(projects, inputHistory);
 }
 
 function extractMyBugsResult(toolResults?: unknown[]): JiraBugPayload | null {

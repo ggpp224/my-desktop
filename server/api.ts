@@ -20,8 +20,16 @@ import { deploy as jenkinsDeploy, getDeployStatus, getDeployStatusByBuildHistory
 import { open as openBrowser } from '../tools/browser-tool.js';
 import { getAllProjects, getProjectByCode } from '../config/projects.js';
 import { deployNovaPretest, deployByJobKey } from '../tools/deploy-jenkins-helper.js';
-import { mergeByCode, mergeNova, mergeNovaPretest, mergeBizSolution, mergeScm } from '../tools/merge-tool.js';
-import { runWorkflowStep } from '../tools/workflow-tool.js';
+import {
+  mergeByCode,
+  mergeNova,
+  mergeNovaPretest,
+  mergeBizSolution,
+  mergeBizSolutionPretest,
+  mergeScm,
+} from '../tools/merge-tool.js';
+import { buildCommandCapabilityDetail } from '../config/command-capability-catalog.js';
+import { listSupportedWorkflows, runWorkflowStep } from '../tools/workflow-tool.js';
 import { addManualTerminalToSession, closeEmbeddedWorkflowSession, getEmbeddedWorkflowSession, removeTerminalFromSession, startEmbeddedWorkflow } from '../tools/workflow-embedded-service.js';
 import {
   closeTerminalSession,
@@ -575,6 +583,42 @@ app.get('/stats/commands/by-source', (req, res) => {
   }
 });
 
+/** 获取 workflows/*.json 预设工作流目录 */
+app.get('/workflows', async (_req, res) => {
+  try {
+    const workflows = await listSupportedWorkflows();
+    const panelWorkflows = workflows.filter((w) => w.showInPanel !== false);
+    const projectSnapshot = getAllProjects().map((p) => ({
+      codes: p.codes,
+      jenkins: p.jenkins,
+      merge: p.merge,
+    }));
+    const capabilities = buildCommandCapabilityDetail(projectSnapshot);
+    res.json({
+      total: workflows.length,
+      panelTotal: panelWorkflows.length,
+      commandCapabilityTotal: capabilities.total,
+      commandBreakdown: capabilities.breakdown,
+      commandCapabilitySections: capabilities.sections,
+      workflows,
+      panelWorkflows,
+    });
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    res.status(500).json({ success: false, error: msg });
+  }
+});
+
+/** 当前支持的全部可执行指令统计（与聊天输入提示口径一致） */
+app.get('/commands/capabilities', (_req, res) => {
+  const projectSnapshot = getAllProjects().map((p) => ({
+    codes: p.codes,
+    jenkins: p.jenkins,
+    merge: p.merge,
+  }));
+  res.json(buildCommandCapabilityDetail(projectSnapshot));
+});
+
 /** 获取统一项目列表（代号、路径、Jenkins、merge），便于前端展示与扩展 */
 app.get('/projects', (_req, res) => {
   const list = getAllProjects().map((p) => ({
@@ -896,6 +940,34 @@ app.post('/merge/nova-pretest', async (_req, res) => {
   };
   try {
     const result = await mergeNovaPretest({ onStep: send });
+    res.write(`data: ${JSON.stringify({ done: true, success: result.success, error: result.error })}\n\n`);
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    res.write(`data: ${JSON.stringify({ done: true, success: false, error: msg })}\n\n`);
+  }
+  res.end();
+});
+
+/** 合并 biz-solution 集测：目标分支为 react18 远程最大 sprint-N，无 release，SSE 流式输出 */
+app.post('/merge/biz-solution-pretest', async (_req, res) => {
+  recordMerge('biz-solution-pretest', 'POST /merge/biz-solution-pretest');
+  res.setHeader('Content-Type', 'text/event-stream');
+  res.setHeader('Cache-Control', 'no-cache');
+  res.setHeader('Connection', 'keep-alive');
+  res.setHeader('X-Accel-Buffering', 'no');
+  const socket = (res as unknown as { socket?: { setNoDelay?: (v: boolean) => void } }).socket;
+  if (socket?.setNoDelay) socket.setNoDelay(true);
+  res.flushHeaders?.();
+  const send = (msg: string) => {
+    const payload = `data: ${JSON.stringify({ step: msg })}\n\n`;
+    res.write(payload, 'utf8', () => {
+      if (typeof (res as unknown as { flush?: () => void }).flush === 'function') {
+        (res as unknown as { flush: () => void }).flush();
+      }
+    });
+  };
+  try {
+    const result = await mergeBizSolutionPretest({ onStep: send });
     res.write(`data: ${JSON.stringify({ done: true, success: result.success, error: result.error })}\n\n`);
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);

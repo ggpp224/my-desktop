@@ -361,11 +361,17 @@ export const toolsSchema = [
     type: 'function' as const,
     function: {
       name: 'merge_repo',
-      description: '合并仓库。合并 nova → repo=nova；合并 nova 集测 → repo=nova-pretest（目标为 react18 最大 sprint 分支）；biz-solution/scm 同理',
+      description:
+        '合并仓库。合并 nova → repo=nova；合并 nova 集测 → repo=nova-pretest；合并 biz-solution → repo=biz-solution；合并 biz-solution 集测 → repo=biz-solution-pretest（目标为 react18 最大 sprint 分支）；合并 scm → repo=scm',
       parameters: {
         type: 'object',
         required: ['repo'],
-        properties: { repo: { type: 'string', description: 'nova、nova-pretest、biz-solution 或 scm' } },
+        properties: {
+          repo: {
+            type: 'string',
+            description: 'nova、nova-pretest、biz-solution、biz-solution-pretest 或 scm',
+          },
+        },
       },
     },
   },

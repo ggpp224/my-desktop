@@ -6,6 +6,7 @@ import { run as shellRun, runInTerminal } from './shell-tool.js';
 import { open as browserOpen } from './browser-tool.js';
 import { deploy as jenkinsDeploy } from './jenkins-tool.js';
 import { getProjectPath } from '../config/projects.js';
+import { getWorkflowCatalog } from '../config/workflow-catalog.js';
 import { resolveWorkflowForTaskKey } from '../config/workflow-task-registry.js';
 
 const require = createRequire(import.meta.url);
@@ -30,6 +31,37 @@ export type Step =
   | { tool: 'jenkins'; jobName: string; taskKey?: string };
 
 export type WorkflowDef = { steps: Step[] };
+
+export interface WorkflowSummary {
+  name: string;
+  label: string;
+  desc: string;
+  embedded?: boolean;
+  showInPanel?: boolean;
+  stepCount: number;
+  fileExists: boolean;
+}
+
+/** 列出 catalog 中登记的全部 JSON 工作流（含步骤数、文件是否存在） */
+export async function listSupportedWorkflows(): Promise<WorkflowSummary[]> {
+  const catalog = getWorkflowCatalog();
+  const workflowsDir = getWorkflowsDir();
+  const out: WorkflowSummary[] = [];
+  for (const item of catalog) {
+    let stepCount = 0;
+    let fileExists = false;
+    try {
+      const raw = await readFile(path.join(workflowsDir, `${item.name}.json`), 'utf-8');
+      fileExists = true;
+      const def = JSON.parse(raw) as WorkflowDef;
+      stepCount = Array.isArray(def.steps) ? def.steps.length : 0;
+    } catch {
+      /* 文件缺失时仍返回 catalog 项，便于发现配置漂移 */
+    }
+    out.push({ ...item, stepCount, fileExists });
+  }
+  return out;
+}
 
 function getDesktopRoot(): string {
   return getWorkflowsDir().replace(/[/\\]workflows$/, '');

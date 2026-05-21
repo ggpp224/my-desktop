@@ -9,6 +9,7 @@ import type { WorkTerminal } from './MyWorkPanel';
 const MyWorkPanel = lazy(() => import('./MyWorkPanel').then((m) => ({ default: m.MyWorkPanel })));
 import { KnowledgeBasePanel } from './KnowledgeBasePanel';
 import { CommandStatsPanel } from './CommandStatsPanel';
+import { CommandCapabilityPanel } from './CommandCapabilityPanel';
 import { KnowledgeDocPanel } from './KnowledgeDocPanel';
 import { LlmSettingsModal } from './view/LlmSettingsModal';
 import { HeaderTabNav } from './view/HeaderTabNav';
@@ -283,6 +284,14 @@ export default function App() {
     setActiveHeaderTab('command-stats');
   };
 
+  const openCommandCapabilityTab = () => {
+    setHeaderTabs((prev) => {
+      if (prev.some((tab) => tab.key === 'command-capability')) return prev;
+      return [...prev, { key: 'command-capability', label: '支持指令明细' }];
+    });
+    setActiveHeaderTab('command-capability');
+  };
+
   const openKnowledgeDocTab = (docPath: string) => {
     const normalized = docPath.trim();
     if (!normalized) return;
@@ -507,7 +516,13 @@ export default function App() {
           />
           {!leftCollapsed && (
             <>
-              <WorkflowPanel apiBase={apiBase} addLog={addLog} onStartWorkEmbedded={onStartWorkEmbedded} themeTokens={themeTokens} />
+              <WorkflowPanel
+                apiBase={apiBase}
+                addLog={addLog}
+                onStartWorkEmbedded={onStartWorkEmbedded}
+                onOpenCommandCapability={openCommandCapabilityTab}
+                themeTokens={themeTokens}
+              />
               <ToolPanel themeTokens={themeTokens} />
             </>
           )}
@@ -556,6 +571,11 @@ export default function App() {
           {activeHeaderTab === 'command-stats' && (
             <div style={{ flex: 1, minHeight: 0, width: '100%', height: '100%', display: 'flex', overflow: 'hidden' }}>
               <CommandStatsPanel apiBase={apiBase} themeTokens={themeTokens} />
+            </div>
+          )}
+          {activeHeaderTab === 'command-capability' && (
+            <div style={{ flex: 1, minHeight: 0, width: '100%', height: '100%', display: 'flex', overflow: 'hidden' }}>
+              <CommandCapabilityPanel apiBase={apiBase} themeTokens={themeTokens} />
             </div>
           )}
           {activeHeaderTab.startsWith('knowledge-doc:') && (

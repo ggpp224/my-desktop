@@ -234,7 +234,7 @@ npm run sdk:pr-review -- --base main --model default
 - 执行单步任务：`启动 scm`、`启动 react18`、`启动 mdf-ui`
 - 启动工作流外项目：`启动 base`、`启动 mdf-biz`（mdf 系列为 `yarn w`）
 - 部署：`部署 nova 分支是 sprint-260326`
-- 合并：`合并 biz-solution`
+- 合并：`合并 biz-solution` / `合并 biz-solution 集测`
 - 知识库：`增量重建知识库索引`、`重建知识库索引`
 - 查询：`我的bug`、`本周已完成任务`
 - 周报：`周报`、`写周报`、`组内总结`

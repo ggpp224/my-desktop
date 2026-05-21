@@ -66,6 +66,11 @@ const CHAT_ALIAS_ENTRIES: Array<{ patterns: RegExp[]; canonicalKey: string; disp
     canonicalKey: 'merge:nova-pretest',
     displayLabel: '合并 nova 集测',
   },
+  {
+    patterns: [/^合并\s*biz-solution\s*集测$/i, /^合并biz-solution集测$/i],
+    canonicalKey: 'merge:biz-solution-pretest',
+    displayLabel: '合并 biz-solution 集测',
+  },
 ];
 
 function normalizeChatMessage(message: string): string {
