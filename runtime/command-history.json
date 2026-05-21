@@ -1,14 +1,14 @@
 {
   "items": [
-    "打开集测环境",
-    "打开json配置中心",
-    "启动 biz-solution",
-    "启动 react18",
-    "启动 biz-solution",
-    "启动 base",
-    "启动 base18",
-    "启动shared",
-    "启动uikit",
-    "启动 mdf-biz"
+    "合并 biz-solution",
+    "部署biz-solution",
+    "AdvanceGrid的条件格式化怎么用",
+    "合并 biz-solution",
+    "部署biz-solution",
+    "合并 biz-solution",
+    "部署biz-solution",
+    "部署react18",
+    "开始工作",
+    "统计常用指令"
   ]
 }

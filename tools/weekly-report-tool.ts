@@ -61,6 +61,7 @@ ${titlesText}
 const WEEKLY_REPORT_OLLAMA_OPTIONS = {
   num_ctx: 8192,
   num_predict: 4096,
+  temperature: config.ollama.weeklyReportTemperature,
 };
 
 /** Ollama 慢请求：默认无超时，此处给足时间避免大模型/大列表被误判失败 */

@@ -2,6 +2,7 @@
 import { exec, spawn } from 'child_process';
 import { platform } from 'os';
 import { config } from '../config/default.js';
+import { sanitizeShellEnv } from '../server/sanitize-shell-env.js';
 
 const DANGEROUS_PATTERNS = [/rm\s+-rf\s+\//, /sudo\s+rm/, /:\(\)\s*\{\s*:\s*\|:\s*\}/]; // 高危命令示例
 
@@ -55,7 +56,7 @@ export function run(command: string, options?: { requireConfirmation?: boolean }
   const mergedPath = [...extraPaths, ...basePath.split(':').filter(Boolean)]
     .filter((item, index, arr) => arr.indexOf(item) === index)
     .join(':');
-  const env = { ...process.env, PATH: mergedPath };
+  const env = { ...sanitizeShellEnv(process.env), PATH: mergedPath };
   if (options?.requireConfirmation && isDangerous(command)) {
     return Promise.reject(new Error('该命令被判定为高危，需要用户确认后再执行。'));
   }

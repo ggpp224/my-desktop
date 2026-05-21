@@ -11,10 +11,11 @@ export type ChatMessage = {
   tool_calls?: Array<{ function: { name: string; arguments: string | Record<string, unknown> } }>;
 };
 
-/** Ollama 推理参数：限制上下文与生成长度以加快速度 */
+/** Ollama 推理参数：限制上下文与生成长度；Agent 用低 temperature 稳定 tool 选择 */
 const OLLAMA_OPTIONS = {
   num_ctx: 4096,
   num_predict: 512,
+  temperature: config.ollama.agentTemperature,
 };
 
 /** Ollama 单次 chat 返回的 token 统计（可能因缓存等未返回） */

@@ -23,6 +23,7 @@ import {
   escapeHtmlForClipboard,
   type ReportCopyLlmContext,
 } from './domain/llm/reportCopyLeadLine';
+import { extractNovaUpgradeVerifyMarkdown } from './domain/workflow/novaUpgradeVerifyReport';
 
 type AgentTiming = { firstLLMMs?: number; tools?: { name: string; ms: number }[]; secondLLMMs?: number; tokenUsage?: { promptTokens?: number; completionTokens?: number } };
 type AgentResult = {
@@ -217,6 +218,7 @@ interface ChatPanelProps {
   addLog: (line: string) => void;
   onStartWorkEmbedded: (payload: { sessionId: string; terminals: WorkTerminal[] }) => void;
   onOpenKnowledgeBase: () => void;
+  onOpenCommandStats: () => void;
   onOpenKnowledgeDoc: (sourcePath: string) => void;
   /** 本地 Ollama / 外部 Gemini */
   llmRuntimeMode: LlmRuntimeMode;
@@ -236,15 +238,57 @@ const QUICK_ACTIONS: Array<{ label: string; message: string }> = [
 ];
 
 /** 合并菜单项：走 SSE 流式接口，每步实时写入 Logs */
-const MERGE_TASKS = [
+type MergeTaskItem = {
+  key: string;
+  label: string;
+  path: string;
+  /** 额外自然语言匹配（如「合并nova集测」） */
+  patterns?: RegExp[];
+};
+
+/** 集测合并须优先于「合并 nova」，避免 /合并\s*nova/ 误匹配「合并 nova 集测」 */
+function isNovaPretestMergeMessage(msg: string): boolean {
+  return /合并\s*nova\s*集测/i.test(msg.trim());
+}
+
+/** 集测部署须优先于「部署 nova」，避免误用 test 分支 */
+function isNovaPretestDeployMessage(msg: string): boolean {
+  return /部署\s*nova(?:\s*集测|集测)/i.test(msg.trim());
+}
+
+const MERGE_TASKS: MergeTaskItem[] = [
+  {
+    key: 'nova-pretest',
+    label: '合并 nova 集测',
+    path: '/merge/nova-pretest',
+    patterns: [/合并\s*nova\s*集测/i],
+  },
   { key: 'nova', label: '合并 nova', path: '/merge/nova' },
   { key: 'biz-solution', label: '合并 biz-solution', path: '/merge/biz-solution' },
   { key: 'scm', label: '合并 scm', path: '/merge/scm' },
-] as const;
+];
+
+function matchesMergeTaskMessage(msg: string, task: MergeTaskItem): boolean {
+  const trimmed = msg.trim();
+  if (task.key === 'nova' && isNovaPretestMergeMessage(trimmed)) return false;
+  if (msg === task.label) return true;
+  if (task.key === 'nova-pretest') return isNovaPretestMergeMessage(trimmed);
+  if (task.key === 'nova') return /合并\s*nova(?!\s*集测)/i.test(trimmed);
+  if (new RegExp(`合并\\s*${task.key.replace(/-/g, '\\-')}`, 'i').test(trimmed)) return true;
+  return (task.patterns ?? []).some((p) => p.test(trimmed));
+}
+
+function resolveMergeTask(msg: string): MergeTaskItem | undefined {
+  if (isNovaPretestMergeMessage(msg)) {
+    return MERGE_TASKS.find((t) => t.key === 'nova-pretest');
+  }
+  return MERGE_TASKS.find((t) => matchesMergeTaskMessage(msg, t));
+}
 
 /** 下拉列表：快捷部署 Jenkins 任务（与 config/projects 中有 jenkins 的代号一致） */
 const DEPLOY_OPTIONS = [
   { value: '', label: '快捷部署...' },
+  { value: 'nova-pretest', label: '部署nova集测' },
   { value: 'nova', label: '部署nova' },
   { value: 'cc-web', label: '部署cc-web' },
   { value: 'react18', label: '部署react18' },
@@ -339,7 +383,11 @@ function buildCommandHints(projects: ProjectInfo[], inputHistory: string[]): str
     `关闭 Cursor 的 ${code}`,
     `关闭 VS Code 的 ${code}`,
   ]);
-  const mergeHints = mergeCodes.map((code) => `合并 ${code}`);
+  const mergeHints = [
+    ...mergeCodes.map((code) => `合并 ${code}`),
+    ...(mergeCodes.includes('nova') ? ['合并 nova 集测'] : []),
+  ];
+  const deployPretestHints = jenkinsCodes.includes('nova') ? ['部署 nova 集测', '部署nova集测'] : [];
   const openProjectTerminalHints = allCodes.map((code) => `终端打开 ${code}`);
   return Array.from(
     new Set([
@@ -347,6 +395,7 @@ function buildCommandHints(projects: ProjectInfo[], inputHistory: string[]): str
       ...workflowHints,
       ...startHints,
       ...deployHints,
+      ...deployPretestHints,
       ...jenkinsOpenHints,
       ...openIdeHints,
       ...closeIdeHints,
@@ -773,6 +822,28 @@ function renderToolResults(
   themeTokens: AppThemeTokens,
   onOpenKnowledgeDoc?: (sourcePath: string) => void,
 ) {
+  const novaVerifyMd = extractNovaUpgradeVerifyMarkdown(toolResults);
+  if (novaVerifyMd) {
+    return (
+      <div style={{ marginTop: 8 }}>
+        <div style={{ fontSize: 12, color: themeTokens.textSecondary, marginBottom: 6 }}>
+          package.json 核对报告（Markdown）
+        </div>
+        <div
+          style={{
+            background: themeTokens.workspacePanelSubtleBackground,
+            borderRadius: 6,
+            border: `1px solid ${themeTokens.inputBorder}`,
+            padding: 10,
+            maxHeight: 480,
+            overflow: 'auto',
+          }}
+        >
+          <MarkdownRenderer markdown={novaVerifyMd} themeTokens={themeTokens} />
+        </div>
+      </div>
+    );
+  }
   // AI 生成 By Peng.Guo：列出知识库文档
   const listDocsResult = extractListKnowledgeDocsResult(toolResults);
   if (listDocsResult) {
@@ -1178,7 +1249,20 @@ function renderToolResults(
   if (cursorUsage) return cursorUsage;
   if (toolResults && toolResults.length > 0) {
     return (
-      <pre style={{ marginTop: 8, fontSize: 12, background: themeTokens.workspacePanelSubtleBackground, color: themeTokens.textPrimary, padding: 8, borderRadius: 4, overflow: 'auto' }}>
+      <pre
+        style={{
+          marginTop: 8,
+          fontSize: 12,
+          background: themeTokens.workspacePanelSubtleBackground,
+          color: themeTokens.textPrimary,
+          padding: 8,
+          borderRadius: 4,
+          maxWidth: '100%',
+          overflowX: 'auto',
+          whiteSpace: 'pre-wrap',
+          wordBreak: 'break-all',
+        }}
+      >
         {JSON.stringify(toolResults, null, 2)}
       </pre>
     );
@@ -1194,7 +1278,7 @@ function formatToolProgressLogLine(e: AgentToolProgressEvent): string {
   return e.ok ? `[工具] ${e.tool} 完成` : `[工具] ${e.tool} 失败${e.message ? `: ${e.message}` : ''}`;
 }
 
-export function ChatPanel({ apiBase, addLog, onStartWorkEmbedded, onOpenKnowledgeBase, onOpenKnowledgeDoc, llmRuntimeMode, agentChatLlmBody, themeTokens }: ChatPanelProps) {
+export function ChatPanel({ apiBase, addLog, onStartWorkEmbedded, onOpenKnowledgeBase, onOpenCommandStats, onOpenKnowledgeDoc, llmRuntimeMode, agentChatLlmBody, themeTokens }: ChatPanelProps) {
   const [input, setInput] = useState('');
   const [inputHistory, setInputHistory] = useState<string[]>([]);
   const [loading, setLoading] = useState(false);
@@ -1404,6 +1488,78 @@ export function ChatPanel({ apiBase, addLog, onStartWorkEmbedded, onOpenKnowledg
     return () => document.removeEventListener('mousedown', onOutsideClick);
   }, [showModelPicker]);
 
+  const handleDeployApiResult = (
+    payload: {
+      success?: boolean;
+      message?: string;
+      queueUrl?: string;
+      jobUrl?: string;
+      jobName?: string;
+      jobKey?: string;
+    },
+    label: string
+  ) => {
+    const hasDeployPoll = payload && (payload.queueUrl || payload.jobName);
+    const content = hasDeployPoll
+      ? withJenkinsMarkdownLink(payload.message ?? '已触发，构建中…', payload.jobUrl ?? payload.queueUrl)
+      : payload.success
+        ? (payload.message ?? `${label}完成`)
+        : (payload.message ?? '部署失败');
+    setMessages((prev) => [...prev, { role: 'assistant', content }]);
+    if (hasDeployPoll && apiBase) {
+      const target: DeployPollingTarget | null = payload.queueUrl
+        ? { kind: 'queueUrl', value: payload.queueUrl }
+        : payload.jobName
+          ? { kind: 'jobName', value: payload.jobName }
+          : null;
+      if (target) {
+        startDeployPolling({
+          apiBase,
+          target,
+          label,
+          taskKey: payload.jobKey,
+          jobPageUrl: payload.jobUrl,
+          setMessages,
+          addLog,
+          pollRef: deployPollRef,
+        });
+      }
+    } else if (!payload.success) {
+      addLog(payload.message ?? '部署失败');
+    } else {
+      addLog(label);
+    }
+  };
+
+  const executeJenkinsDeployNovaPretest = async () => {
+    if (!apiBase) return;
+    const label = '部署 nova 集测';
+    addLog(`开始${label}…`);
+    try {
+      const res = await fetch(`${apiBase}/jenkins/deploy/nova-pretest`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+      });
+      const data = (await res.json()) as {
+        success?: boolean;
+        message?: string;
+        queueUrl?: string;
+        jobUrl?: string;
+        jobName?: string;
+        jobKey?: string;
+      };
+      if (!res.ok) {
+        addLog(`请求失败: ${res.status} ${data.message ?? ''}`);
+        setMessages((prev) => [...prev, { role: 'assistant', content: data.message ?? `请求失败: ${res.status}` }]);
+        return;
+      }
+      handleDeployApiResult({ ...data, jobKey: data.jobKey ?? 'nova-pretest' }, label);
+    } catch (e) {
+      addLog(`请求失败: ${e}`);
+      setMessages((prev) => [...prev, { role: 'assistant', content: `请求失败: ${String(e)}` }]);
+    }
+  };
+
   const executeMerge = async (path: string, doneLabel: string) => {
     if (!apiBase) return;
     addLog(`开始${doneLabel}…`);
@@ -1550,6 +1706,15 @@ export function ChatPanel({ apiBase, addLog, onStartWorkEmbedded, onOpenKnowledg
       onOpenKnowledgeBase();
       addLog('已打开私人知识库页签');
     }
+    const openStatsToolResult = data.toolResults?.find(
+      (t): t is { tool: string; result?: { openCommandStats?: boolean } } =>
+        (t as { tool?: string }).tool === 'open_command_stats' &&
+        (t as { result?: { openCommandStats?: boolean } }).result?.openCommandStats === true
+    );
+    if (openStatsToolResult) {
+      onOpenCommandStats();
+      addLog('已打开指令统计页签');
+    }
     const mergeSteps = (mergeResult?.result?.steps as string[] | undefined);
     appendToolResultsToLogs(data.toolResults, addLog);
     if (Array.isArray(mergeSteps) && mergeSteps.length > 0) mergeSteps.forEach((step) => addLog(step));
@@ -1570,10 +1735,15 @@ export function ChatPanel({ apiBase, addLog, onStartWorkEmbedded, onOpenKnowledg
     setLoading(true);
     setLiveTokenMetrics(null);
     addLog(`发送: ${msg}`);
-    const mergeTask = MERGE_TASKS.find((t) => msg === t.label || new RegExp(`合并\\s*${t.key}`, 'i').test(msg));
+    const mergeTask = resolveMergeTask(msg);
     if (mergeTask) {
       setLoading(false);
       await executeMerge(mergeTask.path, mergeTask.label);
+      return;
+    }
+    if (isNovaPretestDeployMessage(msg)) {
+      setLoading(false);
+      await executeJenkinsDeployNovaPretest();
       return;
     }
     if (msg === '添加私人知识库') {
@@ -1581,6 +1751,13 @@ export function ChatPanel({ apiBase, addLog, onStartWorkEmbedded, onOpenKnowledg
       onOpenKnowledgeBase();
       addLog('已打开私人知识库页签');
       setMessages((prev) => [...prev, { role: 'assistant', content: '已打开私人知识库页签，请选择目录并导入 Markdown 文档。' }]);
+      return;
+    }
+    if (msg === '统计常用指令') {
+      setLoading(false);
+      onOpenCommandStats();
+      addLog('已打开指令统计页签');
+      setMessages((prev) => [...prev, { role: 'assistant', content: '已打开指令统计页签，可查看柱状图、饼图与折线图。' }]);
       return;
     }
     if (/清除私人知识库|清空私人知识库/.test(msg)) {
@@ -1704,10 +1881,11 @@ export function ChatPanel({ apiBase, addLog, onStartWorkEmbedded, onOpenKnowledg
                   if (progressEvent.status === 'start') {
                     return { ...current, vectorCurrent: progressEvent.doc };
                   }
-                  if (progressEvent.status === 'done') {
-                    const nextDone = current.vectorDone.includes(progressEvent.doc)
+                  if (progressEvent.status === 'done' && progressEvent.doc) {
+                    const doc = progressEvent.doc;
+                    const nextDone = current.vectorDone.includes(doc)
                       ? current.vectorDone
-                      : [...current.vectorDone, progressEvent.doc];
+                      : [...current.vectorDone, doc];
                     return { ...current, vectorDone: nextDone, vectorCurrent: undefined };
                   }
                 }
@@ -1813,7 +1991,7 @@ export function ChatPanel({ apiBase, addLog, onStartWorkEmbedded, onOpenKnowledg
   };
 
   return (
-    <section style={{ flex: 1, display: 'flex', flexDirection: 'column', minHeight: 0, padding: 16 }}>
+    <section style={{ flex: 1, display: 'flex', flexDirection: 'column', minHeight: 0, minWidth: 0, width: '100%', overflow: 'hidden', padding: 16 }}>
       <div style={{ marginBottom: 8, display: 'flex', gap: 4, flexWrap: 'wrap', alignItems: 'center' }}>
         {QUICK_ACTIONS.map(({ label, message }) => (
           <Button
@@ -1849,6 +2027,7 @@ export function ChatPanel({ apiBase, addLog, onStartWorkEmbedded, onOpenKnowledg
         ref={feedbackListRef}
         style={{
           flex: 1,
+          minWidth: 0,
           overflow: 'auto',
           marginBottom: 12,
           background: themeTokens.workspacePanelBackground,

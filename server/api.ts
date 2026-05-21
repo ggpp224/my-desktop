@@ -1,6 +1,7 @@
 /* AI 生成 By Peng.Guo */
 import 'dotenv/config';
 import dns from 'node:dns';
+import type { Server } from 'node:http';
 import express from 'express';
 import cors from 'cors';
 import { runAgent, type AgentLlmOptions } from '../agent/agent.js';
@@ -18,12 +19,37 @@ import { getJenkinsPreset } from '../config/jenkins-presets.js';
 import { deploy as jenkinsDeploy, getDeployStatus, getDeployStatusByBuildHistory } from '../tools/jenkins-tool.js';
 import { open as openBrowser } from '../tools/browser-tool.js';
 import { getAllProjects, getProjectByCode } from '../config/projects.js';
-import { mergeByCode, mergeNova, mergeBizSolution, mergeScm } from '../tools/merge-tool.js';
+import { deployNovaPretest, deployByJobKey } from '../tools/deploy-jenkins-helper.js';
+import { mergeByCode, mergeNova, mergeNovaPretest, mergeBizSolution, mergeScm } from '../tools/merge-tool.js';
 import { runWorkflowStep } from '../tools/workflow-tool.js';
 import { addManualTerminalToSession, closeEmbeddedWorkflowSession, getEmbeddedWorkflowSession, removeTerminalFromSession, startEmbeddedWorkflow } from '../tools/workflow-embedded-service.js';
-import { closeTerminalSession, getTerminalSessionOutput, resizeTerminalSession, writeTerminalSessionInput } from '../tools/terminal-session-service.js';
+import {
+  closeTerminalSession,
+  getTerminalSessionOutput,
+  resizeTerminalSession,
+  writeTerminalSessionInput,
+} from '../tools/terminal-proxy.js';
 import { promises as fs } from 'fs';
 import path from 'path';
+import type { CommandStatSource } from './stats/command-stat-labels.js';
+import {
+  formatRangeForResponse,
+  parseStatsRangeQuery,
+  queryAggregated,
+  queryBySource,
+  queryTimeline,
+} from './stats/command-stats-repository.js';
+import { getApiBootId, rotateApiBootId } from './api-boot.js';
+import {
+  recordChatCommand,
+  recordDeploy,
+  recordDeployNovaPretest,
+  recordKnowledgeImport,
+  recordMerge,
+  recordOpenUrl,
+  recordWorkflowEmbedded,
+  recordWorkflowStep,
+} from './stats/command-stats-record.js';
 
 /** 出站 DNS 优先 IPv4，避免部分网络 IPv6 不通导致 Google 等连接在 IPv6 上卡死至超时 */
 if (typeof dns.setDefaultResultOrder === 'function') {
@@ -226,9 +252,19 @@ app.post('/agent/gemini/test', async (req, res) => {
   }
 });
 
-app.get('/health', async (_req, res) => {
+/** 轻量探活：仅表示本 Express 子进程存活，不访问 Ollama（避免高频 health 拖慢或误判） */
+app.get('/health', (_req, res) => {
+  res.status(200).json({
+    ok: true,
+    bootId: getApiBootId(),
+    service: 'ai-dev-control-center',
+    port: config.server.port,
+  });
+});
+
+app.get('/health/ollama', async (_req, res) => {
   const ollamaReachable = await healthCheck();
-  res.status(200).json({ ok: true, ollamaReachable, service: 'ai-dev-control-center' });
+  res.status(200).json({ ok: true, ollamaReachable });
 });
 
 /** 返回当前使用的本地模型名（可运行时切换），供前端展示 */
@@ -311,6 +347,7 @@ app.post('/knowledge-base/import', async (req, res) => {
     res.status(400).json({ success: false, error: '缺少 files' });
     return;
   }
+  recordKnowledgeImport('POST /knowledge-base/import');
   const sourceName = sourceNameRaw.replace(/[^a-zA-Z0-9._-]/g, '_').slice(0, 80) || 'import-latest';
   const targetRoot = path.join(PRIVATE_KB_BASE_DIR, sourceName);
   let imported = 0;
@@ -348,6 +385,7 @@ app.post('/agent/chat', async (req, res) => {
     res.status(400).json({ success: false, error: '缺少 message' });
     return;
   }
+  recordChatCommand(message, 'POST /agent/chat');
   let llm: AgentLlmOptions | undefined;
   try {
     llm = parseAgentLlmFromBody(req.body);
@@ -384,6 +422,7 @@ app.post('/agent/chat/stream', async (req, res) => {
     res.status(400).json({ success: false, error: '缺少 message' });
     return;
   }
+  recordChatCommand(message, 'POST /agent/chat/stream');
   let llm: AgentLlmOptions | undefined;
   try {
     llm = parseAgentLlmFromBody(req.body);
@@ -464,9 +503,72 @@ app.post('/open-url', async (req, res) => {
     res.status(400).json({ success: false, error: '缺少或无效的 url（需 http/https）' });
     return;
   }
+  recordOpenUrl('POST /open-url');
   try {
     await openBrowser(url);
     res.json({ success: true });
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    res.status(500).json({ success: false, error: msg });
+  }
+});
+
+function parseStatsSourceParam(raw: string): CommandStatSource | undefined {
+  const s = raw.trim() as CommandStatSource;
+  if (['chat', 'workflow', 'deploy', 'merge', 'browser', 'knowledge'].includes(s)) return s;
+  return undefined;
+}
+
+/** 指令统计：按 canonical_key 聚合（柱状图/饼图） */
+app.get('/stats/commands', (req, res) => {
+  try {
+    const range = parseStatsRangeQuery({
+      days: String(req.query?.days ?? ''),
+      from: String(req.query?.from ?? ''),
+      to: String(req.query?.to ?? ''),
+    });
+    const source = parseStatsSourceParam(String(req.query?.source ?? ''));
+    const limit = parseInt(String(req.query?.limit ?? '15'), 10);
+    const { items, total } = queryAggregated({ range, source, limit });
+    res.json({ items, total, range: formatRangeForResponse(range) });
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    res.status(500).json({ success: false, error: msg });
+  }
+});
+
+/** 指令统计：按日时间序列（折线图） */
+app.get('/stats/commands/timeline', (req, res) => {
+  try {
+    const range = parseStatsRangeQuery({
+      days: String(req.query?.days ?? ''),
+      from: String(req.query?.from ?? ''),
+      to: String(req.query?.to ?? ''),
+    });
+    const source = parseStatsSourceParam(String(req.query?.source ?? ''));
+    const { buckets, total } = queryTimeline({ range, source });
+    res.json({
+      buckets,
+      granularity: 'day',
+      total,
+      range: formatRangeForResponse(range),
+    });
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    res.status(500).json({ success: false, error: msg });
+  }
+});
+
+/** 指令统计：按来源分组（饼图「按来源」模式） */
+app.get('/stats/commands/by-source', (req, res) => {
+  try {
+    const range = parseStatsRangeQuery({
+      days: String(req.query?.days ?? ''),
+      from: String(req.query?.from ?? ''),
+      to: String(req.query?.to ?? ''),
+    });
+    const { items, total } = queryBySource({ range });
+    res.json({ items, total, range: formatRangeForResponse(range) });
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
     res.status(500).json({ success: false, error: msg });
@@ -496,27 +598,34 @@ app.post('/jenkins/deploy', async (req, res) => {
     res.status(400).json({ success: false, error: '缺少 job' });
     return;
   }
-  let preset = getJenkinsPreset(jobKey);
-  if (!preset) {
-    const entry = getProjectByCode(jobKey);
-    if (entry?.jenkins) {
-      const branchParam = (entry.jenkins.branchParam || 'BRANCH_NAME').trim() || 'BRANCH_NAME';
-      preset = {
-        name: entry.jenkins.jobName,
-        branchParam,
-        parameters: { [branchParam]: branch || entry.jenkins.defaultBranch },
-      };
+  recordDeploy(jobKey, branch || undefined, 'POST /jenkins/deploy');
+  const keyLower = jobKey.toLowerCase();
+  if (keyLower === 'nova-pretest' || keyLower === 'nova集测') {
+    try {
+      const result = await deployNovaPretest();
+      res.json({ ...result, jobName: result.jobName });
+      return;
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      res.status(500).json({ success: false, message: msg });
+      return;
     }
   }
-  const jobName = preset ? preset.name : jobKey;
-  let parameters: Record<string, string> | undefined = preset?.parameters;
-  if (preset && branch) {
-    const branchParam = preset.branchParam || 'BRANCH_NAME';
-    parameters = { ...(preset.parameters ?? {}), [branchParam]: branch };
-  }
   try {
-    const result = await jenkinsDeploy(jobName, parameters);
-    res.json({ ...result, jobName });
+    const result = await deployByJobKey(jobKey, branch || undefined);
+    res.json({ ...result, jobName: result.jobName });
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    res.status(500).json({ success: false, message: msg });
+  }
+});
+
+/** 部署 nova 集测：Jenkins 任务同 nova，分支为 react18 最大 sprint */
+app.post('/jenkins/deploy/nova-pretest', async (_req, res) => {
+  recordDeployNovaPretest('POST /jenkins/deploy/nova-pretest');
+  try {
+    const result = await deployNovaPretest();
+    res.json({ ...result, jobName: result.jobName });
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
     res.status(500).json({ success: false, message: msg });
@@ -573,6 +682,7 @@ app.post('/workflow/:workflowName/step', async (req, res) => {
     res.status(400).json({ success: false, error: '缺少 taskKey 或 stepIndex' });
     return;
   }
+  recordWorkflowStep(workflowName, taskKey || undefined, typeof stepIndex === 'number' ? stepIndex : undefined, 'POST /workflow/:workflowName/step');
   try {
     const result = await runWorkflowStep(workflowName, {
       ...(taskKey ? { taskKey } : {}),
@@ -592,6 +702,7 @@ app.post('/workflow/:workflowName/step', async (req, res) => {
 /** 启动内嵌工作流终端：用于 UI 子页签展示，不再依赖外部终端 */
 app.post('/workflow/:workflowName/embedded', async (req, res) => {
   const workflowName = (req.params?.workflowName ?? '').trim() || 'start-work';
+  recordWorkflowEmbedded(workflowName, 'POST /workflow/:workflowName/embedded');
   try {
     const result = await startEmbeddedWorkflow(workflowName);
     res.json({ success: true, ...result });
@@ -638,14 +749,14 @@ app.delete('/workflow/sessions/:sessionId', (req, res) => {
 });
 
 /** 在已有工作会话中新增手动终端；可选 body.cwdAbs 为初始工作目录（通常继承当前页签） */
-app.post('/workflow/sessions/:sessionId/terminals', (req, res) => {
+app.post('/workflow/sessions/:sessionId/terminals', async (req, res) => {
   const sessionId = (req.params?.sessionId ?? '').trim();
   if (!sessionId) {
     res.status(400).json({ success: false, error: '缺少 sessionId' });
     return;
   }
   const cwdFromBody = (req.body?.cwdAbs ?? req.body?.cwd ?? '').toString().trim();
-  const terminal = addManualTerminalToSession(sessionId, cwdFromBody ? { cwd: cwdFromBody } : undefined);
+  const terminal = await addManualTerminalToSession(sessionId, cwdFromBody ? { cwd: cwdFromBody } : undefined);
   if (!terminal) {
     res.status(404).json({ success: false, error: `会话不存在: ${sessionId}` });
     return;
@@ -670,14 +781,14 @@ app.delete('/workflow/sessions/:sessionId/terminals/:terminalId', (req, res) => 
 });
 
 /** 获取终端增量输出（from=上次 seq），用于 xterm 渲染 */
-app.get('/terminal/sessions/:sessionId/output', (req, res) => {
+app.get('/terminal/sessions/:sessionId/output', async (req, res) => {
   const sessionId = (req.params?.sessionId ?? '').trim();
   const from = Number((req.query?.from ?? 0).toString());
   if (!sessionId) {
     res.status(400).json({ success: false, error: '缺少 sessionId' });
     return;
   }
-  const data = getTerminalSessionOutput(sessionId, Number.isFinite(from) ? from : 0);
+  const data = await getTerminalSessionOutput(sessionId, Number.isFinite(from) ? from : 0);
   if (!data) {
     res.status(404).json({ success: false, error: `终端会话不存在: ${sessionId}` });
     return;
@@ -686,7 +797,7 @@ app.get('/terminal/sessions/:sessionId/output', (req, res) => {
 });
 
 /** 写入终端输入，支持回车/编辑/快捷键 */
-app.post('/terminal/sessions/:sessionId/input', (req, res) => {
+app.post('/terminal/sessions/:sessionId/input', async (req, res) => {
   const sessionId = (req.params?.sessionId ?? '').trim();
   const data = (req.body?.data ?? '').toString();
   if (!sessionId) {
@@ -697,7 +808,7 @@ app.post('/terminal/sessions/:sessionId/input', (req, res) => {
     res.status(400).json({ success: false, error: '缺少 data' });
     return;
   }
-  const ok = writeTerminalSessionInput(sessionId, data);
+  const ok = await writeTerminalSessionInput(sessionId, data);
   if (!ok) {
     res.status(404).json({ success: false, error: `终端会话不存在: ${sessionId}` });
     return;
@@ -706,7 +817,7 @@ app.post('/terminal/sessions/:sessionId/input', (req, res) => {
 });
 
 /** 通知后端终端尺寸变化，保证 curses 类程序正常显示 */
-app.post('/terminal/sessions/:sessionId/resize', (req, res) => {
+app.post('/terminal/sessions/:sessionId/resize', async (req, res) => {
   const sessionId = (req.params?.sessionId ?? '').trim();
   const cols = Number(req.body?.cols ?? 80);
   const rows = Number(req.body?.rows ?? 24);
@@ -714,7 +825,7 @@ app.post('/terminal/sessions/:sessionId/resize', (req, res) => {
     res.status(400).json({ success: false, error: '缺少 sessionId' });
     return;
   }
-  const ok = resizeTerminalSession(sessionId, cols, rows);
+  const ok = await resizeTerminalSession(sessionId, cols, rows);
   if (!ok) {
     res.status(404).json({ success: false, error: `终端会话不存在: ${sessionId}` });
     return;
@@ -723,13 +834,13 @@ app.post('/terminal/sessions/:sessionId/resize', (req, res) => {
 });
 
 /** 直接关闭终端会话（保留接口，便于未来非 workflow 终端管理） */
-app.delete('/terminal/sessions/:sessionId', (req, res) => {
+app.delete('/terminal/sessions/:sessionId', async (req, res) => {
   const sessionId = (req.params?.sessionId ?? '').trim();
   if (!sessionId) {
     res.status(400).json({ success: false, error: '缺少 sessionId' });
     return;
   }
-  const ok = closeTerminalSession(sessionId);
+  const ok = await closeTerminalSession(sessionId);
   if (!ok) {
     res.status(404).json({ success: false, error: `终端会话不存在: ${sessionId}` });
     return;
@@ -739,6 +850,7 @@ app.delete('/terminal/sessions/:sessionId', (req, res) => {
 
 /** 合并 nova：SSE 流式输出每步，前端可实时展示 */
 app.post('/merge/nova', async (_req, res) => {
+  recordMerge('nova', 'POST /merge/nova');
   res.setHeader('Content-Type', 'text/event-stream');
   res.setHeader('Cache-Control', 'no-cache');
   res.setHeader('Connection', 'keep-alive');
@@ -764,8 +876,37 @@ app.post('/merge/nova', async (_req, res) => {
   res.end();
 });
 
+/** 合并 nova 集测：目标分支为 react18 远程最大 sprint-N，流程同 merge nova（含 release） */
+app.post('/merge/nova-pretest', async (_req, res) => {
+  recordMerge('nova-pretest', 'POST /merge/nova-pretest');
+  res.setHeader('Content-Type', 'text/event-stream');
+  res.setHeader('Cache-Control', 'no-cache');
+  res.setHeader('Connection', 'keep-alive');
+  res.setHeader('X-Accel-Buffering', 'no');
+  const socket = (res as unknown as { socket?: { setNoDelay?: (v: boolean) => void } }).socket;
+  if (socket?.setNoDelay) socket.setNoDelay(true);
+  res.flushHeaders?.();
+  const send = (msg: string) => {
+    const payload = `data: ${JSON.stringify({ step: msg })}\n\n`;
+    res.write(payload, 'utf8', () => {
+      if (typeof (res as unknown as { flush?: () => void }).flush === 'function') {
+        (res as unknown as { flush: () => void }).flush();
+      }
+    });
+  };
+  try {
+    const result = await mergeNovaPretest({ onStep: send });
+    res.write(`data: ${JSON.stringify({ done: true, success: result.success, error: result.error })}\n\n`);
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    res.write(`data: ${JSON.stringify({ done: true, success: false, error: msg })}\n\n`);
+  }
+  res.end();
+});
+
 /** 合并 biz-solution：目标分支 test-260423，无 pnpm run release，SSE 流式输出 */
 app.post('/merge/biz-solution', async (_req, res) => {
+  recordMerge('biz-solution', 'POST /merge/biz-solution');
   res.setHeader('Content-Type', 'text/event-stream');
   res.setHeader('Cache-Control', 'no-cache');
   res.setHeader('Connection', 'keep-alive');
@@ -792,6 +933,7 @@ app.post('/merge/biz-solution', async (_req, res) => {
 
 /** 合并 scm：目标分支 test-260423，无 pnpm run release，SSE 流式输出 */
 app.post('/merge/scm', async (_req, res) => {
+  recordMerge('scm', 'POST /merge/scm');
   res.setHeader('Content-Type', 'text/event-stream');
   res.setHeader('Cache-Control', 'no-cache');
   res.setHeader('Connection', 'keep-alive');
@@ -832,6 +974,7 @@ app.post('/merge/:code', async (req, res) => {
     res.status(400).json({ success: false, error: `项目 ${entry.codes[0]} 未配置 merge` });
     return;
   }
+  recordMerge(code, 'POST /merge/:code');
   res.setHeader('Content-Type', 'text/event-stream');
   res.setHeader('Cache-Control', 'no-cache');
   res.setHeader('Connection', 'keep-alive');
@@ -856,25 +999,56 @@ app.post('/merge/:code', async (req, res) => {
   res.end();
 });
 
-/** 启动 API 服务；若端口被占用则尝试 3001、3002…，返回实际监听端口 */
-export async function startServer(): Promise<number> {
-  const basePort = config.server.port;
+let httpServer: Server | null = null;
+
+export type StartServerOptions = {
+  /** 期望监听端口，默认 config.server.port */
+  preferredPort?: number;
+  /** 为 false 时端口占用直接失败，不尝试 3001、3002…（Electron 托管启动用） */
+  allowPortFallback?: boolean;
+};
+
+/** 关闭由本进程 startServer 启动的 HTTP 服务 */
+export function stopServer(): Promise<void> {
+  return new Promise((resolve) => {
+    if (!httpServer) {
+      resolve();
+      return;
+    }
+    const server = httpServer;
+    httpServer = null;
+    server.close(() => resolve());
+  });
+}
+
+/** 启动 API 服务；默认若端口被占用则尝试下一端口；返回实际监听端口 */
+export async function startServer(options?: StartServerOptions): Promise<number> {
+  const basePort = options?.preferredPort ?? config.server.port;
+  const allowPortFallback = options?.allowPortFallback !== false;
   const maxPort = basePort + 20;
+
+  await stopServer();
 
   await syncActiveModelFromOllamaPs().catch(() => {
     /* Ollama 未启动或 /api/ps 不可用时保留内存中的默认（来自 env） */
   });
 
+  const listenHost = process.env.API_STRICT_PORT === '1' ? '127.0.0.1' : '';
+
   function tryListen(port: number): Promise<number> {
     return new Promise((resolve, reject) => {
-      const server = app.listen(port, () => {
+      const onListening = () => {
+        httpServer = server;
         const actual = (server.address() as { port: number })?.port ?? port;
-        console.log(`API http://localhost:${actual}`);
+        const hostLabel = listenHost || 'localhost';
+        const bootId = rotateApiBootId();
+        console.log(`API http://${hostLabel}:${actual} bootId=${bootId}`);
         resolve(actual);
-      });
+      };
+      const server = listenHost ? app.listen(port, listenHost, onListening) : app.listen(port, onListening);
       server.on('error', (err: NodeJS.ErrnoException) => {
         server.close();
-        if (err.code === 'EADDRINUSE' && port < maxPort) {
+        if (allowPortFallback && err.code === 'EADDRINUSE' && port < maxPort) {
           tryListen(port + 1).then(resolve).catch(reject);
         } else {
           reject(err);
@@ -887,4 +1061,10 @@ export async function startServer(): Promise<number> {
 }
 
 const isMain = process.argv[1]?.includes('api.');
-if (isMain) void startServer().catch((e) => console.error('startServer failed:', e));
+if (isMain) {
+  const strictPort = process.env.API_STRICT_PORT === '1';
+  const preferredPort = Number(process.env.PORT) || config.server.port;
+  void startServer({ allowPortFallback: !strictPort, preferredPort }).catch((e) =>
+    console.error('startServer failed:', e)
+  );
+}

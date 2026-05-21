@@ -94,7 +94,7 @@ npm run dev
 该命令会并行启动：
 
 - `ui`（Vite，默认 `5173`）
-- `server`（Express API，默认 `3000`，端口冲突会自动递增）
+- `server`（Express API，默认 `41738`/`API_PORT`；Electron 托管时固定端口，单独 `tsx server/api.ts` 时端口冲突可递增）
 - Electron 主进程（等待 UI/API 可用后启动）
 
 ### 4) 生产运行

@@ -1,11 +1,14 @@
 /* AI 生成 By Peng.Guo */
-import { useState, useEffect, useRef, useMemo } from 'react';
+import { lazy, Suspense, useState, useEffect, useRef, useMemo } from 'react';
 import { ChatPanel } from './ChatPanel';
 import { WorkflowPanel } from './WorkflowPanel';
 import { ToolPanel } from './ToolPanel';
 import { LogsPanel } from './LogsPanel';
-import { MyWorkPanel, type WorkTerminal } from './MyWorkPanel';
+import type { WorkTerminal } from './MyWorkPanel';
+
+const MyWorkPanel = lazy(() => import('./MyWorkPanel').then((m) => ({ default: m.MyWorkPanel })));
 import { KnowledgeBasePanel } from './KnowledgeBasePanel';
+import { CommandStatsPanel } from './CommandStatsPanel';
 import { KnowledgeDocPanel } from './KnowledgeDocPanel';
 import { LlmSettingsModal } from './view/LlmSettingsModal';
 import { HeaderTabNav } from './view/HeaderTabNav';
@@ -18,7 +21,7 @@ import type { GeminiUserSettings, LlmRuntimeMode } from './domain/llm/agentLlmRe
 import { useAppTheme } from './viewmodel/theme/useAppTheme';
 import { getHelpCodebook, getHelpCommands } from './infrastructure/help/helpCatalogDataSource';
 
-const DEFAULT_API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:3000';
+const DEFAULT_API_BASE = import.meta.env.VITE_API_URL || 'http://127.0.0.1:41738';
 const MY_WORK_SESSION_STORAGE_KEY = 'ai-dev-control-center:my-work-session-id';
 type HeaderTab = { key: string; label: string; docPath?: string };
 const HEADER_TABS: HeaderTab[] = [
@@ -29,7 +32,11 @@ const HELP_CODES = getHelpCodebook();
 
 declare global {
   interface Window {
-    electronAPI?: { getApiBase: () => Promise<string> };
+    electronAPI?: {
+      getApiBase: () => Promise<string>;
+      onApiPortChanged?: (handler: (apiBase: string) => void) => () => void;
+      onApiChildExited?: (handler: () => void) => () => void;
+    };
   }
 }
 
@@ -49,6 +56,8 @@ export default function App() {
   const [headerTabs, setHeaderTabs] = useState<HeaderTab[]>(HEADER_TABS);
   const [myWorkSessionId, setMyWorkSessionId] = useState('');
   const [myWorkTerminals, setMyWorkTerminals] = useState<WorkTerminal[]>([]);
+  const [myWorkInvalidHint, setMyWorkInvalidHint] = useState('');
+  const [apiServerOk, setApiServerOk] = useState(true);
   const [leftCollapsed, setLeftCollapsed] = useState(true);
   const [rightWidth, setRightWidth] = useState(400);
   const [resizing, setResizing] = useState(false);
@@ -122,15 +131,121 @@ export default function App() {
   }, [apiBase]);
 
   useEffect(() => {
+    const unsub = window.electronAPI?.onApiPortChanged?.((base) => {
+      setApiBase(base);
+      setApiServerOk(true);
+    });
+    return () => unsub?.();
+  }, []);
+
+  const clearMyWorkSession = (hint: string) => {
+    setMyWorkSessionId('');
+    setMyWorkTerminals([]);
+    localStorage.removeItem(MY_WORK_SESSION_STORAGE_KEY);
+    if (hint) {
+      setMyWorkInvalidHint(hint);
+      addLog(hint);
+    }
+  };
+
+  useEffect(() => {
+    const unsub = window.electronAPI?.onApiChildExited?.(() => {
+      setApiServerOk(false);
+      const hint =
+        '后端 API 子进程已退出（见终端 [api-server] exited）。请 Cmd+Q 完全退出应用后重新 yarn dev，再点「开始工作」。';
+      if (myWorkSessionId) clearMyWorkSession(hint);
+      else {
+        setMyWorkInvalidHint(hint);
+        addLog(hint);
+      }
+    });
+    return () => unsub?.();
+  }, [myWorkSessionId]);
+
+  useEffect(() => {
     if (!apiBase) return;
-    fetch(`${apiBase}/health`)
-      .then((r) => r.json())
-      .then((d: { ok?: boolean; ollamaReachable?: boolean }) => {
-        if (typeof d.ollamaReachable === 'boolean') setOllamaOk(d.ollamaReachable);
-        else setOllamaOk(!!d.ok);
-      })
-      .catch(() => setOllamaOk(false));
-  }, [apiBase]);
+    let cancelled = false;
+    let ollamaTick = 0;
+    const apiDownHint = () =>
+      `后端 API（${apiBase}）无响应。它是本应用自带的 Node 服务（默认 41738/API_PORT），负责「开始工作」、内嵌终端、Agent 工具。请 Cmd+Q 退出后重新 yarn dev。`;
+
+    let healthFailStreak = 0;
+    const pollHealth = async () => {
+      try {
+        const r = await fetch(`${apiBase}/health`, { signal: AbortSignal.timeout(4000) });
+        if (!r.ok) throw new Error(`health ${r.status}`);
+        if (cancelled) return;
+        healthFailStreak = 0;
+        setApiServerOk(true);
+        ollamaTick += 1;
+        if (ollamaTick % 3 === 0) {
+          fetch(`${apiBase}/health/ollama`)
+            .then((or) => or.json())
+            .then((d: { ollamaReachable?: boolean }) => {
+              if (!cancelled && typeof d.ollamaReachable === 'boolean') setOllamaOk(d.ollamaReachable);
+            })
+            .catch(() => {
+              if (!cancelled) setOllamaOk(false);
+            });
+        }
+      } catch {
+        if (cancelled) return;
+        healthFailStreak += 1;
+        setApiServerOk(false);
+        setOllamaOk(false);
+        if (healthFailStreak < 3) return;
+        if (myWorkSessionId) clearMyWorkSession(apiDownHint());
+        else setMyWorkInvalidHint(apiDownHint());
+      }
+    };
+    void pollHealth();
+    const timer = window.setInterval(() => void pollHealth(), 4000);
+    return () => {
+      cancelled = true;
+      window.clearInterval(timer);
+    };
+  }, [apiBase, myWorkSessionId]);
+
+  useEffect(() => {
+    if (!apiBase) return;
+    const storedSessionId = localStorage.getItem(MY_WORK_SESSION_STORAGE_KEY)?.trim();
+    if (!storedSessionId || storedSessionId === myWorkSessionId) return;
+    const restoreMyWorkSession = async () => {
+      try {
+        const response = await fetch(`${apiBase}/workflow/sessions/${encodeURIComponent(storedSessionId)}`);
+        if (!response.ok) {
+          localStorage.removeItem(MY_WORK_SESSION_STORAGE_KEY);
+          setMyWorkInvalidHint('内嵌工作流会话已过期（后端 API 已重启或退出过），请重新「开始工作」。');
+          return;
+        }
+        const payload = (await response.json()) as { success?: boolean; terminals?: WorkTerminal[] };
+        if (!payload.success || !Array.isArray(payload.terminals)) {
+          localStorage.removeItem(MY_WORK_SESSION_STORAGE_KEY);
+          setMyWorkInvalidHint('内嵌终端会话已过期，请重新「开始工作」。');
+          return;
+        }
+        setMyWorkInvalidHint('');
+        setMyWorkSessionId(storedSessionId);
+        setMyWorkTerminals(payload.terminals);
+        setHeaderTabs((prev) => {
+          if (prev.some((tab) => tab.key === 'my-work')) return prev;
+          return [...prev, { key: 'my-work', label: '终端' }];
+        });
+      } catch {
+        // 保留本地会话标记，下次聚焦窗口时继续尝试恢复。
+      }
+    };
+    void restoreMyWorkSession();
+  }, [apiBase, myWorkSessionId, resumeTick]);
+
+  useEffect(() => {
+    if (!myWorkSessionId) return;
+    localStorage.setItem(MY_WORK_SESSION_STORAGE_KEY, myWorkSessionId);
+    setHeaderTabs((prev) => {
+      if (prev.some((tab) => tab.key === 'my-work')) return prev;
+      return [...prev, { key: 'my-work', label: '终端' }];
+    });
+  }, [myWorkSessionId]);
 
   if (apiBase === null) {
     return (
@@ -141,6 +256,7 @@ export default function App() {
   }
 
   const onStartWorkEmbedded = (payload: { sessionId: string; terminals: WorkTerminal[] }) => {
+    setMyWorkInvalidHint('');
     setMyWorkSessionId(payload.sessionId);
     setMyWorkTerminals(payload.terminals);
     localStorage.setItem(MY_WORK_SESSION_STORAGE_KEY, payload.sessionId);
@@ -157,6 +273,14 @@ export default function App() {
       return [...prev, { key: 'knowledge-base', label: '私人知识库' }];
     });
     setActiveHeaderTab('knowledge-base');
+  };
+
+  const openCommandStatsTab = () => {
+    setHeaderTabs((prev) => {
+      if (prev.some((tab) => tab.key === 'command-stats')) return prev;
+      return [...prev, { key: 'command-stats', label: '指令统计' }];
+    });
+    setActiveHeaderTab('command-stats');
   };
 
   const openKnowledgeDocTab = (docPath: string) => {
@@ -187,44 +311,6 @@ export default function App() {
     setActiveHeaderTab((prev) => (prev === tabKey ? 'workspace' : prev));
   };
 
-  useEffect(() => {
-    if (!apiBase) return;
-    const storedSessionId = localStorage.getItem(MY_WORK_SESSION_STORAGE_KEY)?.trim();
-    if (!storedSessionId || storedSessionId === myWorkSessionId) return;
-    const restoreMyWorkSession = async () => {
-      try {
-        const response = await fetch(`${apiBase}/workflow/sessions/${encodeURIComponent(storedSessionId)}`);
-        if (!response.ok) {
-          localStorage.removeItem(MY_WORK_SESSION_STORAGE_KEY);
-          return;
-        }
-        const payload = (await response.json()) as { success?: boolean; terminals?: WorkTerminal[] };
-        if (!payload.success || !Array.isArray(payload.terminals)) {
-          localStorage.removeItem(MY_WORK_SESSION_STORAGE_KEY);
-          return;
-        }
-        setMyWorkSessionId(storedSessionId);
-        setMyWorkTerminals(payload.terminals);
-        setHeaderTabs((prev) => {
-          if (prev.some((tab) => tab.key === 'my-work')) return prev;
-          return [...prev, { key: 'my-work', label: '终端' }];
-        });
-      } catch {
-        // 保留本地会话标记，下次聚焦窗口时继续尝试恢复。
-      }
-    };
-    void restoreMyWorkSession();
-  }, [apiBase, myWorkSessionId, resumeTick]);
-
-  useEffect(() => {
-    if (!myWorkSessionId) return;
-    localStorage.setItem(MY_WORK_SESSION_STORAGE_KEY, myWorkSessionId);
-    setHeaderTabs((prev) => {
-      if (prev.some((tab) => tab.key === 'my-work')) return prev;
-      return [...prev, { key: 'my-work', label: '终端' }];
-    });
-  }, [myWorkSessionId]);
-
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100vh', background: themeTokens.appBackground }}>
       <header style={{ padding: '12px 16px', borderBottom: `1px solid ${themeTokens.panelBorder}`, background: themeTokens.headerBackground, display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 16 }}>
@@ -236,7 +322,12 @@ export default function App() {
             onTabClick={setActiveHeaderTab}
             onTabClose={(tabKey) => void closeHeaderTab(tabKey)}
           />
-          {llmMode === 'local' && ollamaOk === false && (
+          {!apiServerOk && (
+            <p style={{ margin: '8px 0 0', fontSize: 12, color: themeTokens.statusWarning }}>
+              后端 API 不可用（{apiBase}）。请查看终端里是否有 [api-server] exited，然后 Cmd+Q 退出并重新 yarn dev。
+            </p>
+          )}
+          {llmMode === 'local' && ollamaOk === false && apiServerOk && (
             <p style={{ margin: '8px 0 0', fontSize: 12, color: themeTokens.statusWarning }}>
               请先安装并启动 Ollama，并拉取模型（如 ollama pull qwen2.5）。<a href="https://ollama.com" target="_blank" rel="noreferrer" style={{ color: themeTokens.tabActiveBorder }}>文档</a>
             </p>
@@ -384,7 +475,7 @@ export default function App() {
         </div>
         </div>
       </header>
-      <div ref={contentRef} style={{ display: 'flex', flex: 1, minHeight: 0 }}>
+      <div ref={contentRef} style={{ display: 'flex', flex: 1, minHeight: 0, minWidth: 0, overflow: 'hidden' }}>
         <aside
           style={{
             width: leftCollapsed ? 40 : 250,
@@ -421,33 +512,114 @@ export default function App() {
             </>
           )}
         </aside>
-        <main style={{ flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0, borderRight: `1px solid ${themeTokens.panelBorder}` }}>
-          {/* AI 生成 By Peng.Guo：ChatPanel 常驻挂载，避免切换“终端”页签后状态被重置 */}
-          <div style={{ display: activeHeaderTab === 'workspace' ? 'flex' : 'none', flex: 1, minHeight: 0 }}>
+        <main
+          style={{
+            flex: 1,
+            display: 'flex',
+            flexDirection: 'column',
+            minWidth: 0,
+            minHeight: 0,
+            overflow: 'hidden',
+            borderRight: `1px solid ${themeTokens.panelBorder}`,
+            position: 'relative',
+          }}
+        >
+          {/* AI 生成 By Peng.Guo：ChatPanel 常驻挂载，避免切换「终端」等页签后聊天状态被重置 */}
+          <div
+            style={{
+              display: activeHeaderTab === 'workspace' ? 'flex' : 'none',
+              flex: 1,
+              minHeight: 0,
+              minWidth: 0,
+              width: '100%',
+              height: '100%',
+              overflow: 'hidden',
+            }}
+          >
             <ChatPanel
               apiBase={apiBase}
               addLog={addLog}
               onStartWorkEmbedded={onStartWorkEmbedded}
               onOpenKnowledgeBase={openKnowledgeBaseTab}
+              onOpenCommandStats={openCommandStatsTab}
               onOpenKnowledgeDoc={openKnowledgeDocTab}
               llmRuntimeMode={llmMode}
               agentChatLlmBody={agentChatLlmBody}
               themeTokens={themeTokens}
             />
           </div>
-          <div style={{ display: activeHeaderTab === 'knowledge-base' ? 'flex' : 'none', flex: 1, minHeight: 0 }}>
-            <KnowledgeBasePanel apiBase={apiBase} addLog={addLog} themeTokens={themeTokens} />
-          </div>
-          {activeHeaderTab.startsWith('knowledge-doc:') && (
-            <KnowledgeDocPanel
-              apiBase={apiBase}
-              sourcePath={headerTabs.find((tab) => tab.key === activeHeaderTab)?.docPath ?? ''}
-              themeTokens={themeTokens}
-              onOpenKnowledgeDoc={openKnowledgeDocTab}
-            />
+          {activeHeaderTab === 'knowledge-base' && (
+            <div style={{ flex: 1, minHeight: 0, width: '100%', height: '100%', display: 'flex', overflow: 'hidden' }}>
+              <KnowledgeBasePanel apiBase={apiBase} addLog={addLog} themeTokens={themeTokens} />
+            </div>
           )}
-          {activeHeaderTab === 'my-work' && myWorkSessionId && (
-            <MyWorkPanel apiBase={apiBase} sessionId={myWorkSessionId} initialTerminals={myWorkTerminals} themeTokens={themeTokens} />
+          {activeHeaderTab === 'command-stats' && (
+            <div style={{ flex: 1, minHeight: 0, width: '100%', height: '100%', display: 'flex', overflow: 'hidden' }}>
+              <CommandStatsPanel apiBase={apiBase} themeTokens={themeTokens} />
+            </div>
+          )}
+          {activeHeaderTab.startsWith('knowledge-doc:') && (
+            <div style={{ flex: 1, minHeight: 0, width: '100%', height: '100%', display: 'flex', overflow: 'hidden' }}>
+              <KnowledgeDocPanel
+                apiBase={apiBase}
+                sourcePath={headerTabs.find((tab) => tab.key === activeHeaderTab)?.docPath ?? ''}
+                themeTokens={themeTokens}
+                onOpenKnowledgeDoc={openKnowledgeDocTab}
+              />
+            </div>
+          )}
+          {activeHeaderTab === 'my-work' && (
+            <div style={{ flex: 1, minHeight: 0, width: '100%', height: '100%', display: 'flex', overflow: 'hidden' }}>
+              {myWorkSessionId && apiServerOk ? (
+                <Suspense
+                  fallback={
+                    <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', color: themeTokens.textSecondary }}>
+                      终端加载中…
+                    </div>
+                  }
+                >
+                  <MyWorkPanel
+                    apiBase={apiBase}
+                    apiServerOk={apiServerOk}
+                    sessionId={myWorkSessionId}
+                    initialTerminals={myWorkTerminals}
+                    themeTokens={themeTokens}
+                  />
+                </Suspense>
+              ) : myWorkSessionId && !apiServerOk ? (
+                <div
+                  style={{
+                    flex: 1,
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    padding: 24,
+                    color: themeTokens.statusWarning,
+                    fontSize: 14,
+                    textAlign: 'center',
+                    lineHeight: 1.6,
+                  }}
+                >
+                  后端 API 暂时不可用，已暂停终端轮询。请 Cmd+Q 退出应用后重新 yarn dev，再点「开始工作」。
+                </div>
+              ) : (
+                <div
+                  style={{
+                    flex: 1,
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    padding: 24,
+                    color: themeTokens.textSecondary,
+                    fontSize: 14,
+                    textAlign: 'center',
+                    lineHeight: 1.6,
+                  }}
+                >
+                  {myWorkInvalidHint || '请在工作区点击「开始工作」以打开内嵌终端。'}
+                </div>
+              )}
+            </div>
           )}
         </main>
         <div

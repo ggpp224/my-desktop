@@ -1,4 +1,5 @@
 /* AI 生成 By Peng.Guo */
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { readFile } from 'fs/promises';
 import path from 'path';
 import { randomUUID } from 'crypto';
@@ -8,7 +9,7 @@ import { getProjectPath } from '../config/projects.js';
 import { open as browserOpen } from './browser-tool.js';
 import { deploy as jenkinsDeploy } from './jenkins-tool.js';
 import { run as shellRun } from './shell-tool.js';
-import { closeTerminalSession, createTerminalSession } from './terminal-session-service.js';
+import { closeTerminalSession, createTerminalSession } from './terminal-proxy.js';
 
 type Step =
   | { tool: 'shell'; cmd: string; visible?: boolean; taskKey?: string; cwdCode?: string }
@@ -38,8 +39,58 @@ interface EmbeddedSession {
 
 const require = createRequire(import.meta.url);
 const sessions = new Map<string, EmbeddedSession>();
+const SESSIONS_FILE = path.resolve(process.cwd(), 'runtime', 'embedded-workflow-sessions.json');
 const MAX_LINES_PER_TERMINAL = 2000;
 const DEFAULT_WORKFLOW = 'start-work';
+/** 连续创建多个 PTY 时的间隔，降低 API 子进程被系统 OOM(Signal 9) 杀死的概率 */
+const PTY_STAGGER_MS = 1200;
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function ensureRuntimeDir(): void {
+  const dir = path.dirname(SESSIONS_FILE);
+  if (!existsSync(dir)) mkdirSync(dir, { recursive: true });
+}
+
+/** API 子进程重启后从磁盘恢复「开始工作」会话元数据（PTY 在 terminal-broker 子进程，通常仍可连） */
+function loadSessionsFromDisk(): void {
+  ensureRuntimeDir();
+  try {
+    if (!existsSync(SESSIONS_FILE)) return;
+    const raw = readFileSync(SESSIONS_FILE, 'utf-8');
+    const data = JSON.parse(raw) as Record<string, EmbeddedSession>;
+    for (const [id, session] of Object.entries(data)) {
+      if (session?.id === id && Array.isArray(session.terminals)) {
+        sessions.set(id, session);
+      }
+    }
+  } catch {
+    /* 损坏的缓存忽略 */
+  }
+}
+
+function persistSessionsToDisk(): void {
+  try {
+    ensureRuntimeDir();
+    writeFileSync(SESSIONS_FILE, JSON.stringify(Object.fromEntries(sessions)), 'utf-8');
+  } catch {
+    /* 磁盘写入失败不阻断工作流 */
+  }
+}
+
+loadSessionsFromDisk();
+
+async function runPtyJobsSequential(jobs: Array<() => Promise<void>>): Promise<void> {
+  for (const job of jobs) {
+    try {
+      await job();
+    } catch {
+      /* 单页签失败不阻断其余终端 */
+    }
+  }
+}
 
 function getWorkflowsDir(): string {
   if (typeof process !== 'undefined' && process.versions?.electron) {
@@ -110,6 +161,8 @@ export async function startEmbeddedWorkflow(workflowName = DEFAULT_WORKFLOW): Pr
     createdAt: Date.now(),
   };
   sessions.set(sessionId, session);
+  persistSessionsToDisk();
+  const ptyJobs: Array<() => Promise<void>> = [];
 
   for (let i = 0; i < def.steps.length; i++) {
     const step = def.steps[i];
@@ -119,15 +172,26 @@ export async function startEmbeddedWorkflow(workflowName = DEFAULT_WORKFLOW): Pr
       if (step.tool === 'shell') {
         const { command, cwd } = resolveShellStep(step);
         if (step.visible) {
-          const ptySession = createTerminalSession({
-            title: terminal.title,
-            cwd,
-            command,
+          pushLine(terminal, '正在创建可交互终端…');
+          const priorVisibleShells = def.steps.slice(0, i).filter((s) => s.tool === 'shell' && s.visible).length;
+          ptyJobs.push(async () => {
+            if (priorVisibleShells > 0) await sleep(PTY_STAGGER_MS);
+            try {
+              const ptySession = await createTerminalSession({
+                title: terminal.title,
+                cwd,
+                command,
+              });
+              terminal.terminalSessionId = ptySession.id;
+              terminal.status = ptySession.status;
+              terminal.cwdAbs = ptySession.cwdAbs;
+              pushLine(terminal, `已创建可交互终端，会话: ${ptySession.id}`);
+            } catch (err) {
+              terminal.status = 'error';
+              pushLine(terminal, `终端创建失败: ${err instanceof Error ? err.message : String(err)}`);
+            }
+            persistSessionsToDisk();
           });
-          terminal.terminalSessionId = ptySession.id;
-          terminal.status = ptySession.status;
-          terminal.cwdAbs = ptySession.cwdAbs;
-          pushLine(terminal, `已创建可交互终端，会话: ${ptySession.id}`);
         } else {
           const runCommand = cwd ? `cd ${cwd} && ${command}` : command;
           terminal.cwdAbs = cwd || process.cwd();
@@ -156,6 +220,10 @@ export async function startEmbeddedWorkflow(workflowName = DEFAULT_WORKFLOW): Pr
     }
   }
 
+  if (ptyJobs.length > 0) {
+    void runPtyJobsSequential(ptyJobs);
+  }
+
   return {
     sessionId,
     terminals: session.terminals,
@@ -167,17 +235,17 @@ export function getEmbeddedWorkflowSession(sessionId: string): EmbeddedSession |
 }
 
 /** 在已有会话中新建手动终端页签；cwd 默认用户主目录 */
-export function addManualTerminalToSession(
+export async function addManualTerminalToSession(
   sessionId: string,
   opts?: { cwd?: string; tabTitle?: string }
-): EmbeddedTerminalSnapshot | null {
+): Promise<EmbeddedTerminalSnapshot | null> {
   const session = sessions.get(sessionId);
   if (!session) return null;
   const existingManualCount = session.terminals.filter((item) => item.taskKey === 'manual').length;
   const cwdInput = (opts?.cwd ?? '').trim();
   const cwdResolved = cwdInput || homedir();
   const title = (opts?.tabTitle ?? '').trim() || `terminal-${existingManualCount + 1}`;
-  const ptySession = createTerminalSession({ title, cwd: cwdResolved });
+  const ptySession = await createTerminalSession({ title, cwd: cwdResolved });
   const terminal: EmbeddedTerminalSnapshot = {
     id: `manual-${Date.now()}`,
     title,
@@ -193,14 +261,15 @@ export function addManualTerminalToSession(
     terminalSessionId: ptySession.id,
   };
   session.terminals.push(terminal);
+  persistSessionsToDisk();
   return terminal;
 }
 
 /** 打开仅含手动终端的内嵌工作区；可指定初始 cwd 与页签标题（如项目代号） */
-export function openEmbeddedTerminalWorkspace(opts?: {
+export async function openEmbeddedTerminalWorkspace(opts?: {
   cwd?: string;
   tabTitle?: string;
-}): { sessionId: string; terminals: EmbeddedTerminalSnapshot[] } {
+}): Promise<{ sessionId: string; terminals: EmbeddedTerminalSnapshot[] }> {
   const sessionId = randomUUID();
   const session: EmbeddedSession = {
     id: sessionId,
@@ -209,7 +278,8 @@ export function openEmbeddedTerminalWorkspace(opts?: {
     createdAt: Date.now(),
   };
   sessions.set(sessionId, session);
-  const terminal = addManualTerminalToSession(sessionId, opts);
+  persistSessionsToDisk();
+  const terminal = await addManualTerminalToSession(sessionId, opts);
   return { sessionId, terminals: terminal ? [terminal] : [] };
 }
 
@@ -220,9 +290,10 @@ export function removeTerminalFromSession(sessionId: string, terminalId: string)
   if (index < 0) return false;
   const terminal = session.terminals[index];
   if (terminal.terminalSessionId) {
-    closeTerminalSession(terminal.terminalSessionId);
+    void closeTerminalSession(terminal.terminalSessionId);
   }
   session.terminals.splice(index, 1);
+  persistSessionsToDisk();
   return true;
 }
 
@@ -231,9 +302,10 @@ export function closeEmbeddedWorkflowSession(sessionId: string): boolean {
   if (!session) return false;
   session.terminals.forEach((terminal) => {
     if (terminal.terminalSessionId) {
-      closeTerminalSession(terminal.terminalSessionId);
+      void closeTerminalSession(terminal.terminalSessionId);
     }
   });
   sessions.delete(sessionId);
+  persistSessionsToDisk();
   return true;
 }

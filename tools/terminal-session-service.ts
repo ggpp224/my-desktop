@@ -5,6 +5,7 @@ import { accessSync, chmodSync, constants, existsSync, statSync } from 'fs';
 import { spawn } from 'child_process';
 import path from 'path';
 import pty from 'node-pty';
+import { sanitizeShellEnv } from '../server/sanitize-shell-env.js';
 
 type TerminalStatus = 'running' | 'success' | 'error';
 
@@ -27,7 +28,7 @@ interface TerminalSession {
   killer: () => void;
 }
 
-const MAX_EVENT_BACKLOG = 4000;
+const MAX_EVENT_BACKLOG = 1200;
 const sessions = new Map<string, TerminalSession>();
 
 function getDefaultShell(): string {
@@ -88,7 +89,7 @@ export function createTerminalSession(params: { title: string; cwd?: string; com
     cols: 120,
     rows: 30,
     cwd: resolveCwd(params.cwd),
-    env: process.env as Record<string, string>,
+    env: sanitizeShellEnv(process.env),
   };
   const appendEvent = (session: TerminalSession, data: string) => {
     if (!data) return;

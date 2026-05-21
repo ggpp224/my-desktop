@@ -1,6 +1,7 @@
 /* AI 生成 By Peng.Guo */
 import { execSync, spawn } from 'child_process';
 import { getProjectByCode } from '../config/projects.js';
+import { resolveMaxSprintBranch } from './sprint-branch.js';
 
 /** 按行缓冲并回调，用于流式输出 */
 function flushLines(buffer: { out: string }, chunk: string, add: (line: string) => void) {
@@ -50,6 +51,13 @@ function runStream(command: string, cwd: string, add: (msg: string) => void): Pr
 
 function delayMs(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+/** 检出分支；本地不存在时从 origin 创建（与 upgrade-react18-nova 工作流一致） */
+function checkoutBranch(cwd: string, branch: string): { stdout: string; stderr: string; code: number } {
+  const hasLocal = run(`git show-ref --verify --quiet refs/heads/${branch}`, cwd);
+  if (hasLocal.code === 0) return run(`git checkout ${branch}`, cwd);
+  return run(`git checkout -b ${branch} origin/${branch}`, cwd);
 }
 
 export interface MergeResult {
@@ -109,7 +117,7 @@ async function mergeMerge(
   add(`当前分支: ${currentBranch}`);
   addOutput(branchOut.stdout, branchOut.stderr);
 
-  const coTarget = run(`git checkout ${targetBranch}`, cwd);
+  const coTarget = checkoutBranch(cwd, targetBranch);
   if (coTarget.code !== 0) {
     add(`切换到 ${targetBranch} 分支失败`);
     addOutput(coTarget.stdout, coTarget.stderr);
@@ -213,6 +221,55 @@ export async function mergeByCode(code: string, options?: MergeOptions): Promise
 
 export async function mergeNova(options?: MergeOptions): Promise<MergeResult> {
   return mergeByCode('nova', options);
+}
+
+/**
+ * 合并 nova 到集测 sprint 分支：目标分支算法与 upgrade-react18-nova 一致（在 react18 仓库解析最大 origin/sprint-N）。
+ */
+export async function mergeNovaPretest(options?: MergeOptions): Promise<MergeResult> {
+  const steps: string[] = [];
+  const onStep = options?.onStep;
+  const add = (msg: string) => {
+    steps.push(msg);
+    onStep?.(msg);
+  };
+
+  const novaEntry = getProjectByCode('nova');
+  const react18Entry = getProjectByCode('react18');
+  if (!novaEntry?.merge) {
+    return { success: false, steps, error: 'nova 未配置 merge' };
+  }
+  if (!react18Entry?.path) {
+    return { success: false, steps, error: '未找到 react18 项目路径' };
+  }
+
+  const resolved = resolveMaxSprintBranch(react18Entry.path, {
+    onStep: add,
+    runGit: run,
+  });
+  if (!resolved.ok) {
+    return { success: false, steps, error: resolved.error };
+  }
+
+  const { branch: targetBranch } = resolved.result;
+  add(`集测合并目标: ${targetBranch}（nova 仓库）`);
+
+  add('正在 nova 仓库 fetch…');
+  const fetchNova = run('git fetch', novaEntry.path);
+  if (fetchNova.code !== 0) {
+    if (fetchNova.stdout) add(fetchNova.stdout);
+    if (fetchNova.stderr) add(fetchNova.stderr);
+    return { success: false, steps, error: fetchNova.stderr || 'nova 仓库 git fetch 失败' };
+  }
+
+  return mergeMerge(
+    {
+      projectPath: novaEntry.path,
+      targetBranch,
+      runRelease: novaEntry.merge.runRelease,
+    },
+    options
+  );
 }
 
 export async function mergeBizSolution(options?: MergeOptions): Promise<MergeResult> {

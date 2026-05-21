@@ -20,6 +20,7 @@ function resolveTabIcon(tabKey: string): string {
   if (tabKey === 'workspace') return '⌂';
   if (tabKey === 'my-work') return '⌘';
   if (tabKey === 'knowledge-base') return '◫';
+  if (tabKey === 'command-stats') return '▥';
   if (tabKey.startsWith('knowledge-doc:')) return '◧';
   return '◦';
 }

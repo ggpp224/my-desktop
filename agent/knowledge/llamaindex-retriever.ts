@@ -27,6 +27,15 @@ type CachedIndexState = {
   parentById: Record<string, ParentNodeRecord>;
 };
 
+/** 知识库相关 Ollama chat 共用 options（含 temperature） */
+function buildKbOllamaOptions(overrides: { num_ctx: number }): Record<string, unknown> {
+  return {
+    num_ctx: overrides.num_ctx,
+    flash_attention: config.knowledgeBase.flashAttention,
+    temperature: config.knowledgeBase.temperature,
+  };
+}
+
 type PersistMeta = {
   signature: string;
   docsCount: number;
@@ -388,10 +397,7 @@ async function rerankByLocalModel(query: string, ranked: RankedNode[], callbacks
       model: config.knowledgeBase.rerankModel,
       stream: false,
       messages: [{ role: 'user', content: prompt }],
-      options: {
-        num_ctx: Math.max(config.knowledgeBase.numCtx, 4096),
-        flash_attention: config.knowledgeBase.flashAttention,
-      },
+      options: buildKbOllamaOptions({ num_ctx: Math.max(config.knowledgeBase.numCtx, 4096) }),
     }),
   });
   if (!res.ok) throw new Error(`本地模型重排失败：${res.status}`);
@@ -717,10 +723,7 @@ ${content.slice(0, 5000)}`;
       model: ingestModel,
       stream: false,
       messages: [{ role: 'user', content: prompt }],
-      options: {
-        num_ctx: config.knowledgeBase.numCtx,
-        flash_attention: config.knowledgeBase.flashAttention,
-      },
+      options: buildKbOllamaOptions({ num_ctx: config.knowledgeBase.numCtx }),
     }),
   });
   if (!res.ok) throw new Error(`${ingestModel} 元数据提取失败：${res.status}`);
@@ -737,10 +740,7 @@ async function askQuestionsWith35B(prompt: string, ingestModel: string): Promise
       model: ingestModel,
       stream: false,
       messages: [{ role: 'user', content: prompt }],
-      options: {
-        num_ctx: config.knowledgeBase.numCtx,
-        flash_attention: config.knowledgeBase.flashAttention,
-      },
+      options: buildKbOllamaOptions({ num_ctx: config.knowledgeBase.numCtx }),
     }),
   });
   if (!res.ok) return [];
@@ -959,10 +959,7 @@ async function createStateFromDocs(
   const llm = new Ollama({
     model: config.knowledgeBase.chatModel,
     config: { host: config.ollama.baseUrl },
-    options: {
-      num_ctx: config.knowledgeBase.contextWindow,
-      flash_attention: config.knowledgeBase.flashAttention,
-    } as Record<string, unknown>,
+    options: buildKbOllamaOptions({ num_ctx: config.knowledgeBase.contextWindow }) as Record<string, unknown>,
   });
   Settings.embedModel = embedModel;
   Settings.llm = llm;
@@ -1010,10 +1007,7 @@ async function tryLoadPersistedState(expectedSignature: string, docs: KnowledgeD
     const llm = new Ollama({
       model: config.knowledgeBase.chatModel,
       config: { host: config.ollama.baseUrl },
-      options: {
-        num_ctx: config.knowledgeBase.contextWindow,
-        flash_attention: config.knowledgeBase.flashAttention,
-      } as Record<string, unknown>,
+      options: buildKbOllamaOptions({ num_ctx: config.knowledgeBase.contextWindow }) as Record<string, unknown>,
     });
     Settings.embedModel = embedModel;
     Settings.llm = llm;
@@ -1054,10 +1048,7 @@ async function tryLoadStalePersistedState(
     const llm = new Ollama({
       model: config.knowledgeBase.chatModel,
       config: { host: config.ollama.baseUrl },
-      options: {
-        num_ctx: config.knowledgeBase.contextWindow,
-        flash_attention: config.knowledgeBase.flashAttention,
-      } as Record<string, unknown>,
+      options: buildKbOllamaOptions({ num_ctx: config.knowledgeBase.contextWindow }) as Record<string, unknown>,
     });
     Settings.embedModel = embedModel;
     Settings.llm = llm;
@@ -1190,10 +1181,7 @@ ${contextText}`;
       model: modelOverride?.trim() || config.knowledgeBase.chatModel,
       stream: true,
       messages: [{ role: 'user', content: prompt }],
-      options: {
-        num_ctx: config.knowledgeBase.contextWindow,
-        flash_attention: config.knowledgeBase.flashAttention,
-      },
+      options: buildKbOllamaOptions({ num_ctx: config.knowledgeBase.contextWindow }),
     }),
   });
   if (!res.ok || !res.body) throw new Error(`Ollama 流式生成失败：${res.status}`);

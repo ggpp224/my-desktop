@@ -14,15 +14,43 @@ function parseOllamaThinkFromEnv(): true | 'low' | 'medium' | 'high' | undefined
   return undefined;
 }
 
+/** Ollama temperature：0～2，非法或缺省则用 defaultValue */
+function parseOllamaTemperatureFromEnv(envKey: string, defaultValue: number): number {
+  const v = process.env[envKey];
+  if (v == null || String(v).trim() === '') return defaultValue;
+  const n = Number(v);
+  if (!Number.isFinite(n) || n < 0 || n > 2) return defaultValue;
+  return n;
+}
+
+function resolveApiPort(): number {
+  const fromDedicated = Number(process.env.API_PORT);
+  if (Number.isFinite(fromDedicated) && fromDedicated > 0) return fromDedicated;
+  /** 兼容旧 .env 的 PORT；新配置请只用 API_PORT，勿设 PORT（cc-web cjet dev 会读 PORT） */
+  const legacy = Number(process.env.PORT);
+  if (Number.isFinite(legacy) && legacy > 0) return legacy;
+  return 41738;
+}
+
+const apiPort = resolveApiPort();
+
 export const config = {
   ollama: {
     baseUrl: process.env.OLLAMA_BASE || 'http://localhost:11434',
     model: process.env.OLLAMA_MODEL || 'qwen2.5',
     /** 传入 Ollama chat 的 think；undefined 表示不传（兼容非 thinking 模型）。显式开启见 OLLAMA_THINK */
     think: parseOllamaThinkFromEnv(),
+    /** Agent 工具路由：宜 0，减少同指令偶发不调 tool */
+    agentTemperature: parseOllamaTemperatureFromEnv('OLLAMA_AGENT_TEMPERATURE', 0),
+    /** 写周报生成 */
+    weeklyReportTemperature: parseOllamaTemperatureFromEnv('OLLAMA_WEEKLY_REPORT_TEMPERATURE', 0.4),
+    /** 组内总结生成 */
+    teamSummaryTemperature: parseOllamaTemperatureFromEnv('OLLAMA_TEAM_SUMMARY_TEMPERATURE', 0.4),
   },
   server: {
-    port: Number(process.env.PORT) || 3000,
+    port: apiPort,
+    /** 内嵌 PTY 专用子进程端口，与 API 分离避免 OOM 连带杀死 API */
+    terminalBrokerPort: Number(process.env.TERMINAL_BROKER_PORT) || apiPort + 1,
   },
   jenkins: {
     baseUrl: process.env.JENKINS_BASE_URL || '',
@@ -105,6 +133,8 @@ export const config = {
     /** 进入重排的候选池大小 */
     rerankPoolSize: Math.max(4, Number(process.env.KB_RERANK_POOL_SIZE) || 24),
     /** 单次知识库查询超时（毫秒），避免工具阶段长时间无响应 */
-    queryTimeoutMs: Math.max(5000, Number(process.env.KB_QUERY_TIMEOUT_MS) || 120000),
+    queryTimeoutMs: Math.max(5000, Number(process.env.KB_QUERY_TIMEOUT_MS) || 300000),
+    /** 知识库问答 / 预处理 / 重排：宜偏低，减少胡编 */
+    temperature: parseOllamaTemperatureFromEnv('OLLAMA_KB_TEMPERATURE', 0.1),
   },
 };

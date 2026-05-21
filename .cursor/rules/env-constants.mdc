@@ -9,14 +9,20 @@ alwaysApply: false
 
 所有可配置的路径、Jenkins 任务名、分支、固定网址均通过 `.env` 提供，复制 `.env.example` 为 `.env` 后按本机修改。换电脑或换环境时只需改 `.env`，无需改代码。
 
+**AI 改配置**：按 `.cursor/rules/env-direct-edit.mdc`，用户提出调参/超时/模型等需求时**直接改 `.env`**，并同步 `.env.example` 与相关文档，无需每次征求确认。
+
 ## 一、固定网址与目录（config/default.ts）
 
 | 变量 | 含义 | 示例/默认 |
 |------|------|-----------|
 | `OLLAMA_BASE` | Ollama 服务地址 | `http://localhost:11434` |
 | `OLLAMA_MODEL` | 默认模型名 | `qwen2.5:3b` |
+| `OLLAMA_AGENT_TEMPERATURE` | Chat Agent 工具路由 temperature，宜 `0` 减少同指令偶发不调 tool | `0` |
+| `OLLAMA_KB_TEMPERATURE` | 知识库问答/预处理/重排 temperature，宜偏低 | `0.1` |
+| `OLLAMA_WEEKLY_REPORT_TEMPERATURE` | 写周报生成 temperature | `0.4` |
+| `OLLAMA_TEAM_SUMMARY_TEMPERATURE` | 组内总结生成 temperature | `0.4` |
 | `OLLAMA_THINK` | 是否在 `/api/chat` 传 `think`；**默认不传**（兼容非 thinking 模型）；`true`/`1`/`low`/`medium`/`high` 开启；若开启而模型不支持，会自动去掉 `think` 重试 | 留空 |
-| `PORT` | 本机 API 服务端口 | `3000` |
+| `API_PORT` | 本应用 API 端口（**勿用 `PORT`**，cc-web cjet dev 会读 `PORT` 抢端口） | `41738` |
 | `SHELL_CWD` | Shell 工具允许的工作目录 | 空则用 `process.cwd()` |
 | `JENKINS_BASE_URL` | Jenkins 根地址 | `https://jenkins.rd.chanjet.com/` |
 | `JENKINS_USERNAME` | Jenkins Basic 认证用户名 | - |
@@ -26,6 +32,13 @@ alwaysApply: false
 | `GEMINI_SOCKS_URL` | 可选：仅 SOCKS 时代理地址，优先级高于 `ALL_PROXY` 等 | 例：`socks5://127.0.0.1:1081` |
 | `GEMINI_USE_MAC_SYSTEM_SOCKS` | 默认自动：在 macOS 且未配置上述 HTTP/SOCKS 环境变量时，读取 `scutil --proxy` 的系统 SOCKS；设为 `0` 可关闭 | `0` |
 | `GEMINI_CONNECT_TIMEOUT_MS` | undici **TCP 连接**超时（毫秒），默认 `120000`；仅作用于外部 Gemini 请求 | `180000` |
+
+## 一点五、知识库（config/default.ts → knowledgeBase）
+
+| 变量 | 含义 | 默认 |
+|------|------|------|
+| `KB_QUERY_TIMEOUT_MS` | 单次知识库查询超时（毫秒） | `300000`（5 分钟） |
+| `KB_CHAT_MODEL` / `KB_EMBED_MODEL` / `KB_INGEST_MODEL` 等 | 见 `.env.example`「知识库」段 | - |
 
 ## 二、Jenkins 默认分支（config/projects.ts → 部署时 BRANCH_NAME）
 
@@ -75,5 +88,5 @@ alwaysApply: false
 ## 使用约定
 
 - 修改或新增项目时：在 `config/projects.ts` 增加/调整条目，并在 `.env.example` 与本文档中同步变量名与说明。
-- 修改 `.env.example` 时，必须同步修改 `.env` 对应项，确保示例配置与本地运行配置不漂移。
+- 用户要求改环境参数时：**直接改 `.env`**（见 `env-direct-edit.mdc`），并同步 `.env.example`、本文档；不要只改示例却让用户自己抄到 `.env`。
 - 代码中仅通过 `process.env.XXX` 或 `config/default.ts` 的 `config` 读取，不写死路径/网址/任务名。

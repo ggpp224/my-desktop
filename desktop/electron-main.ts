@@ -1,26 +1,42 @@
 /* AI 生成 By Peng.Guo */
 import 'dotenv/config';
-import { app, BrowserWindow, Menu, shell } from 'electron';
+import { app, BrowserWindow, ipcMain, Menu, shell } from 'electron';
 import { existsSync } from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
+import { releaseApiPort } from '../server/port-utils.js';
+import { stripApiPortFromProcessEnv } from '../server/sanitize-shell-env.js';
+import {
+  setApiChildExitedListener,
+  setApiRestartListener,
+  startManagedApiServer,
+  stopManagedApiServer,
+} from './api-server-manager.js';
 import { openExternalUrlPreferChrome } from './open-external-chrome.js';
-import { startServer } from '../server/api.js';
+import { config } from '../config/default.js';
+
+/** cjet dev / webpack-dev-server 会读 process.env.PORT，勿让 API 端口污染 Electron 与内嵌 PTY */
+stripApiPortFromProcessEnv();
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-// 仅当显式 NODE_ENV=development 时走开发模式（连 5173）；否则一律用打包 UI，避免 npm run start 或安装版误连 5173 白屏
+// 仅当显式 NODE_ENV=development 时走开发模式（连 5173）；否则一律用打包 UI
 const isDev = !app.isPackaged && process.env.NODE_ENV === 'development';
-// AI 生成 By Peng.Guo
-// 开发态默认应用名会显示为 Electron，显式设置应用名以保证 Dock/提示文本正确。
 app.setName('AI Dev Control Center');
 
-// AI 生成 By Peng.Guo
-// 在可用设备上尽量启用 GPU 与 WebGL 相关能力（仍受驱动与系统策略限制）。
 app.commandLine.appendSwitch('ignore-gpu-blocklist');
 app.commandLine.appendSwitch('enable-gpu-rasterization');
 app.commandLine.appendSwitch('enable-accelerated-2d-canvas');
 
 let mainWindow: BrowserWindow | null = null;
+let apiPort = config.server.port;
+let isStoppingApi = false;
+
+/** 渲染进程随时同步获取端口，避免 api-port 事件早于 preload 订阅导致 getApiBase 永久挂起 */
+ipcMain.handle('get-api-port', () => apiPort);
+
+function getProjectRoot(): string {
+  return app.getAppPath();
+}
 
 function resolveAppIconPath(): string | null {
   const candidates = app.isPackaged
@@ -28,7 +44,7 @@ function resolveAppIconPath(): string | null {
         path.join(process.resourcesPath, 'build', 'icon.png'),
         path.join(process.resourcesPath, 'icon.png'),
       ]
-    : [path.join(app.getAppPath(), 'build', 'icon.png')];
+    : [path.join(getProjectRoot(), 'build', 'icon.png')];
 
   for (const iconPath of candidates) {
     if (iconPath && existsSync(iconPath)) {
@@ -38,7 +54,19 @@ function resolveAppIconPath(): string | null {
   return null;
 }
 
-function createWindow(apiPort: number): void {
+function notifyRendererApiPort(win: BrowserWindow | null, port: number): void {
+  if (!win || win.isDestroyed()) return;
+  const send = () => {
+    if (!win.isDestroyed()) win.webContents.send('api-port', port);
+  };
+  if (win.webContents.isLoading()) {
+    win.webContents.once('did-finish-load', send);
+  } else {
+    send();
+  }
+}
+
+function createWindow(): void {
   const preloadPath = path.join(__dirname, 'preload.js');
   const appIconPath = resolveAppIconPath() ?? undefined;
   mainWindow = new BrowserWindow({
@@ -49,7 +77,7 @@ function createWindow(apiPort: number): void {
     webPreferences: {
       nodeIntegration: false,
       contextIsolation: true,
-      preload: isDev ? undefined : preloadPath,
+      preload: preloadPath,
     },
   });
   mainWindow.once('ready-to-show', () => {
@@ -95,7 +123,6 @@ function createWindow(apiPort: number): void {
     return { action: 'deny' };
   });
 
-  // 右键菜单：检查 -> 打开 DevTools
   mainWindow.webContents.on('context-menu', (_event, _params) => {
     const ctxMenu = Menu.buildFromTemplate([
       { label: '检查', click: () => mainWindow?.webContents.openDevTools() },
@@ -103,37 +130,81 @@ function createWindow(apiPort: number): void {
     ctxMenu.popup({ window: mainWindow! });
   });
   if (isDev) {
+    mainWindow.webContents.on('console-message', (_event, level, message, line, sourceId) => {
+      const tag = level >= 2 ? 'error' : 'log';
+      console[tag](`[renderer] ${message} (${sourceId}:${line})`);
+    });
     mainWindow.loadURL('http://localhost:5173').catch((err) => {
       console.error('loadURL failed:', err);
       mainWindow?.show();
     });
-    // 默认不自动打开 DevTools，需要时可用快捷键或菜单手动打开
   } else {
-    const indexHtml = path.join(app.getAppPath(), 'ui', 'dist', 'index.html');
+    const indexHtml = path.join(getProjectRoot(), 'ui', 'dist', 'index.html');
     mainWindow.loadFile(indexHtml).catch((err) => {
       console.error('loadFile failed:', indexHtml, err);
       mainWindow?.show();
     });
-    mainWindow.webContents.once('did-finish-load', () => {
-      mainWindow?.webContents.send('api-port', apiPort);
-    });
   }
-  mainWindow.on('closed', () => { mainWindow = null; });
+  notifyRendererApiPort(mainWindow, apiPort);
+  mainWindow.on('closed', () => {
+    mainWindow = null;
+  });
+}
+
+const gotSingleInstanceLock = app.requestSingleInstanceLock();
+if (!gotSingleInstanceLock) {
+  app.quit();
+} else {
+  app.on('second-instance', () => {
+    if (mainWindow && !mainWindow.isDestroyed()) {
+      if (mainWindow.isMinimized()) mainWindow.restore();
+      mainWindow.focus();
+    }
+  });
 }
 
 app.whenReady().then(async () => {
-  // AI 生成 By Peng.Guo
-  // macOS 下开发态不会自动套用 electron-builder 的 icon，主动设置 Dock 图标确保可见。
+  if (!gotSingleInstanceLock) return;
   const appIconPath = resolveAppIconPath();
   if (process.platform === 'darwin' && appIconPath) {
     app.dock.setIcon(appIconPath);
   }
 
-  const apiPort = isDev ? 3000 : await startServer();
-  createWindow(apiPort);
-  app.on('activate', () => {
-    if (BrowserWindow.getAllWindows().length === 0) createWindow(apiPort);
+  setApiRestartListener((port) => {
+    apiPort = port;
+    notifyRendererApiPort(mainWindow, port);
+    if (mainWindow && !mainWindow.isDestroyed()) {
+      mainWindow.webContents.send('api-restarted');
+    }
   });
+
+  setApiChildExitedListener(() => {
+    if (mainWindow && !mainWindow.isDestroyed()) {
+      mainWindow.webContents.send('api-child-exited');
+    }
+  });
+
+  try {
+    apiPort = await startManagedApiServer(getProjectRoot(), isDev);
+  } catch (err) {
+    console.error('startManagedApiServer failed:', err);
+  }
+
+  createWindow();
+  app.on('activate', () => {
+    if (BrowserWindow.getAllWindows().length === 0) createWindow();
+  });
+});
+
+app.on('before-quit', (event) => {
+  if (isStoppingApi) return;
+  event.preventDefault();
+  isStoppingApi = true;
+  void stopManagedApiServer(apiPort, { stopBroker: true })
+    .then(() => releaseApiPort(apiPort))
+    .finally(() => {
+      app.exit(0);
+    });
 });
 
 app.on('window-all-closed', () => {

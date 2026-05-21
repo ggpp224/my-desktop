@@ -142,7 +142,7 @@ export async function queryKnowledgeBase(
         onAnswerDelta: callbacks?.onAnswerDelta,
       }),
       config.knowledgeBase.queryTimeoutMs,
-      `知识库查询超时（>${config.knowledgeBase.queryTimeoutMs}ms）。建议：1) 调大 KB_QUERY_TIMEOUT_MS（如 120000）；2) 使用更快的模型（如 qwen2.5:7b）；3) 减少 KB_TOP_K（如 3）`
+      `知识库查询超时（>${config.knowledgeBase.queryTimeoutMs}ms）。建议：1) 调大 KB_QUERY_TIMEOUT_MS（如 300000，即 5 分钟）；2) 使用更快的模型（如 qwen2.5:7b）；3) 减少 KB_TOP_K（如 3）`
     );
     return {
       success: true,

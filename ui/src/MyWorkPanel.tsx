@@ -2,8 +2,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Terminal } from 'xterm';
 import { FitAddon } from 'xterm-addon-fit';
-import { WebglAddon } from 'xterm-addon-webgl';
 import 'xterm/css/xterm.css';
+import { safeFitXterm } from './domain/terminal/xtermFit';
 import type { AppThemeTokens } from './domain/theme/appTheme';
 import { Button } from './view/Button';
 import { IconButton } from './view/IconButton';
@@ -23,6 +23,7 @@ export interface WorkTerminal {
 
 interface MyWorkPanelProps {
   apiBase: string;
+  apiServerOk: boolean;
   sessionId: string;
   initialTerminals: WorkTerminal[];
   themeTokens: AppThemeTokens;
@@ -35,21 +36,37 @@ function resolveInheritCwdForNewTab(terminals: WorkTerminal[], activeTerminalId:
   return cwd || undefined;
 }
 
-export function MyWorkPanel({ apiBase, sessionId, initialTerminals, themeTokens }: MyWorkPanelProps) {
+export function MyWorkPanel({ apiBase, apiServerOk, sessionId, initialTerminals, themeTokens }: MyWorkPanelProps) {
   const [terminals, setTerminals] = useState<WorkTerminal[]>(initialTerminals);
   const [activeTerminalId, setActiveTerminalId] = useState<string>(initialTerminals[0]?.id ?? '');
   const [creatingTerminal, setCreatingTerminal] = useState(false);
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number; path: string } | null>(null);
   const [hoveredTerminalId, setHoveredTerminalId] = useState<string | null>(null);
+  /** xterm 实例重建时递增，用于触发输出回放 */
+  const [xtermEpoch, setXtermEpoch] = useState(0);
   const terminalMountRef = useRef<HTMLDivElement>(null);
   const xtermRef = useRef<Terminal | null>(null);
   const fitAddonRef = useRef<FitAddon | null>(null);
-  const webglAddonRef = useRef<WebglAddon | null>(null);
   const activePtySeqRef = useRef(0);
   const activePtyIdRef = useRef('');
-  const renderedTerminalIdRef = useRef('');
+  const terminalOutputErrorRef = useRef<string | null>(null);
+  /** 已渲染的「页签 id + pty 会话 id」，pty 变化时需 reset 并回放输出 */
+  const renderedTerminalKeyRef = useRef('');
+  const xtermDisposedRef = useRef(false);
   const tabContextRef = useRef({ terminals: initialTerminals, activeTerminalId: initialTerminals[0]?.id ?? '' });
   tabContextRef.current = { terminals, activeTerminalId };
+
+  const terminalMountHasSize = useCallback((): boolean => {
+    const el = terminalMountRef.current;
+    if (!el) return false;
+    return el.clientWidth >= 2 && el.clientHeight >= 2;
+  }, []);
+
+  const safeFitTerminal = useCallback((fitAddon: FitAddon, terminal: Terminal) => {
+    if (xtermDisposedRef.current || !fitAddonRef.current || !xtermRef.current) return false;
+    if (!terminalMountHasSize()) return false;
+    return safeFitXterm(fitAddon, terminal);
+  }, [terminalMountHasSize]);
 
   const createManualTerminal = useCallback(async () => {
     if (!sessionId || creatingTerminal) return;
@@ -81,7 +98,7 @@ export function MyWorkPanel({ apiBase, sessionId, initialTerminals, themeTokens 
   }, [sessionId, initialTerminals]);
 
   useEffect(() => {
-    if (!sessionId) return;
+    if (!sessionId || !apiServerOk) return;
     const timer = window.setInterval(async () => {
       try {
         const resp = await fetch(`${apiBase}/workflow/sessions/${encodeURIComponent(sessionId)}`);
@@ -107,7 +124,7 @@ export function MyWorkPanel({ apiBase, sessionId, initialTerminals, themeTokens 
       }
     }, 1000);
     return () => window.clearInterval(timer);
-  }, [apiBase, sessionId]);
+  }, [apiBase, apiServerOk, sessionId]);
 
   useEffect(() => {
     const onWindowClick = () => setContextMenu(null);
@@ -132,32 +149,105 @@ export function MyWorkPanel({ apiBase, sessionId, initialTerminals, themeTokens 
     [activeTerminalId, terminals]
   );
 
+  const showTerminalMessageOnce = useCallback((key: string, message: string) => {
+    if (terminalOutputErrorRef.current === key) return;
+    terminalOutputErrorRef.current = key;
+    xtermRef.current?.writeln(`\r\n${message}\r\n`);
+  }, []);
+
+  const replayTerminalOutput = useCallback(
+    async (ptyId: string, fromSeq: number): Promise<{ seq: number; ok: boolean }> => {
+      const term = xtermRef.current;
+      if (!apiServerOk || !ptyId || !term) return { seq: fromSeq, ok: false };
+      try {
+        const resp = await fetch(
+          `${apiBase}/terminal/sessions/${encodeURIComponent(ptyId)}/output?from=${fromSeq}`
+        );
+        if (!resp.ok) {
+          showTerminalMessageOnce(
+            `http-${resp.status}`,
+            `[无法拉取终端输出 HTTP ${resp.status}，若刚重启应用请重新「开始工作」]`
+          );
+          return { seq: fromSeq, ok: false };
+        }
+        const data = await resp.json();
+        if (!data?.success) {
+          showTerminalMessageOnce('session-missing', '[终端会话不存在，可能 API 已重启，请重新「开始工作」]');
+          return { seq: fromSeq, ok: false };
+        }
+        terminalOutputErrorRef.current = null;
+        if (Array.isArray(data.chunks) && data.chunks.length > 0) {
+          data.chunks.forEach((chunk: string) => term.write(chunk));
+        }
+        const seq = typeof data.seq === 'number' ? data.seq : fromSeq;
+        return { seq, ok: true };
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err);
+        showTerminalMessageOnce(
+          'network',
+          `[无法连接本地 API（${apiBase}）：${msg}。请完全退出应用后重新打开，或重新「开始工作」]`
+        );
+        return { seq: fromSeq, ok: false };
+      }
+    },
+    [apiBase, apiServerOk, showTerminalMessageOnce]
+  );
+
+  const [terminalHostReady, setTerminalHostReady] = useState(false);
+
   useEffect(() => {
-    if (!terminalMountRef.current) return;
+    const host = terminalMountRef.current;
+    if (!host) return;
+    const syncReady = () => setTerminalHostReady(host.clientWidth >= 2 && host.clientHeight >= 2);
+    syncReady();
+    const ro = new ResizeObserver(syncReady);
+    ro.observe(host);
+    return () => {
+      ro.disconnect();
+      setTerminalHostReady(false);
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!terminalHostReady) return;
+    const mountEl = terminalMountRef.current;
+    if (!mountEl) return;
+
+    xtermDisposedRef.current = false;
     const terminal = new Terminal({
       cursorBlink: true,
       fontSize: 13,
       theme: { background: themeTokens.workspacePanelBackground, foreground: themeTokens.textPrimary },
-      convertEol: false,
+      convertEol: true,
       scrollback: 5000,
     });
     const fitAddon = new FitAddon();
     terminal.loadAddon(fitAddon);
-    terminal.open(terminalMountRef.current);
-    try {
-      const webglAddon = new WebglAddon();
-      terminal.loadAddon(webglAddon);
-      webglAddon.onContextLoss(() => {
-        webglAddon.dispose();
-        if (webglAddonRef.current === webglAddon) webglAddonRef.current = null;
-      });
-      webglAddonRef.current = webglAddon;
-    } catch {
-      webglAddonRef.current = null;
-    }
-    fitAddon.fit();
+    terminal.open(mountEl);
     xtermRef.current = terminal;
     fitAddonRef.current = fitAddon;
+    renderedTerminalKeyRef.current = '';
+    setXtermEpoch((n) => n + 1);
+
+    const notifyPtyResize = () => {
+      if (xtermDisposedRef.current || !xtermRef.current) return;
+      const ptyId = activePtyIdRef.current;
+      if (!ptyId) return;
+      fetch(`${apiBase}/terminal/sessions/${encodeURIComponent(ptyId)}/resize`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ cols: xtermRef.current.cols, rows: xtermRef.current.rows }),
+      }).catch(() => {});
+    };
+
+    let resizeObserver: ResizeObserver | null = null;
+
+    const onResize = () => {
+      if (xtermDisposedRef.current) return;
+      if (!safeFitTerminal(fitAddon, terminal)) return;
+      notifyPtyResize();
+    };
+
     const onDataDispose = terminal.onData((data) => {
       const ptyId = activePtyIdRef.current;
       if (!ptyId) return;
@@ -168,81 +258,106 @@ export function MyWorkPanel({ apiBase, sessionId, initialTerminals, themeTokens 
       }).catch(() => {});
     });
 
-    const onResize = () => {
-      if (!fitAddonRef.current || !xtermRef.current) return;
-      fitAddonRef.current.fit();
-      const ptyId = activePtyIdRef.current;
-      if (!ptyId) return;
-      fetch(`${apiBase}/terminal/sessions/${encodeURIComponent(ptyId)}/resize`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ cols: xtermRef.current.cols, rows: xtermRef.current.rows }),
-      }).catch(() => {});
-    };
     window.addEventListener('resize', onResize);
 
+    let rafUntilReady = 0;
+    const scheduleFitWhenSized = () => {
+      if (xtermDisposedRef.current) return;
+      if (safeFitTerminal(fitAddon, terminal)) {
+        notifyPtyResize();
+        if (!resizeObserver) {
+          resizeObserver = new ResizeObserver(() => onResize());
+          resizeObserver.observe(mountEl);
+        }
+        return;
+      }
+      if (rafUntilReady < 120) {
+        rafUntilReady += 1;
+        requestAnimationFrame(scheduleFitWhenSized);
+      }
+    };
+    requestAnimationFrame(scheduleFitWhenSized);
+
     return () => {
+      xtermDisposedRef.current = true;
+      resizeObserver?.disconnect();
+      resizeObserver = null;
       onDataDispose.dispose();
       window.removeEventListener('resize', onResize);
-      webglAddonRef.current?.dispose();
-      webglAddonRef.current = null;
-      terminal.dispose();
+      try {
+        terminal.dispose();
+      } catch {
+        /* StrictMode 二次卸载时 xterm 内部可能已无 dimensions */
+      }
       xtermRef.current = null;
       fitAddonRef.current = null;
     };
-  }, [apiBase, themeTokens.textPrimary, themeTokens.workspacePanelBackground]);
+  }, [apiBase, safeFitTerminal, terminalHostReady, themeTokens.textPrimary, themeTokens.workspacePanelBackground]);
 
   useEffect(() => {
     const terminal = xtermRef.current;
     const fitAddon = fitAddonRef.current;
     if (!terminal || !fitAddon) return;
-    if (renderedTerminalIdRef.current === activeTerminal?.id) return;
-    renderedTerminalIdRef.current = activeTerminal?.id ?? '';
+
+    const renderKey = `${activeTerminal?.id ?? ''}:${activeTerminal?.terminalSessionId ?? ''}:${xtermEpoch}`;
+    if (renderedTerminalKeyRef.current === renderKey) return;
+    renderedTerminalKeyRef.current = renderKey;
+
     terminal.reset();
+    terminalOutputErrorRef.current = null;
     activePtySeqRef.current = 0;
     activePtyIdRef.current = activeTerminal?.terminalSessionId ?? '';
+
     if (!activeTerminal?.terminalSessionId) {
       const fallback = (activeTerminal?.lines ?? []).join('\r\n');
       terminal.writeln(fallback || '该步骤暂无可交互终端。');
       return;
     }
-    fitAddon.fit();
-    fetch(`${apiBase}/terminal/sessions/${encodeURIComponent(activeTerminal.terminalSessionId)}/resize`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ cols: terminal.cols, rows: terminal.rows }),
-    }).catch(() => {});
-  }, [activeTerminal?.id, activeTerminal?.terminalSessionId, apiBase]);
+
+    const ptyId = activeTerminal.terminalSessionId;
+    const bootstrap = async () => {
+      safeFitTerminal(fitAddon, terminal);
+      fetch(`${apiBase}/terminal/sessions/${encodeURIComponent(ptyId)}/resize`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ cols: terminal.cols, rows: terminal.rows }),
+      }).catch(() => {});
+      const result = await replayTerminalOutput(ptyId, 0);
+      activePtySeqRef.current = result.seq;
+    };
+    void bootstrap();
+  }, [activeTerminal?.id, activeTerminal?.terminalSessionId, apiBase, replayTerminalOutput, safeFitTerminal, xtermEpoch]);
 
   useEffect(() => {
     const ptyId = activeTerminal?.terminalSessionId;
-    if (!ptyId || !xtermRef.current) return;
-    const timer = window.setInterval(async () => {
+    if (!ptyId || !xtermRef.current || !apiServerOk) return;
+    let cancelled = false;
+    let failures = 0;
+    let timer = 0;
+    const tick = async () => {
+      if (cancelled || !apiServerOk) return;
       const currentPtyId = activePtyIdRef.current;
-      if (!currentPtyId) return;
-      try {
-        const resp = await fetch(
-          `${apiBase}/terminal/sessions/${encodeURIComponent(currentPtyId)}/output?from=${activePtySeqRef.current}`
-        );
-        if (!resp.ok) return;
-        const data = await resp.json();
-        if (!data?.success) return;
-        if (Array.isArray(data.chunks) && data.chunks.length > 0) {
-          const terminal = xtermRef.current;
-          if (terminal && currentPtyId === activePtyIdRef.current) {
-            data.chunks.forEach((chunk: string) => terminal.write(chunk));
-          }
-        }
-        if (typeof data.seq === 'number') activePtySeqRef.current = data.seq;
-      } catch {
-        // ignore poll errors
+      if (!currentPtyId || currentPtyId !== ptyId) return;
+      const result = await replayTerminalOutput(currentPtyId, activePtySeqRef.current);
+      activePtySeqRef.current = result.seq;
+      if (!result.ok) {
+        failures += 1;
+        if (failures >= 5) return;
+      } else {
+        failures = 0;
       }
-    }, 120);
-    return () => window.clearInterval(timer);
-  }, [activeTerminal?.terminalSessionId, apiBase]);
+      const delay = result.ok ? 300 : Math.min(8000, 400 * 2 ** Math.min(failures, 4));
+      timer = window.setTimeout(() => void tick(), delay);
+    };
+    void tick();
+    return () => {
+      cancelled = true;
+      window.clearTimeout(timer);
+    };
+  }, [activeTerminal?.terminalSessionId, apiBase, apiServerOk, replayTerminalOutput]);
 
   return (
-    <section style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
+    <section style={{ display: 'flex', flexDirection: 'column', flex: 1, minHeight: 0, width: '100%', height: '100%' }}>
       <div style={{ display: 'flex', gap: 8, padding: '6px 10px', borderBottom: `1px solid ${themeTokens.inputBorder}`, overflowX: 'auto' }}>
         <IconButton
           themeTokens={themeTokens}
@@ -342,7 +457,15 @@ export function MyWorkPanel({ apiBase, sessionId, initialTerminals, themeTokens 
       </div>
       <div
         ref={terminalMountRef}
-        style={{ flex: 1, minHeight: 240, borderTop: `1px solid ${themeTokens.inputBorder}`, padding: 8, background: themeTokens.workspacePanelBackground }}
+        style={{
+          flex: 1,
+          minHeight: 0,
+          height: '100%',
+          borderTop: `1px solid ${themeTokens.inputBorder}`,
+          padding: 8,
+          background: themeTokens.workspacePanelBackground,
+          overflow: 'hidden',
+        }}
       />
       {contextMenu && (
         <div

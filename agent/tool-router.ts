@@ -19,7 +19,8 @@ import { deploy as jenkinsDeploy } from '../tools/jenkins-tool.js';
 import { runWorkflow, runWorkflowStep } from '../tools/workflow-tool.js';
 import { startProjectDev } from '../tools/project-start-tool.js';
 import { openEmbeddedTerminalWorkspace, startEmbeddedWorkflow } from '../tools/workflow-embedded-service.js';
-import { mergeNova, mergeBizSolution, mergeScm } from '../tools/merge-tool.js';
+import { deployNovaPretest, deployByJobKey } from '../tools/deploy-jenkins-helper.js';
+import { mergeNova, mergeNovaPretest, mergeBizSolution, mergeScm } from '../tools/merge-tool.js';
 import { openInIde } from '../tools/open-ide-tool.js';
 import { closeIdeProject } from '../tools/close-ide-tool.js';
 import { searchMyBugs, searchOnlineBugs, searchWeeklyDoneTasks, searchWeeklyHandoffBugs } from '../tools/jira-tool.js';
@@ -53,6 +54,8 @@ export async function routeAndExecute(call: ToolCall, ctx?: RouteExecuteContext)
   switch (name) {
     case 'open_knowledge_base_manager':
       return { openKnowledgeBaseManager: true };
+    case 'open_command_stats':
+      return { openCommandStats: true };
     case 'clear_private_knowledge_base':
       ctx?.onToolProgress?.({
         phase: 'progress',
@@ -158,25 +161,21 @@ export async function routeAndExecute(call: ToolCall, ctx?: RouteExecuteContext)
         tool: 'deploy_jenkins',
         message: '正在触发 Jenkins 部署…',
       });
-      const job = (args?.job as string) ?? '';
+      const job = ((args?.job as string) ?? '').trim().toLowerCase();
       const branch = (args?.branch as string)?.trim();
-      let preset = getJenkinsPreset(job);
-      if (!preset) {
-        const entry = getProjectByCode(job);
-        if (entry?.jenkins) {
-          const branchParam = (entry.jenkins.branchParam || 'BRANCH_NAME').trim() || 'BRANCH_NAME';
-          preset = {
-            name: entry.jenkins.jobName,
-            branchParam,
-            parameters: { [branchParam]: branch || entry.jenkins.defaultBranch },
-          };
-        }
+      const intent = ((args?.intent as string) ?? (args?.message as string) ?? '').trim();
+      const pretest =
+        job === 'nova-pretest' ||
+        job === 'nova集测' ||
+        (job === 'nova' && /集测/.test(intent));
+      if (pretest) {
+        return deployNovaPretest({
+          onStep: (msg) =>
+            ctx?.onToolProgress?.({ phase: 'progress', tool: 'deploy_jenkins', message: msg }),
+        });
       }
-      if (preset) {
-        const parameters: Record<string, string> = { ...(preset.parameters ?? {}) };
-        if (branch) parameters[preset.branchParam || 'BRANCH_NAME'] = branch;
-        const result = await jenkinsDeploy(preset.name, parameters);
-        return { ...result, jobKey: job };
+      if (job && (getJenkinsPreset(job) || getProjectByCode(job)?.jenkins)) {
+        return deployByJobKey(job, branch || undefined);
       }
       return jenkinsDeploy(job);
     }
@@ -196,10 +195,10 @@ export async function routeAndExecute(call: ToolCall, ctx?: RouteExecuteContext)
         if (!existsSync(dir) || !statSync(dir).isDirectory()) {
           throw new Error(`项目目录不可用或未配置: ${code} → ${dir}`);
         }
-        const embedded = openEmbeddedTerminalWorkspace({ cwd: dir, tabTitle: code });
+        const embedded = await openEmbeddedTerminalWorkspace({ cwd: dir, tabTitle: code });
         return { success: true, embedded: true, projectCode: code, ...embedded };
       }
-      const embedded = openEmbeddedTerminalWorkspace();
+      const embedded = await openEmbeddedTerminalWorkspace();
       return { success: true, embedded: true, ...embedded };
     }
     case 'search_my_bugs': {
@@ -269,11 +268,17 @@ export async function routeAndExecute(call: ToolCall, ctx?: RouteExecuteContext)
       return runWorkflowStep(workflow, { taskKey });
     }
     case 'merge_repo': {
-      const repo = (args?.repo as string) ?? '';
+      const repo = ((args?.repo as string) ?? '').trim().toLowerCase();
+      const intent = ((args?.intent as string) ?? (args?.message as string) ?? '').trim();
+      const pretest =
+        repo === 'nova-pretest' ||
+        repo === 'nova集测' ||
+        (repo === 'nova' && /集测/.test(intent));
+      if (pretest) return mergeNovaPretest();
       if (repo === 'nova') return mergeNova();
       if (repo === 'biz-solution') return mergeBizSolution();
       if (repo === 'scm') return mergeScm();
-      throw new Error(`不支持的 merge_repo: ${repo}，应为 nova、biz-solution 或 scm`);
+      throw new Error(`不支持的 merge_repo: ${repo}，应为 nova、nova-pretest、biz-solution 或 scm`);
     }
     case 'open_in_ide': {
       const app = (args?.app as string) ?? '';

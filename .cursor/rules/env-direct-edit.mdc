@@ -1,0 +1,15 @@
+---
+description: 调整环境配置时直接改 .env，无需每次询问用户
+alwaysApply: true
+---
+
+# .env 直接修改约定
+<!-- AI 生成 By Peng.Guo -->
+
+当用户要求调整超时、模型、路径、Jenkins、知识库、Ollama、代理等**已由 `.env` / `.env.example` / `config/default.ts` 承载的配置**时：
+
+1. **直接修改** 项目根目录 `.env` 中对应变量；**不要**先问「是否改 .env」或让用户「请手动改 .env」。
+2. **同步** `.env.example` 与 `config/default.ts` 默认值（若有），以及 `.cursor/rules/env-constants.mdc`、`docs/使用文档.md` 中的说明（若已有该变量文档）。
+3. 改完后简短告知：改了哪些变量、是否需要**重启 API** 才生效。
+4. **不要**提交 `.env`（通常已在 `.gitignore`）；**不要**在回复中粘贴 API Key、Token 等敏感值的完整内容。
+5. 仅当用户明确要求「只改示例、不动本机」时，才只改 `.env.example` 而不动 `.env`。

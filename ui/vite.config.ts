@@ -2,10 +2,11 @@
 import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
 
-export default defineConfig({
+export default defineConfig(({ command }) => ({
   plugins: [react()],
-  server: { port: 5173 },
-  // Electron 用 loadFile 加载 file://，必须用相对路径否则 /assets/xxx.js 会请求到盘符根导致白屏
-  base: './',
+  server: { port: 5173, strictPort: true },
+  // 开发：Electron 通过 http://localhost:5173 加载，base 必须为 '/'，否则 ESM 模块无法执行、#root 空白
+  // 生产：Electron loadFile(file://) 必须用相对路径，否则 /assets/*.js 会解析到盘符根导致白屏
+  base: command === 'serve' ? '/' : './',
   build: { outDir: 'dist' },
-});
+}));

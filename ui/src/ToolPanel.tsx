@@ -11,8 +11,8 @@ const TOOL_GROUPS: ToolGroup[] = [
       { name: 'run_workflow', desc: '执行工作流（如：开始工作、开始工作，使用外部终端、执行 start-work）' },
       { name: 'run_workflow_step', desc: '启动项目：工作流内（cpxy/react18/scm 等）或工作流外（base/mdf-ui/mdf-biz 等，mdf 为 yarn w）' },
       { name: 'open_terminal', desc: '在「我的工作」打开终端页签（如：终端打开 react18）' },
-      { name: 'deploy_jenkins', desc: '触发 Jenkins 部署（如：部署 nova、部署 base）' },
-      { name: 'merge_repo', desc: '合并代码到测试分支（如：合并 nova、合并 scm）' },
+      { name: 'deploy_jenkins', desc: '触发 Jenkins 部署（如：部署 nova、部署 nova 集测、部署 base）' },
+      { name: 'merge_repo', desc: '合并代码到测试分支（如：合并 nova、合并 nova 集测、合并 scm）' },
       { name: 'open_in_ide', desc: '用 IDE 打开项目（如：ws打开base、cursor打开scm）' },
       { name: 'close_ide_project', desc: '关闭 IDE 项目窗口（如：关闭ws的nova、关闭cursor的base）' },
     ],
@@ -44,6 +44,7 @@ const TOOL_GROUPS: ToolGroup[] = [
     title: '知识库',
     tools: [
       { name: 'open_knowledge_base_manager', desc: '打开私人知识库管理页（如：添加私人知识库）' },
+      { name: 'open_command_stats', desc: '打开指令统计页签（如：统计常用指令）' },
       { name: 'list_knowledge_docs', desc: '列出知识库文档（如：知识库有哪些文档）' },
       { name: 'query_knowledge_base', desc: '查询知识库内容（如：文档里如何配置）' },
       { name: 'incremental_rebuild_knowledge_base_index', desc: '增量重建索引（如：增量重建知识库索引）' },

@@ -32,6 +32,7 @@ export interface WeeklyTeamSummaryDraftResult {
 const TEAM_SUMMARY_OLLAMA_OPTIONS = {
   num_ctx: Math.max(4096, Math.min(131072, Number(process.env.OLLAMA_TEAM_SUMMARY_NUM_CTX ?? 16384) || 16384)),
   num_predict: Math.max(1024, Math.min(8192, Number(process.env.OLLAMA_TEAM_SUMMARY_NUM_PREDICT ?? 4096) || 4096)),
+  temperature: config.ollama.teamSummaryTemperature,
 };
 
 const TEAM_SUMMARY_FETCH_MS = Number(process.env.OLLAMA_TEAM_SUMMARY_TIMEOUT_MS ?? process.env.OLLAMA_WEEKLY_REPORT_TIMEOUT_MS ?? 600_000);

@@ -15,6 +15,17 @@ export const toolsSchema = [
   {
     type: 'function' as const,
     function: {
+      name: 'open_command_stats',
+      description: '打开指令统计页签。用户说「统计常用指令」时调用，以图表展示常用指令次数，无参数',
+      parameters: {
+        type: 'object',
+        properties: {},
+      },
+    },
+  },
+  {
+    type: 'function' as const,
+    function: {
       name: 'clear_private_knowledge_base',
       description:
         '清除私人知识库。用户说「清除私人知识库」「清空私人知识库」时调用；删除 runtime/private-kb 下已导入文档并清理知识库索引',
@@ -148,12 +159,12 @@ export const toolsSchema = [
     type: 'function' as const,
     function: {
       name: 'deploy_jenkins',
-      description: '部署/构建某项目。用户说「部署nova/cc-node」「部署nova 分支是sprint-260326」时：job=预定义 key（nova、cc-web、cc-node、react18 等）或完整 Job 名；可选 branch=指定分支（如 sprint-260326），不传则用该项目默认分支',
+      description: '部署/构建某项目。用户说「部署nova/cc-node」「部署nova 分支是sprint-260326」时：job=预定义 key；「部署 nova 集测」→ job=nova-pretest（自动解析 react18 最大 sprint 分支）。可选 branch=指定分支，不传则用默认或集测算法分支',
       parameters: {
         type: 'object',
         required: ['job'],
         properties: {
-          job: { type: 'string', description: '预定义 key 或完整 Jenkins Job 名' },
+          job: { type: 'string', description: '预定义 key：nova、nova-pretest（集测）等，或完整 Jenkins Job 名' },
           branch: { type: 'string', description: '可选。指定部署分支，如 sprint-260326；用户说「分支是xxx」时必填' },
         },
       },
@@ -350,11 +361,11 @@ export const toolsSchema = [
     type: 'function' as const,
     function: {
       name: 'merge_repo',
-      description: '合并仓库。合并 nova/biz-solution/scm → repo=nova|biz-solution|scm',
+      description: '合并仓库。合并 nova → repo=nova；合并 nova 集测 → repo=nova-pretest（目标为 react18 最大 sprint 分支）；biz-solution/scm 同理',
       parameters: {
         type: 'object',
         required: ['repo'],
-        properties: { repo: { type: 'string', description: 'nova、biz-solution 或 scm' } },
+        properties: { repo: { type: 'string', description: 'nova、nova-pretest、biz-solution 或 scm' } },
       },
     },
   },

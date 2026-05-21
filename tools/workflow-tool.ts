@@ -31,13 +31,19 @@ export type Step =
 
 export type WorkflowDef = { steps: Step[] };
 
-/** 若步骤带 cwdCode，则按代号解析路径并拼成 cd path && cmd */
+function getDesktopRoot(): string {
+  return getWorkflowsDir().replace(/[/\\]workflows$/, '');
+}
+
+/** 若步骤带 cwdCode，则按代号解析路径并拼成 cd path && cmd；注入 AI_DEV_DESKTOP_ROOT 供子脚本定位工具 */
 function resolveShellCmd(step: Step & { tool: 'shell'; cmd: string; cwdCode?: string }): string {
+  const desktopRoot = getDesktopRoot();
+  const envPrefix = `export AI_DEV_DESKTOP_ROOT="${desktopRoot.replace(/"/g, '\\"')}"; `;
   const code = step.cwdCode?.trim();
-  if (!code) return step.cmd;
+  if (!code) return `${envPrefix}${step.cmd}`;
   const dir = getProjectPath(code);
-  if (!dir) return step.cmd;
-  return `cd ${dir} && ${step.cmd}`;
+  if (!dir) return `${envPrefix}${step.cmd}`;
+  return `${envPrefix}cd ${dir} && ${step.cmd}`;
 }
 
 /** 执行工作流中的单步，支持 stepIndex 或 taskKey。用于「启动 cpxy」等指令单独执行某一任务。 */

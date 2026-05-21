@@ -10,6 +10,10 @@ node_modules
 /ui/dist/
 /runtime/knowledge-index/
 /runtime/private-kb/
+/runtime/command-stats.sqlite
+/runtime/command-stats.sqlite-wal
+/runtime/command-stats.sqlite-shm
+/runtime/embedded-workflow-sessions.json
 storage/
 /ui/.npm-cache/
 /.npm-cache/

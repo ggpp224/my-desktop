@@ -5,6 +5,11 @@ export function getHelpCommands(): HelpCommandItem[] {
   return [
     {
       section: '快速开始',
+      command: '统计常用指令',
+      description: '打开指令统计页签，以柱状图/饼图/折线图查看常用指令次数（默认最近 30 天，可选时间段）',
+    },
+    {
+      section: '快速开始',
       command: '开始工作',
       description: '一键启动常用开发环境（cpxy、react18、cc-web、biz-solution、uikit、shared、docker）',
     },
@@ -31,7 +36,8 @@ export function getHelpCommands(): HelpCommandItem[] {
     {
       section: '工作流',
       command: '升级集测react18的nova版本',
-      description: '自动切 sprint、更新依赖、提交并 push，完成后切回原分支',
+      description:
+        '自动切 sprint、更新依赖、提交并 push；反馈区以 Markdown 表格+JSON 代码块展示本地/远程 package.json 比对结果',
     },
     {
       section: '工作流',
@@ -76,13 +82,15 @@ export function getHelpCommands(): HelpCommandItem[] {
     },
     {
       section: '部署',
-      command: '部署 nova / 部署 cc-web / 部署 react18 / 部署 base / 部署 base18',
-      description: '触发 Jenkins 任务；可扩展到其它已配置项目代号',
+      command: '部署 nova / 部署 nova 集测 / 部署 cc-web / 部署 react18 / 部署 base / 部署 base18',
+      description:
+        '触发 Jenkins 任务；nova 默认 test；部署 nova 集测使用 react18 最大 sprint 分支；可扩展到其它已配置项目代号',
     },
     {
       section: '合并',
-      command: '合并 nova / 合并 biz-solution / 合并 scm',
-      description: '将当前分支合并到预设测试分支（并按项目策略执行后续步骤）',
+      command: '合并 nova / 合并 nova 集测 / 合并 biz-solution / 合并 scm',
+      description:
+        '将当前分支合并到测试分支；nova 集测合并到 react18 最大 sprint 分支（算法同升级集测 react18 nova 版本）',
     },
     {
       section: 'Jira',
