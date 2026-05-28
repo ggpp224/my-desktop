@@ -20,6 +20,7 @@ import { runWorkflow, runWorkflowStep } from '../tools/workflow-tool.js';
 import { startProjectDev } from '../tools/project-start-tool.js';
 import { openEmbeddedTerminalWorkspace, startEmbeddedWorkflow } from '../tools/workflow-embedded-service.js';
 import { deployNovaPretest, deployByJobKey } from '../tools/deploy-jenkins-helper.js';
+import { runCompositeNovaMergeAndDeploy } from '../tools/composite-nova-workflow-tool.js';
 import {
   mergeNova,
   mergeNovaPretest,
@@ -295,6 +296,15 @@ export async function routeAndExecute(call: ToolCall, ctx?: RouteExecuteContext)
         `不支持的 merge_repo: ${repo}，应为 nova、nova-pretest、biz-solution、biz-solution-pretest 或 scm`
       );
     }
+    case 'composite_nova_merge_and_deploy':
+      return runCompositeNovaMergeAndDeploy({
+        onStep: (message) =>
+          ctx?.onToolProgress?.({
+            phase: 'progress',
+            tool: 'composite_nova_merge_and_deploy',
+            message,
+          }),
+      });
     case 'open_in_ide': {
       const app = (args?.app as string) ?? '';
       const code = (args?.code as string) ?? '';

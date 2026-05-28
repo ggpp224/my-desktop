@@ -43,6 +43,7 @@ export const FIXED_COMMAND_HINTS = [
   '知识库有哪些文档',
   '统计常用指令',
   'md生成pdf',
+  '合并nova并部署相关服务',
   '打开集测环境',
   '打开测试环境',
   '打开json配置中心',

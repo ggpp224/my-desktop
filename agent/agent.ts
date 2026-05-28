@@ -138,6 +138,13 @@ function parseUpgradeNovaWorkflowIntent(userMessage: string): ToolCall | null {
   return null;
 }
 
+/** 解析固定复合口令「合并nova并部署相关服务」 */
+function parseCompositeNovaMergeAndDeployIntent(userMessage: string): ToolCall | null {
+  const compact = (userMessage ?? '').replace(/\s+/g, '').toLowerCase();
+  if (compact !== '合并nova并部署相关服务') return null;
+  return { name: 'composite_nova_merge_and_deploy', arguments: {} };
+}
+
 // AI 生成 By Peng.Guo：关键口令「开始工作，使用外部终端」优先级最高，避免被误判为 run_workflow_step
 function isStartWorkExternalTerminalIntent(userMessage: string): boolean {
   const text = (userMessage ?? '').trim().toLowerCase();
@@ -292,14 +299,19 @@ export async function runAgent(userMessage: string, options?: RunAgentOptions): 
       if (deployPretest) {
         calls = [deployPretest];
       } else {
-        const upgradeNova = parseUpgradeNovaWorkflowIntent(normalizedUserMessage);
-        if (upgradeNova) {
-          calls = [upgradeNova];
+        const compositeNova = parseCompositeNovaMergeAndDeployIntent(normalizedUserMessage);
+        if (compositeNova) {
+          calls = [compositeNova];
         } else {
-          const startTaskKey = parseStartProjectIntent(normalizedUserMessage);
-          if (startTaskKey) {
-            const workflow = resolveWorkflowForTaskKey(startTaskKey) ?? 'start-work';
-            calls = [{ name: 'run_workflow_step', arguments: { workflow, taskKey: startTaskKey } }];
+          const upgradeNova = parseUpgradeNovaWorkflowIntent(normalizedUserMessage);
+          if (upgradeNova) {
+            calls = [upgradeNova];
+          } else {
+            const startTaskKey = parseStartProjectIntent(normalizedUserMessage);
+            if (startTaskKey) {
+              const workflow = resolveWorkflowForTaskKey(startTaskKey) ?? 'start-work';
+              calls = [{ name: 'run_workflow_step', arguments: { workflow, taskKey: startTaskKey } }];
+            }
           }
         }
       }

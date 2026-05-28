@@ -38,6 +38,7 @@ export const FIXED_COMMAND_TOOL_NAMES: Partial<Record<FixedCommandHint, readonly
   知识库有哪些文档: ['list_knowledge_docs'],
   统计常用指令: ['open_command_stats'],
   md生成pdf: ['open_md_to_pdf'],
+  合并nova并部署相关服务: ['composite_nova_merge_and_deploy'],
   打开集测环境: ['open_jice_env'],
   打开测试环境: ['open_test_env'],
   打开json配置中心: ['open_json_config_center'],

@@ -392,6 +392,18 @@ export const toolsSchema = [
   {
     type: 'function' as const,
     function: {
+      name: 'composite_nova_merge_and_deploy',
+      description:
+        '执行复合流程「合并nova并部署相关服务」：先串行执行合并 nova、部署 nova，成功后并行部署 react18 与 cc-web，并汇总结果。固定口令触发，无参数',
+      parameters: {
+        type: 'object',
+        properties: {},
+      },
+    },
+  },
+  {
+    type: 'function' as const,
+    function: {
       name: 'open_in_ide',
       description: '用 IDE 打开项目。ws/cursor打开base → app=ws|cursor，code=项目代号。代号见 config/projects',
       parameters: {
