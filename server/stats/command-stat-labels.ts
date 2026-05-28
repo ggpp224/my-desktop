@@ -42,6 +42,11 @@ const CHAT_ALIAS_ENTRIES: Array<{ patterns: RegExp[]; canonicalKey: string; disp
     displayLabel: '统计常用指令',
   },
   {
+    patterns: [/^md生成pdf$/i],
+    canonicalKey: 'md:generate-pdf',
+    displayLabel: 'md生成pdf',
+  },
+  {
     patterns: [/^打开\s*jenkins$/i, /^打开jenkins$/i],
     canonicalKey: 'browser:jenkins',
     displayLabel: '打开 Jenkins',

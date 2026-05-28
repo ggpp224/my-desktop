@@ -32,4 +32,6 @@ contextBridge.exposeInMainWorld('electronAPI', {
     ipcRenderer.on('api-child-exited', listener);
     return () => ipcRenderer.removeListener('api-child-exited', listener);
   },
+  pickMdFile: () => ipcRenderer.invoke('pick-md-file'),
+  generateMdPdf: (mdFilePath) => ipcRenderer.invoke('generate-md-pdf', mdFilePath),
 });

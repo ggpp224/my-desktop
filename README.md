@@ -16,13 +16,15 @@
 - **工程辅助能力**：Cursor 用量查询与 Cookie 自动同步；命令历史持久化（`runtime/command-history.json`）；主题持久化。
 - **SDK 自动化能力（PoC）**：支持基于 Cursor SDK 的仓库健康检查与 PR 自动审查脚本（本地运行，可落盘审查报告）。
 
-## 近期新增能力（2026-04）
+## 近期新增能力（2026-05）
 
 - **主题系统**：新增浅色/深色/高对比主题切换，前端会记忆上次主题。
 - **模型设置面板**：新增本地/外部模式切换；Gemini API Key、模型、Base URL 可视化配置与连通性测试。
 - **流式体验增强**：`/agent/chat/stream` 增加 `llm_delta`、`tool_progress`、`token_usage` 事件，聊天体验更平滑。
 - **知识库闭环**：新增 `POST /knowledge-base/import` 导入本地 Markdown，支持从引用直接打开原文 `GET /knowledge-base/document`。
 - **内嵌终端增强**：`/workflow/:workflowName/embedded` 启动会话，支持会话恢复、新增页签、输入/输出轮询、尺寸同步与关闭回收。
+- **Markdown 转 PDF**：新增 `md生成pdf` 指令与独立页签，可选择本地 `.md` 并在同目录生成同名 `.pdf`，支持 GitLab 风格排版、代码高亮与 Mermaid 图渲染。
+- **固定口令路由收敛**：对「开始工作」「统计常用指令」「md生成pdf」「打开集测环境/测试环境/json配置中心」等固定口令，首轮仅暴露候选工具，降低同类工具误选。
 
 ## 环境要求
 
@@ -156,7 +158,7 @@ npm run sdk:pr-review -- --base main --model default
   - `GEMINI_API_KEY` 或 `GOOGLE_API_KEY`
   - 知识库：`KB_CHAT_MODEL`、`KB_INGEST_MODEL`、`KB_EMBED_MODEL`
 - **服务**
-  - `PORT`、`SHELL_CWD`
+  - `API_PORT`、`SHELL_CWD`
 - **Jenkins**
   - `JENKINS_BASE_URL`、`JENKINS_USERNAME`、`JENKINS_TOKEN`
   - 以及各项目 `JENKINS_JOB_*` / 默认分支变量

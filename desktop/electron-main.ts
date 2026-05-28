@@ -1,6 +1,7 @@
 /* AI 生成 By Peng.Guo */
 import 'dotenv/config';
-import { app, BrowserWindow, ipcMain, Menu, shell } from 'electron';
+import { app, BrowserWindow, dialog, ipcMain, Menu, shell } from 'electron';
+import { generateMdPdfBesideSource } from './md-pdf-generator.js';
 import { existsSync } from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
@@ -33,6 +34,29 @@ let isStoppingApi = false;
 
 /** 渲染进程随时同步获取端口，避免 api-port 事件早于 preload 订阅导致 getApiBase 永久挂起 */
 ipcMain.handle('get-api-port', () => apiPort);
+
+/** MD → PDF：选择本地 .md 文件 */
+ipcMain.handle('pick-md-file', async () => {
+  const win = BrowserWindow.getFocusedWindow() ?? mainWindow;
+  const dialogOptions = {
+    title: '选择 Markdown 文件',
+    properties: ['openFile'] as Array<'openFile'>,
+    filters: [{ name: 'Markdown', extensions: ['md', 'markdown'] }],
+  };
+  const result =
+    win != null ? await dialog.showOpenDialog(win, dialogOptions) : await dialog.showOpenDialog(dialogOptions);
+  if (result.canceled || result.filePaths.length === 0) {
+    return { canceled: true as const };
+  }
+  return { canceled: false as const, filePath: result.filePaths[0] };
+});
+
+/** MD → PDF：在同目录生成 GitLab 风格 PDF */
+ipcMain.handle('generate-md-pdf', async (_event, mdFilePath: unknown) => {
+  const path = typeof mdFilePath === 'string' ? mdFilePath.trim() : '';
+  if (!path) return { success: false, error: '缺少文件路径' };
+  return generateMdPdfBesideSource(path);
+});
 
 function getProjectRoot(): string {
   return app.getAppPath();

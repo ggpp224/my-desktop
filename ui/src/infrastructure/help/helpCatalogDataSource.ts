@@ -10,6 +10,11 @@ export function getHelpCommands(): HelpCommandItem[] {
     },
     {
       section: '快速开始',
+      command: 'md生成pdf',
+      description: '打开 MD 生成 PDF 页签：选择或上传 .md，在同目录生成 GitLab 风格（含表格）的 PDF',
+    },
+    {
+      section: '快速开始',
       command: '开始工作',
       description: '一键启动常用开发环境（cpxy、react18、cc-web、biz-solution、uikit、shared、docker）',
     },

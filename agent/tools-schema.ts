@@ -26,6 +26,18 @@ export const toolsSchema = [
   {
     type: 'function' as const,
     function: {
+      name: 'open_md_to_pdf',
+      description:
+        '打开 MD 生成 PDF 页签。用户说「md生成pdf」「MD生成PDF」时调用；页签内可上传/选择 .md 并在同目录生成 GitLab 风格 PDF，无参数',
+      parameters: {
+        type: 'object',
+        properties: {},
+      },
+    },
+  },
+  {
+    type: 'function' as const,
+    function: {
       name: 'clear_private_knowledge_base',
       description:
         '清除私人知识库。用户说「清除私人知识库」「清空私人知识库」时调用；删除 runtime/private-kb 下已导入文档并清理知识库索引',
@@ -114,7 +126,8 @@ export const toolsSchema = [
     type: 'function' as const,
     function: {
       name: 'open_jice_env',
-      description: '打开集测环境（好业财）。用户说「打开集测环境」时调用，无参数。',
+      description:
+        '在系统默认浏览器打开好业财集测环境（固定 URL）。仅当用户说「打开集测环境」时调用；不是 open_terminal，无参数。',
       parameters: {
         type: 'object',
         properties: {},
@@ -125,7 +138,8 @@ export const toolsSchema = [
     type: 'function' as const,
     function: {
       name: 'open_test_env',
-      description: '打开测试环境（好业财）。用户说「打开测试环境」时调用，无参数。',
+      description:
+        '在系统默认浏览器打开好业财测试环境（固定 URL）。仅当用户说「打开测试环境」时调用；与内嵌终端 open_terminal 无关，无参数。',
       parameters: {
         type: 'object',
         properties: {},
@@ -317,7 +331,7 @@ export const toolsSchema = [
     function: {
       name: 'open_terminal',
       description:
-        '打开内嵌终端工作区（我的工作），新建一个终端页签，不执行开始工作流。用户说「终端打开 react18」「终端打开 cc-web」「终端打开 mdf-ui」等 → 必传 code=项目代号，cwd 为该代号在 config/projects 中的路径；仅「打开终端/新建终端」不传 code，cwd 为用户主目录。代号示例：react18、cc-web、cc-web2、biz-solution、biz-guide、uikit、shared、scm、scm18、nova、nova-next、base、base18、mdf-ui、mdf-biz、ai-import、uikit-compat、cc-node、app-service、biz-framework、front-entity、front-pub、evoui、chanjet-grid、nova-form、nova-grid、nova-server、nova-ui、chanjet-nova、h5-biz-common、cc-web-hkj',
+        '打开内嵌终端工作区（我的工作），新建终端页签，不打开浏览器。禁止用于「打开测试环境」「打开集测环境」「打开json配置中心」——那些必须用 open_test_env / open_jice_env / open_json_config_center。仅当用户明确说「打开终端」「新建终端」，或「终端打开 react18」等（口令含「终端」）时调用；「终端打开 xx」必传 code=项目代号。仅「打开终端/新建终端」不传 code。',
       parameters: {
         type: 'object',
         properties: {

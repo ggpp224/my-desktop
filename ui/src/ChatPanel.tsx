@@ -220,6 +220,7 @@ interface ChatPanelProps {
   onStartWorkEmbedded: (payload: { sessionId: string; terminals: WorkTerminal[] }) => void;
   onOpenKnowledgeBase: () => void;
   onOpenCommandStats: () => void;
+  onOpenMdToPdf: () => void;
   onOpenKnowledgeDoc: (sourcePath: string) => void;
   /** 本地 Ollama / 外部 Gemini */
   llmRuntimeMode: LlmRuntimeMode;
@@ -1206,7 +1207,7 @@ function formatToolProgressLogLine(e: AgentToolProgressEvent): string {
   return e.ok ? `[工具] ${e.tool} 完成` : `[工具] ${e.tool} 失败${e.message ? `: ${e.message}` : ''}`;
 }
 
-export function ChatPanel({ apiBase, addLog, onStartWorkEmbedded, onOpenKnowledgeBase, onOpenCommandStats, onOpenKnowledgeDoc, llmRuntimeMode, agentChatLlmBody, themeTokens }: ChatPanelProps) {
+export function ChatPanel({ apiBase, addLog, onStartWorkEmbedded, onOpenKnowledgeBase, onOpenCommandStats, onOpenMdToPdf, onOpenKnowledgeDoc, llmRuntimeMode, agentChatLlmBody, themeTokens }: ChatPanelProps) {
   const [input, setInput] = useState('');
   const [inputHistory, setInputHistory] = useState<string[]>([]);
   const [loading, setLoading] = useState(false);
@@ -1643,6 +1644,15 @@ export function ChatPanel({ apiBase, addLog, onStartWorkEmbedded, onOpenKnowledg
       onOpenCommandStats();
       addLog('已打开指令统计页签');
     }
+    const openMdPdfToolResult = data.toolResults?.find(
+      (t): t is { tool: string; result?: { openMdToPdf?: boolean } } =>
+        (t as { tool?: string }).tool === 'open_md_to_pdf' &&
+        (t as { result?: { openMdToPdf?: boolean } }).result?.openMdToPdf === true
+    );
+    if (openMdPdfToolResult) {
+      onOpenMdToPdf();
+      addLog('已打开 MD 生成 PDF 页签');
+    }
     const mergeSteps = (mergeResult?.result?.steps as string[] | undefined);
     appendToolResultsToLogs(data.toolResults, addLog);
     if (Array.isArray(mergeSteps) && mergeSteps.length > 0) mergeSteps.forEach((step) => addLog(step));
@@ -1686,6 +1696,16 @@ export function ChatPanel({ apiBase, addLog, onStartWorkEmbedded, onOpenKnowledg
       onOpenCommandStats();
       addLog('已打开指令统计页签');
       setMessages((prev) => [...prev, { role: 'assistant', content: '已打开指令统计页签，可查看柱状图、饼图与折线图。' }]);
+      return;
+    }
+    if (/^md生成pdf$/i.test(msg)) {
+      setLoading(false);
+      onOpenMdToPdf();
+      addLog('已打开 MD 生成 PDF 页签');
+      setMessages((prev) => [
+        ...prev,
+        { role: 'assistant', content: '已打开 MD 生成 PDF 页签：选择或上传 .md 文件，点击「生成」即可在同目录输出 GitLab 风格 PDF。' },
+      ]);
       return;
     }
     if (/清除私人知识库|清空私人知识库/.test(msg)) {

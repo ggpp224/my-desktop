@@ -42,6 +42,7 @@ export const FIXED_COMMAND_HINTS = [
   '已添加到知识库的文档',
   '知识库有哪些文档',
   '统计常用指令',
+  'md生成pdf',
   '打开集测环境',
   '打开测试环境',
   '打开json配置中心',

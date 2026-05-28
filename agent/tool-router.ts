@@ -62,6 +62,8 @@ export async function routeAndExecute(call: ToolCall, ctx?: RouteExecuteContext)
       return { openKnowledgeBaseManager: true };
     case 'open_command_stats':
       return { openCommandStats: true };
+    case 'open_md_to_pdf':
+      return { openMdToPdf: true };
     case 'clear_private_knowledge_base':
       ctx?.onToolProgress?.({
         phase: 'progress',

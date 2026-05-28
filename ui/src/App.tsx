@@ -11,6 +11,7 @@ import { KnowledgeBasePanel } from './KnowledgeBasePanel';
 import { CommandStatsPanel } from './CommandStatsPanel';
 import { CommandCapabilityPanel } from './CommandCapabilityPanel';
 import { KnowledgeDocPanel } from './KnowledgeDocPanel';
+import { MdToPdfPanel } from './MdToPdfPanel';
 import { LlmSettingsModal } from './view/LlmSettingsModal';
 import { HeaderTabNav } from './view/HeaderTabNav';
 import { ThemeSwitcher } from './view/ThemeSwitcher';
@@ -37,6 +38,13 @@ declare global {
       getApiBase: () => Promise<string>;
       onApiPortChanged?: (handler: (apiBase: string) => void) => () => void;
       onApiChildExited?: (handler: () => void) => () => void;
+      pickMdFile?: () => Promise<{ canceled: boolean; filePath?: string }>;
+      generateMdPdf?: (mdFilePath: string) => Promise<{
+        success: boolean;
+        mdPath?: string;
+        pdfPath?: string;
+        error?: string;
+      }>;
     };
   }
 }
@@ -282,6 +290,14 @@ export default function App() {
       return [...prev, { key: 'command-stats', label: '指令统计' }];
     });
     setActiveHeaderTab('command-stats');
+  };
+
+  const openMdToPdfTab = () => {
+    setHeaderTabs((prev) => {
+      if (prev.some((tab) => tab.key === 'md-to-pdf')) return prev;
+      return [...prev, { key: 'md-to-pdf', label: 'MD 生成 PDF' }];
+    });
+    setActiveHeaderTab('md-to-pdf');
   };
 
   const openCommandCapabilityTab = () => {
@@ -557,6 +573,7 @@ export default function App() {
               onStartWorkEmbedded={onStartWorkEmbedded}
               onOpenKnowledgeBase={openKnowledgeBaseTab}
               onOpenCommandStats={openCommandStatsTab}
+              onOpenMdToPdf={openMdToPdfTab}
               onOpenKnowledgeDoc={openKnowledgeDocTab}
               llmRuntimeMode={llmMode}
               agentChatLlmBody={agentChatLlmBody}
@@ -571,6 +588,11 @@ export default function App() {
           {activeHeaderTab === 'command-stats' && (
             <div style={{ flex: 1, minHeight: 0, width: '100%', height: '100%', display: 'flex', overflow: 'hidden' }}>
               <CommandStatsPanel apiBase={apiBase} themeTokens={themeTokens} />
+            </div>
+          )}
+          {activeHeaderTab === 'md-to-pdf' && (
+            <div style={{ flex: 1, minHeight: 0, width: '100%', height: '100%', display: 'flex', overflow: 'hidden' }}>
+              <MdToPdfPanel addLog={addLog} themeTokens={themeTokens} />
             </div>
           )}
           {activeHeaderTab === 'command-capability' && (

@@ -48,6 +48,7 @@ const TOOL_GROUPS: ToolGroup[] = [
     tools: [
       { name: 'open_knowledge_base_manager', desc: '打开私人知识库管理页（如：添加私人知识库）' },
       { name: 'open_command_stats', desc: '打开指令统计页签（如：统计常用指令）' },
+      { name: 'open_md_to_pdf', desc: '打开 MD 生成 PDF 页签（如：md生成pdf）' },
       { name: 'list_knowledge_docs', desc: '列出知识库文档（如：知识库有哪些文档）' },
       { name: 'query_knowledge_base', desc: '查询知识库内容（如：文档里如何配置）' },
       { name: 'incremental_rebuild_knowledge_base_index', desc: '增量重建索引（如：增量重建知识库索引）' },
