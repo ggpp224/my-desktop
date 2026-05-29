@@ -3,6 +3,12 @@ import { useState, useRef, useEffect, useLayoutEffect, useMemo } from 'react';
 import { buildSupportedCommandHints } from '@app-config/command-hints';
 import { appendToolResultsToLogs } from './log-tools';
 import { withJenkinsMarkdownLink } from './domain/deploy/jenkinsDeployDisplay';
+import {
+  extractCompositeWorkflowResult,
+  formatCompositeWorkflowStepsMarkdown,
+  getCompositeWorkflowHeadline,
+  isCompositeNovaMergeDeployToolResults,
+} from './domain/deploy/formatDeployToolSummary';
 import type { DeployPollingTarget } from './domain/deploy/models';
 import { LinkifiedText } from './view/LinkifiedText';
 import { isLikelyMarkdown, MarkdownRenderer } from './view/MarkdownRenderer';
@@ -261,6 +267,11 @@ function isBizSolutionPretestMergeMessage(msg: string): boolean {
 /** 集测部署须优先于「部署 nova」，避免误用 test 分支 */
 function isNovaPretestDeployMessage(msg: string): boolean {
   return /部署\s*nova(?:\s*集测|集测)/i.test(msg.trim());
+}
+
+/** 复合流程口令：必须走 Agent，不走前端 merge 快捷分流 */
+function isCompositeNovaMergeDeployMessage(msg: string): boolean {
+  return (msg ?? '').replace(/\s+/g, '').toLowerCase() === '合并nova并部署相关服务';
 }
 
 const MERGE_TASKS: MergeTaskItem[] = [
@@ -1176,7 +1187,26 @@ function renderToolResults(
   if (cursorTodayUsage) return cursorTodayUsage;
   const cursorUsage = renderCursorUsage(toolResults, themeTokens);
   if (cursorUsage) return cursorUsage;
-  if (toolResults && toolResults.length > 0) {
+  const compositeDeployMd = formatCompositeWorkflowStepsMarkdown(extractCompositeWorkflowResult(toolResults));
+  if (compositeDeployMd) {
+    return (
+      <div
+        style={{
+          marginTop: 8,
+          background: themeTokens.workspacePanelSubtleBackground,
+          borderRadius: 6,
+          border: `1px solid ${themeTokens.inputBorder}`,
+          padding: 10,
+          fontSize: 13,
+          lineHeight: 1.65,
+          color: themeTokens.textPrimary,
+        }}
+      >
+        <LinkifiedText text={compositeDeployMd} linkColor={themeTokens.tabActiveBorder} />
+      </div>
+    );
+  }
+  if (toolResults && toolResults.length > 0 && !isCompositeNovaMergeDeployToolResults(toolResults)) {
     return (
       <pre
         style={{
@@ -1205,6 +1235,17 @@ function formatToolProgressLogLine(e: AgentToolProgressEvent): string {
   if (e.phase === 'start') return `[工具] ${e.tool} 开始`;
   if (e.phase === 'progress') return `[${e.tool}] ${e.message ?? ''}`;
   return e.ok ? `[工具] ${e.tool} 完成` : `[工具] ${e.tool} 失败${e.message ? `: ${e.message}` : ''}`;
+}
+
+function shouldShowToolProgressInFeedback(e: AgentToolProgressEvent): boolean {
+  if (e.phase === 'stream_delta') return false;
+  if (e.phase === 'start' || e.phase === 'done') return true;
+  if (e.phase !== 'progress') return true;
+  if (e.tool !== 'composite_nova_merge_and_deploy') return true;
+  const msg = (e.message ?? '').trim();
+  return /^(步骤[123]\/3：正在|步骤[123]\/3完成|步骤[123]\/3失败|复合流程执行完成|步骤1\/3失败，流程终止。|步骤2\/3失败，流程终止。)/.test(
+    msg
+  );
 }
 
 export function ChatPanel({ apiBase, addLog, onStartWorkEmbedded, onOpenKnowledgeBase, onOpenCommandStats, onOpenMdToPdf, onOpenKnowledgeDoc, llmRuntimeMode, agentChatLlmBody, themeTokens }: ChatPanelProps) {
@@ -1568,6 +1609,8 @@ export function ChatPanel({ apiBase, addLog, onStartWorkEmbedded, onOpenKnowledg
         });
       }
     }
+    const compositePayload = extractCompositeWorkflowResult(data.toolResults);
+    const compositeHeadline = compositePayload ? getCompositeWorkflowHeadline(compositePayload) : null;
     const deployResult = data.toolResults?.find(
       (t): t is {
         tool: string;
@@ -1579,14 +1622,16 @@ export function ChatPanel({ apiBase, addLog, onStartWorkEmbedded, onOpenKnowledg
       | undefined;
     const deployPayload = deployResult?.result;
     const hasDeployPoll = deployPayload && (deployPayload.queueUrl || deployPayload.jobName);
-    const content = hasDeployPoll
-      ? withJenkinsMarkdownLink(
-          deployPayload.message ?? '已触发，构建中…',
-          deployPayload.jobUrl ?? deployPayload.queueUrl
-        )
-      : data.success
-        ? (data.text ?? '')
-        : (data.error ?? '请求失败');
+    const content = compositeHeadline
+      ? compositeHeadline
+      : hasDeployPoll
+        ? withJenkinsMarkdownLink(
+            deployPayload.message ?? '已触发，构建中…',
+            deployPayload.jobUrl ?? deployPayload.queueUrl
+          )
+        : data.success
+          ? (data.text ?? '')
+          : (data.error ?? '请求失败');
     setMessages((prev) => [
       ...prev,
       { role: 'assistant', content, toolResults: data.toolResults },
@@ -1673,11 +1718,16 @@ export function ChatPanel({ apiBase, addLog, onStartWorkEmbedded, onOpenKnowledg
     setLoading(true);
     setLiveTokenMetrics(null);
     addLog(`发送: ${msg}`);
+    if (isCompositeNovaMergeDeployMessage(msg)) {
+      // 明确跳过前端合并快捷分流，交给 Agent 复合编排工具执行
+      addLog('检测到复合流程口令，转交 Agent 执行串并行编排');
+    } else {
     const mergeTask = resolveMergeTask(msg);
-    if (mergeTask) {
-      setLoading(false);
-      await executeMerge(mergeTask.path, mergeTask.label);
-      return;
+      if (mergeTask) {
+        setLoading(false);
+        await executeMerge(mergeTask.path, mergeTask.label);
+        return;
+      }
     }
     if (isNovaPretestDeployMessage(msg)) {
       setLoading(false);
@@ -1857,8 +1907,10 @@ export function ChatPanel({ apiBase, addLog, onStartWorkEmbedded, onOpenKnowledg
             );
           }
           const line = formatToolProgressLogLine(e);
-          addLog(line);
-          setToolProgressLines((prev) => [...prev.slice(-40), line]);
+          if (line) addLog(line);
+          if (line && shouldShowToolProgressInFeedback(e)) {
+            setToolProgressLines((prev) => [...prev.slice(-40), line]);
+          }
         },
         onResult: (raw) => {
           if (streamFlushTimerRef.current) clearTimeout(streamFlushTimerRef.current);

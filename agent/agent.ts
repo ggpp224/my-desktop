@@ -119,6 +119,30 @@ function parseDeployNovaPretestIntent(userMessage: string): ToolCall | null {
   return { name: 'deploy_jenkins', arguments: { job: 'nova-pretest' } };
 }
 
+/**
+ * // AI 生成 By Peng.Guo
+ * 解析通用部署口令（如「部署 react18」「部署 nova 分支是 sprint-260326」），
+ * 作为 LLM tool_calls 的兜底，避免偶发未解析。
+ */
+function parseGenericDeployIntent(userMessage: string, explicitCode: string | null): ToolCall | null {
+  const text = (userMessage ?? '').trim();
+  if (!/^部署(?:\s|$)/i.test(text)) return null;
+
+  const explicitJob = (explicitCode ?? '').trim().toLowerCase();
+  const inferredJobMatch = text.match(/^部署\s+([a-z0-9][a-z0-9-]*)\b/i);
+  const inferredJob = (inferredJobMatch?.[1] ?? '').trim().toLowerCase();
+  const job = explicitJob || inferredJob;
+  if (!job) return null;
+
+  const branchMatch = text.match(/(?:分支\s*(?:是|为)?|branch\s*(?:=|是|为)?)\s*([a-z0-9._/-]+)/i);
+  const branch = (branchMatch?.[1] ?? '').trim();
+
+  return {
+    name: 'deploy_jenkins',
+    arguments: branch ? { job, branch } : { job },
+  };
+}
+
 /** 解析「升级集测 react18/cc-web 的 nova 版本」：不依赖 LLM tool_calls，避免偶发未解析 */
 function parseUpgradeNovaWorkflowIntent(userMessage: string): ToolCall | null {
   const text = (userMessage ?? '').trim();
@@ -162,6 +186,10 @@ function isKnowledgeQueryIntent(userMessage: string): boolean {
   const normalized = text.replace(/\s+/g, '');
   const kbKeyword = /(知识库|文档|AdvanceGrid|条件格式化|如何|怎么|怎样|配置|使用|接入|说明|示例)/i.test(normalized);
   if (!kbKeyword) return false;
+  // AI 生成 By Peng.Guo：固定打开类操作（尤其 json 配置中心）不应落到知识库问答
+  const fixedOpenCommandLike =
+    /^打开\s*json\s*配置中心$/i.test(normalized) || /^打开\s*(测试环境|集测环境)$/i.test(normalized);
+  if (fixedOpenCommandLike) return false;
   const startLike = /^启动\s+[a-z0-9][a-z0-9-]*\s*$/i.test(text);
   const deployLike = /^部署\s+/i.test(text) || /^合并\s+/i.test(text);
   const workflowLike = /^执行工作流\s+/i.test(text) || /^开始工作/.test(text);
@@ -299,18 +327,23 @@ export async function runAgent(userMessage: string, options?: RunAgentOptions): 
       if (deployPretest) {
         calls = [deployPretest];
       } else {
-        const compositeNova = parseCompositeNovaMergeAndDeployIntent(normalizedUserMessage);
-        if (compositeNova) {
-          calls = [compositeNova];
+        const genericDeploy = parseGenericDeployIntent(normalizedUserMessage, explicitCode);
+        if (genericDeploy) {
+          calls = [genericDeploy];
         } else {
-          const upgradeNova = parseUpgradeNovaWorkflowIntent(normalizedUserMessage);
-          if (upgradeNova) {
-            calls = [upgradeNova];
+          const compositeNova = parseCompositeNovaMergeAndDeployIntent(normalizedUserMessage);
+          if (compositeNova) {
+            calls = [compositeNova];
           } else {
-            const startTaskKey = parseStartProjectIntent(normalizedUserMessage);
-            if (startTaskKey) {
-              const workflow = resolveWorkflowForTaskKey(startTaskKey) ?? 'start-work';
-              calls = [{ name: 'run_workflow_step', arguments: { workflow, taskKey: startTaskKey } }];
+            const upgradeNova = parseUpgradeNovaWorkflowIntent(normalizedUserMessage);
+            if (upgradeNova) {
+              calls = [upgradeNova];
+            } else {
+              const startTaskKey = parseStartProjectIntent(normalizedUserMessage);
+              if (startTaskKey) {
+                const workflow = resolveWorkflowForTaskKey(startTaskKey) ?? 'start-work';
+                calls = [{ name: 'run_workflow_step', arguments: { workflow, taskKey: startTaskKey } }];
+              }
             }
           }
         }

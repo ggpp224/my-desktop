@@ -1,6 +1,6 @@
 /* AI 生成 By Peng.Guo */
 import { deployByJobKey } from './deploy-jenkins-helper.js';
-import { getDeployStatus } from './jenkins-tool.js';
+import { getDeployStatus, getDeployStatusByBuildHistory } from './jenkins-tool.js';
 import { mergeByCode } from './merge-tool.js';
 
 type StepStatus = 'success' | 'failure';
@@ -25,6 +25,7 @@ export type CompositeWorkflowOptions = {
 const TERMINAL_DEPLOY_STATUS = new Set(['success', 'failure', 'aborted']);
 const POLL_INTERVAL_MS = 10_000;
 const MAX_POLL_COUNT = 240;
+const AFTER_STEP2_DELAY_MS = 30_000;
 
 function appendStep(
   steps: CompositeWorkflowStepResult[],
@@ -42,26 +43,37 @@ function isFailure(step: CompositeWorkflowStepResult): boolean {
   return step.status === 'failure';
 }
 
+function shouldContinueAfterMergeFailure(mergeResult: { steps?: string[]; error?: string }): boolean {
+  const error = (mergeResult.error ?? '').trim();
+  if (!/release\s*退出码/i.test(error)) return false;
+  const steps = mergeResult.steps ?? [];
+  return steps.some((line) => /已切回分支/.test(line));
+}
+
 async function delay(ms: number): Promise<void> {
   await new Promise((resolve) => setTimeout(resolve, ms));
 }
 
 async function waitDeployDone(
-  deployResult: { queueUrl?: string; message?: string },
+  deployResult: { queueUrl?: string; jobName?: string; message?: string },
   serviceName: string,
   onStep: (message: string) => void
 ): Promise<CompositeWorkflowStepResult> {
-  if (!deployResult.queueUrl) {
+  const hasQueue = Boolean(deployResult.queueUrl);
+  const hasJobName = Boolean(deployResult.jobName);
+  if (!hasQueue && !hasJobName) {
     return {
       name: `deploy_${serviceName}`,
       status: 'failure',
-      message: `${serviceName} 缺少 queueUrl，无法等待部署完成`,
+      message: `${serviceName} 缺少 queueUrl/jobName，无法等待部署完成`,
       detail: deployResult,
     };
   }
 
   for (let i = 1; i <= MAX_POLL_COUNT; i += 1) {
-    const status = await getDeployStatus(deployResult.queueUrl);
+    const status = deployResult.queueUrl
+      ? await getDeployStatus(deployResult.queueUrl)
+      : await getDeployStatusByBuildHistory(deployResult.jobName as string);
     const suffix = status.message ? `，${status.message}` : '';
     onStep(`[部署${serviceName}] 进度(${i}/${MAX_POLL_COUNT})：${status.status}${suffix}`);
     if (TERMINAL_DEPLOY_STATUS.has(status.status)) {
@@ -92,15 +104,29 @@ export async function runCompositeNovaMergeAndDeploy(
   onStep('开始执行复合流程：合并nova并部署相关服务');
   onStep('步骤1/3：正在合并 nova...');
   const mergeResult = await mergeByCode('nova', {
+    ignoreReleaseFailure: true,
     onStep: (msg) => onStep(`[合并nova] ${msg}`),
   });
   if (!mergeResult.success) {
-    appendStep(steps, 'merge_nova', 'failure', mergeResult.error ?? '合并 nova 失败', mergeResult);
-    onStep('步骤1/3失败，流程终止。');
-    return { success: false, message: '合并 nova 失败，已终止后续部署。', steps };
+    if (shouldContinueAfterMergeFailure(mergeResult)) {
+      appendStep(
+        steps,
+        'merge_nova',
+        'success',
+        `合并 nova 完成（已忽略 ${mergeResult.error ?? 'release 失败'}）`,
+        mergeResult
+      );
+      onStep('检测到 release 失败但已切回分支，按策略继续步骤2/3。');
+      onStep('步骤1/3完成：已切回分支，忽略 release 失败并继续执行。');
+    } else {
+      appendStep(steps, 'merge_nova', 'failure', mergeResult.error ?? '合并 nova 失败', mergeResult);
+      onStep('步骤1/3失败，流程终止。');
+      return { success: false, message: '合并 nova 失败，已终止后续部署。', steps };
+    }
+  } else {
+    appendStep(steps, 'merge_nova', 'success', '合并 nova 完成', mergeResult);
+    onStep('步骤1/3完成：合并 nova 完成。');
   }
-  appendStep(steps, 'merge_nova', 'success', '合并 nova 完成', mergeResult);
-  onStep('步骤1/3完成：合并 nova 完成。');
 
   onStep('步骤2/3：正在部署 nova...');
   const deployNovaResult = await deployByJobKey('nova');
@@ -116,6 +142,9 @@ export async function runCompositeNovaMergeAndDeploy(
     return { success: false, message: '部署 nova 未成功，已终止后续并行部署。', steps };
   }
   onStep('步骤2/3完成：部署 nova 成功。');
+  onStep('步骤2完成后等待 30 秒，再执行步骤3/3...');
+  await delay(AFTER_STEP2_DELAY_MS);
+  onStep('等待结束，开始执行步骤3/3。');
 
   onStep('步骤3/3：开始并行部署 react18 与 cc-web...');
   const [deployReact18, deployCcWeb] = await Promise.all([

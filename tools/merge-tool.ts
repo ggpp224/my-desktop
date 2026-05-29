@@ -68,6 +68,8 @@ export interface MergeResult {
 
 export interface MergeOptions {
   onStep?: (msg: string) => void;
+  /** 仅在特定编排下使用：release 失败时不中断主流程 */
+  ignoreReleaseFailure?: boolean;
 }
 
 export interface MergeConfig {
@@ -86,6 +88,7 @@ async function mergeMerge(
   const { projectPath: cwd, targetBranch, runRelease } = config;
   const steps: string[] = [];
   const onStep = options?.onStep;
+  const ignoreReleaseFailure = options?.ignoreReleaseFailure === true;
 
   const add = (msg: string) => {
     steps.push(msg);
@@ -175,12 +178,15 @@ async function mergeMerge(
     add('正在执行 pnpm run release…');
     const releaseCode = await runStream('pnpm run release', cwd, add);
     if (releaseCode !== 0) {
-      add('pnpm run release 执行失败');
-      run(`git checkout ${currentBranch}`, cwd);
-      add(`已切回分支: ${currentBranch}`);
-      return { success: false, steps, error: `release 退出码: ${releaseCode}` };
+      add(`pnpm run release 执行失败（退出码: ${releaseCode}）`);
+      if (!ignoreReleaseFailure) {
+        run(`git checkout ${currentBranch}`, cwd);
+        add(`已切回分支: ${currentBranch}`);
+        return { success: false, steps, error: `release 退出码: ${releaseCode}` };
+      }
+      add('已配置忽略 release 失败，继续后续流程。');
     }
-    add('pnpm run release 执行完毕');
+    if (releaseCode === 0) add('pnpm run release 执行完毕');
     add('等待 30 秒后切回原分支…');
     await delayMs(30 * 1000);
     add('开始切回原分支');
