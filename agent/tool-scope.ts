@@ -1,10 +1,11 @@
 /* AI 生成 By Peng.Guo */
 import {
   isCloudEnvOpenIntent,
-  resolveFixedCommandToolNames,
+  resolveExactCommand,
   TERMINAL_TOOL_NAME,
-} from '../config/fixed-command-tools.js';
+} from '../config/command-catalog.js';
 import { toolsSchema } from './tools-schema.js';
+import type { ResolvedIntent } from './intent/types.js';
 
 export type AgentToolDefinition = (typeof toolsSchema)[number];
 
@@ -20,24 +21,46 @@ function filterToolsByNames(names: readonly string[]): AgentToolDefinition[] {
 
 export type AgentToolScope = {
   tools: AgentToolDefinition[];
-  /** 供日志/debug：fixed-exact | cloud-env-no-terminal | full */
-  mode: 'fixed-exact' | 'cloud-env-no-terminal' | 'full';
+  /** 供日志/debug */
+  mode: 'direct' | 'knowledge' | 'llm-full' | 'llm-scoped' | 'llm-no-terminal';
 };
 
-/**
- * 根据用户输入收窄首轮可见工具，减少「打开测试环境」误选 open_terminal。
- * 仍由 LLM 在候选集内选择并发起 tool_calls，不绕过模型执行。
- */
+export function resolveToolsFromIntent(intent: ResolvedIntent, userMessage: string): AgentToolScope {
+  if (intent.kind === 'direct') {
+    return { tools: [], mode: 'direct' };
+  }
+  if (intent.kind === 'knowledge') {
+    return { tools: [], mode: 'knowledge' };
+  }
+  if (intent.llmPolicy === 'no-terminal' || isCloudEnvOpenIntent(userMessage)) {
+    return {
+      tools: toolsSchema.filter((t) => t.function.name !== TERMINAL_TOOL_NAME),
+      mode: 'llm-no-terminal',
+    };
+  }
+  if (intent.llmPolicy === 'scoped' && intent.allowedTools?.length) {
+    return {
+      tools: filterToolsByNames(intent.allowedTools),
+      mode: 'llm-scoped',
+    };
+  }
+  return { tools: [...toolsSchema], mode: 'llm-full' };
+}
+
+/** @deprecated 使用 resolveIntent + resolveToolsFromIntent */
 export function resolveAgentToolScope(userMessage: string): AgentToolScope {
-  const fixedNames = resolveFixedCommandToolNames(userMessage);
-  if (fixedNames && fixedNames.length > 0) {
-    return { tools: filterToolsByNames(fixedNames), mode: 'fixed-exact' };
+  const exact = resolveExactCommand(userMessage);
+  if (exact) {
+    return {
+      tools: filterToolsByNames([exact.tool]),
+      mode: 'llm-scoped',
+    };
   }
   if (isCloudEnvOpenIntent(userMessage)) {
     return {
       tools: toolsSchema.filter((t) => t.function.name !== TERMINAL_TOOL_NAME),
-      mode: 'cloud-env-no-terminal',
+      mode: 'llm-no-terminal',
     };
   }
-  return { tools: [...toolsSchema], mode: 'full' };
+  return { tools: [...toolsSchema], mode: 'llm-full' };
 }

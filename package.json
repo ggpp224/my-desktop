@@ -6,7 +6,9 @@
   "main": "dist/desktop/electron-main.js",
   "scripts": {
     "verify-ollama": "node scripts/verify-ollama-tools.js",
-    "build": "tsc && cp desktop/preload.js dist/desktop/ && npm run build:ui",
+    "verify:catalog": "tsx scripts/verify-command-catalog.ts",
+    "test": "tsx --test agent/intent/**/*.test.ts",
+    "build": "npm run verify:catalog && tsc && cp desktop/preload.js dist/desktop/ && npm run build:ui",
     "build:ui": "cd ui && npm run build",
     "dev": "tsc && concurrently \"npm run dev:ui\" \"npm run dev:electron\"",
     "dev:server": "tsx watch server/api.ts",

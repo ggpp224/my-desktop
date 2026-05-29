@@ -4,6 +4,7 @@
  * 侧栏「Workflow（N）」计数见 command-capability-catalog（仅独立指令）。
  * 无 Node/Agent 依赖，可供 Vite 前端与 Node 后端共用。
  */
+import { COMMAND_CATALOG_EXACT_LABELS } from './command-catalog.js';
 
 export type ProjectCapabilityInput = {
   codes: string[];
@@ -21,34 +22,8 @@ const WORKFLOW_EXEC_HINTS = [
   '升级集测cc-web的nova版本',
 ] as const;
 
-export const FIXED_COMMAND_HINTS = [
-  '开始工作',
-  '开始工作，使用外部终端',
-  '打开终端',
-  '我的bug',
-  '线上bug',
-  '本周已完成任务',
-  '本周经我手的bug',
-  '写周报',
-  '抓取周报信息',
-  '本周组内总结',
-  'cursor用量',
-  '同步cursor登录态',
-  'cursor今日用量',
-  '添加私人知识库',
-  '清除私人知识库',
-  '重建知识库索引',
-  '增量重建知识库索引',
-  '已添加到知识库的文档',
-  '知识库有哪些文档',
-  '统计常用指令',
-  'md生成pdf',
-  '合并nova并部署相关服务',
-  '打开集测环境',
-  '打开测试环境',
-  '打开json配置中心',
-  '打开 Jenkins',
-] as const;
+/** 固定口令（与 command-catalog 同源） */
+export const FIXED_COMMAND_HINTS = COMMAND_CATALOG_EXACT_LABELS;
 
 export const MERGE_PRETEST_HINTS: Record<string, readonly string[]> = {
   nova: ['合并 nova 集测'],
