@@ -87,15 +87,15 @@ export function getHelpCommands(): HelpCommandItem[] {
     },
     {
       section: '部署',
-      command: '部署 nova / 部署 nova 集测 / 部署 cc-web / 部署 react18 / 部署 base / 部署 base18',
+      command: '部署 nova / 部署 nova 集测 / 部署 cc-web / 部署 react18 / 部署 base / 部署 base18 / 部署 mdf-ui / 部署 mdf-biz',
       description:
-        '触发 Jenkins 任务；nova 默认 test；部署 nova 集测使用 react18 最大 sprint 分支；可扩展到其它已配置项目代号',
+        '触发 Jenkins 任务；nova、mdf-ui、mdf-biz 默认 test；部署 nova 集测使用 react18 最大 sprint 分支；可扩展到其它已配置项目代号',
     },
     {
       section: '合并',
-      command: '合并 nova / 合并 nova 集测 / 合并 biz-solution / 合并 biz-solution 集测 / 合并 scm',
+      command: '合并 nova / 合并 nova 集测 / 合并 biz-solution / 合并 biz-solution 集测 / 合并 scm / 合并 mdf-ui / 合并 mdf-biz',
       description:
-        '将当前分支合并到测试或集测分支；nova/biz-solution 集测合并到 react18 最大 sprint 分支（算法同升级集测 react18 nova 版本）',
+        '将当前分支合并到测试或集测分支；mdf-ui/mdf-biz 合并到 test；nova/biz-solution 集测合并到 react18 最大 sprint 分支（算法同升级集测 react18 nova 版本）',
     },
     {
       section: 'Jira',

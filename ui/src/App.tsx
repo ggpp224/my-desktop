@@ -12,6 +12,7 @@ import { CommandStatsPanel } from './CommandStatsPanel';
 import { CommandCapabilityPanel } from './CommandCapabilityPanel';
 import { KnowledgeDocPanel } from './KnowledgeDocPanel';
 import { MdToPdfPanel } from './MdToPdfPanel';
+import { TechDigestPanel } from './TechDigestPanel';
 import { LlmSettingsModal } from './view/LlmSettingsModal';
 import { HeaderTabNav } from './view/HeaderTabNav';
 import { ThemeSwitcher } from './view/ThemeSwitcher';
@@ -28,6 +29,7 @@ const MY_WORK_SESSION_STORAGE_KEY = 'ai-dev-control-center:my-work-session-id';
 type HeaderTab = { key: string; label: string; docPath?: string };
 const HEADER_TABS: HeaderTab[] = [
   { key: 'workspace', label: 'AI Dev Control Center' },
+  { key: 'tech-digest', label: '技术趋势' },
 ];
 const HELP_COMMANDS = getHelpCommands();
 const HELP_CODES = getHelpCodebook();
@@ -321,7 +323,7 @@ export default function App() {
   };
 
   const closeHeaderTab = async (tabKey: string) => {
-    if (tabKey === 'workspace') return;
+    if (tabKey === 'workspace' || tabKey === 'tech-digest') return;
     if (tabKey === 'my-work' && myWorkSessionId) {
       try {
         await fetch(`${apiBase}/workflow/sessions/${encodeURIComponent(myWorkSessionId)}`, { method: 'DELETE' });
@@ -610,6 +612,24 @@ export default function App() {
               />
             </div>
           )}
+          {/* AI 生成 By Peng.Guo：技术趋势常驻挂载，切换页签不销毁内容、不中断刷新 SSE */}
+          <div
+            style={{
+              display: activeHeaderTab === 'tech-digest' ? 'flex' : 'none',
+              flex: 1,
+              minHeight: 0,
+              minWidth: 0,
+              width: '100%',
+              height: '100%',
+              overflow: 'hidden',
+            }}
+          >
+            <TechDigestPanel
+              apiBase={apiBase ?? DEFAULT_API_BASE}
+              themeTokens={themeTokens}
+              agentChatLlmBody={agentChatLlmBody}
+            />
+          </div>
           {activeHeaderTab === 'my-work' && (
             <div style={{ flex: 1, minHeight: 0, width: '100%', height: '100%', display: 'flex', overflow: 'hidden' }}>
               {myWorkSessionId && apiServerOk ? (

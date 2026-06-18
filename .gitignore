@@ -13,7 +13,18 @@ node_modules
 /runtime/command-stats.sqlite
 /runtime/command-stats.sqlite-wal
 /runtime/command-stats.sqlite-shm
+/runtime/tech-digest/
 /runtime/embedded-workflow-sessions.json
 storage/
 /ui/.npm-cache/
 /.npm-cache/
+
+# ccfe runtime generated files
+/.ccfe/AGENTS.md
+/.ccfe/assets.yaml
+/.ccfe/changes
+/.ccfe/projection.yaml
+/.ccfe/runtime.yaml
+/.cursor/skills
+/AGENTS.md
+# /ccfe runtime generated files

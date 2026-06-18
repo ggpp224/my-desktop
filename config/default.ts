@@ -137,4 +137,21 @@ export const config = {
     /** 知识库问答 / 预处理 / 重排：宜偏低，减少胡编 */
     temperature: parseOllamaTemperatureFromEnv('OLLAMA_KB_TEMPERATURE', 0.1),
   },
+  techDigest: {
+    githubLimit: Math.max(1, Number(process.env.TECH_DIGEST_GITHUB_LIMIT) || 50),
+    hnLimit: Math.max(1, Number(process.env.TECH_DIGEST_HN_LIMIT) || 30),
+    redditLimit: Math.max(1, Number(process.env.TECH_DIGEST_REDDIT_LIMIT) || 20),
+    fetchTimeoutMs: Math.max(5000, Number(process.env.TECH_DIGEST_FETCH_TIMEOUT_MS) || 30_000),
+    llmTimeoutMs: Math.max(60_000, Number(process.env.TECH_DIGEST_LLM_TIMEOUT_MS) || 600_000),
+    ollamaTemperature: parseOllamaTemperatureFromEnv('OLLAMA_TECH_DIGEST_TEMPERATURE', 0.3),
+    githubToken: (process.env.GITHUB_TOKEN ?? '').trim(),
+    /** Reddit 要求唯一 UA，格式 platform:appId:version (by /u/username) */
+    redditUserAgent: (process.env.REDDIT_USER_AGENT ?? '').trim(),
+    redditClientId: (process.env.REDDIT_CLIENT_ID ?? '').trim(),
+    redditClientSecret: (process.env.REDDIT_CLIENT_SECRET ?? '').trim(),
+    /** 连续 Reddit 请求最小间隔（毫秒） */
+    redditRequestGapMs: Math.max(1000, Number(process.env.TECH_DIGEST_REDDIT_GAP_MS) || 8000),
+    /** 遇到 429 后全局冷却（毫秒） */
+    reddit429CooldownMs: Math.max(5000, Number(process.env.TECH_DIGEST_REDDIT_429_COOLDOWN_MS) || 45_000),
+  },
 };

@@ -161,7 +161,7 @@ export const toolsSchema = [
     type: 'function' as const,
     function: {
       name: 'open_jenkins_job',
-      description: '打开某项目对应的 Jenkins 任务页面。用户说「打开jenkins nova」「打开 Jenkins 的 cc-web/cc-node」时使用；job=预定义 key（nova、cc-web、cc-node、react18、base、base18、biz-solution、biz-guide、scm）',
+      description: '打开某项目对应的 Jenkins 任务页面。用户说「打开jenkins nova」「打开 Jenkins 的 cc-web/cc-node/mdf-ui」时使用；job=预定义 key（nova、cc-web、cc-node、react18、base、base18、biz-solution、biz-guide、scm、mdf-ui、mdf-biz）',
       parameters: {
         type: 'object',
         required: ['job'],
@@ -376,14 +376,14 @@ export const toolsSchema = [
     function: {
       name: 'merge_repo',
       description:
-        '合并仓库。合并 nova → repo=nova；合并 nova 集测 → repo=nova-pretest；合并 biz-solution → repo=biz-solution；合并 biz-solution 集测 → repo=biz-solution-pretest（目标为 react18 最大 sprint 分支）；合并 scm → repo=scm',
+        '合并仓库。合并 nova → repo=nova；合并 nova 集测 → repo=nova-pretest；合并 biz-solution → repo=biz-solution；合并 biz-solution 集测 → repo=biz-solution-pretest（目标为 react18 最大 sprint 分支）；合并 scm/mdf-ui/mdf-biz → repo=对应代号',
       parameters: {
         type: 'object',
         required: ['repo'],
         properties: {
           repo: {
             type: 'string',
-            description: 'nova、nova-pretest、biz-solution、biz-solution-pretest 或 scm',
+            description: 'nova、nova-pretest、biz-solution、biz-solution-pretest、scm、mdf-ui、mdf-biz 等已配置 merge 的代号',
           },
         },
       },

@@ -93,3 +93,62 @@ body {
   padding: 0;
   background: transparent;
 }
+
+/* AI 生成 By Peng.Guo — 技术雷达榜单列表排版 */
+.tech-digest-markdown.markdown-body h1 {
+  font-size: 18px;
+  margin: 0 0 16px;
+  padding-bottom: 8px;
+}
+
+.tech-digest-markdown.markdown-body h2 {
+  font-size: 15px;
+  margin: 24px 0 12px;
+  padding-bottom: 6px;
+}
+
+.tech-digest-markdown.markdown-body h3 {
+  font-size: 14px;
+  margin: 16px 0 10px;
+  color: #424a53;
+}
+
+.tech-digest-markdown.markdown-body ol {
+  padding-left: 1.6em;
+  margin: 0 0 8px;
+  list-style-position: outside;
+}
+
+.tech-digest-markdown.markdown-body ol > li {
+  margin-bottom: 1.1em;
+  padding-left: 0.35em;
+}
+
+.tech-digest-markdown.markdown-body ol > li::marker {
+  font-weight: 600;
+  color: #6e7781;
+}
+
+.tech-digest-markdown.markdown-body ol > li > p {
+  margin: 0.3em 0;
+  font-size: 13px;
+  line-height: 1.65;
+  color: #57606a;
+}
+
+.tech-digest-markdown.markdown-body ol > li > p:first-child {
+  margin-top: 0;
+  margin-bottom: 0.45em;
+  font-size: 14px;
+  line-height: 1.5;
+  color: #24292f;
+}
+
+.tech-digest-markdown.markdown-body ol > li > p:first-child a {
+  font-weight: 600;
+}
+
+.tech-digest-markdown.markdown-body ol > li > p strong {
+  color: #24292f;
+  font-weight: 600;
+}

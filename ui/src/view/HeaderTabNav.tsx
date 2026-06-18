@@ -18,6 +18,7 @@ type HeaderTabNavProps = {
 
 function resolveTabIcon(tabKey: string): string {
   if (tabKey === 'workspace') return '⌂';
+  if (tabKey === 'tech-digest') return '◎';
   if (tabKey === 'my-work') return '⌘';
   if (tabKey === 'knowledge-base') return '◫';
   if (tabKey === 'command-stats') return '▥';
@@ -47,7 +48,7 @@ export function HeaderTabNav({
     >
       {tabs.map((tab) => {
         const isActive = activeTabKey === tab.key;
-        const closable = tab.key !== 'workspace';
+        const closable = tab.key !== 'workspace' && tab.key !== 'tech-digest';
         const showClose = hoveredTabKey === tab.key;
         return (
           <div

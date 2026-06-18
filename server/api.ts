@@ -58,6 +58,9 @@ import {
   recordWorkflowEmbedded,
   recordWorkflowStep,
 } from './stats/command-stats-record.js';
+import { loadAllDigests, loadDigest } from './trends/trends-repository.js';
+import { runTechDigestRefreshForPeriod } from './trends/trends-service.js';
+import type { TechDigestScope } from './trends/trends-types.js';
 
 /** 出站 DNS 优先 IPv4，避免部分网络 IPv6 不通导致 Google 等连接在 IPv6 上卡死至超时 */
 if (typeof dns.setDefaultResultOrder === 'function') {
@@ -70,6 +73,21 @@ app.use(express.json({ limit: '30mb' }));
 
 /** 进行中的 /agent/chat 可中止：切换模型或新请求时取消与 Ollama 的连接 */
 let agentChatAbort: AbortController | null = null;
+
+/** 进行中的技术趋势刷新可中止（按 scope 独立） */
+const techDigestAbortByScope: Partial<Record<TechDigestScope, AbortController>> = {};
+
+function parseTechDigestScope(raw: unknown): TechDigestScope | null {
+  const s = String(raw ?? '').trim();
+  if (s === 'daily' || s === 'monthly' || s === 'halfYear') return s;
+  return null;
+}
+
+function abortTechDigestRefresh(scope: TechDigestScope): void {
+  techDigestAbortByScope[scope]?.abort();
+  delete techDigestAbortByScope[scope];
+}
+
 
 function abortAgentChat(): void {
   agentChatAbort?.abort();
@@ -518,6 +536,95 @@ app.post('/open-url', async (req, res) => {
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
     res.status(500).json({ success: false, error: msg });
+  }
+});
+
+/** 技术趋势：读取缓存报告（可选 scope） */
+app.get('/tech-digest/latest', (req, res) => {
+  try {
+    const scope = parseTechDigestScope(req.query?.scope);
+    if (scope) {
+      const report = loadDigest(scope);
+      res.json({ success: true, report });
+      return;
+    }
+    const all = loadAllDigests();
+    res.json({
+      success: true,
+      daily: all.daily ?? null,
+      monthly: all.monthly ?? null,
+      halfYear: all.halfYear ?? null,
+    });
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    res.status(500).json({ success: false, error: msg });
+  }
+});
+
+/** 技术趋势：按 scope 手动刷新（SSE 进度） */
+app.post('/tech-digest/refresh/stream', async (req, res) => {
+  const scope = parseTechDigestScope(req.body?.scope);
+  if (!scope) {
+    res.status(400).json({ success: false, error: '缺少或无效的 scope（daily | monthly | halfYear）' });
+    return;
+  }
+
+  let llm: AgentLlmOptions | undefined;
+  try {
+    llm = parseAgentLlmFromBody(req.body);
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : String(e);
+    res.status(400).json({ success: false, error: msg });
+    return;
+  }
+
+  abortTechDigestRefresh(scope);
+  const controller = new AbortController();
+  techDigestAbortByScope[scope] = controller;
+  const { signal } = controller;
+
+  res.setHeader('Content-Type', 'text/event-stream');
+  res.setHeader('Cache-Control', 'no-cache');
+  res.setHeader('Connection', 'keep-alive');
+  res.setHeader('X-Accel-Buffering', 'no');
+  const socket = (res as unknown as { socket?: { setNoDelay?: (v: boolean) => void } }).socket;
+  if (socket?.setNoDelay) socket.setNoDelay(true);
+  res.flushHeaders?.();
+
+  const send = (obj: unknown) => {
+    const payload = `data: ${JSON.stringify(obj)}\n\n`;
+    res.write(payload, 'utf8', () => {
+      if (typeof (res as unknown as { flush?: () => void }).flush === 'function') {
+        (res as unknown as { flush: () => void }).flush();
+      }
+    });
+  };
+
+  try {
+    const report = await runTechDigestRefreshForPeriod(scope, llm, {
+      signal,
+      onProgress: (message) => send({ type: 'progress', message }),
+      onLlmDelta: (delta) =>
+        send({
+          type: 'llm_delta',
+          thinkingDelta: delta.thinkingDelta,
+          contentDelta: delta.contentDelta,
+        }),
+    });
+    send({ type: 'result', report });
+  } catch (err) {
+    const aborted = signal.aborted || (err instanceof Error && err.name === 'AbortError');
+    const msg = aborted ? '刷新已取消' : err instanceof Error ? err.message : String(err);
+    try {
+      send({ type: 'error', error: msg });
+    } catch {
+      /* 客户端已断开 */
+    }
+  } finally {
+    if (techDigestAbortByScope[scope]?.signal === signal) {
+      delete techDigestAbortByScope[scope];
+    }
+    res.end();
   }
 });
 

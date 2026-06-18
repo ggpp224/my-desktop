@@ -105,11 +105,15 @@ const PROJECT_ENTRIES: ProjectEntry[] = [
     codes: ['mdf-ui'],
     path: process.env.PROJECT_PATH_MDF_UI!,
     devCmd: process.env.PROJECT_DEV_CMD_MDF_UI || 'yarn w',
+    jenkins: { jobName: process.env.JENKINS_JOB_MDF_UI!, defaultBranch: process.env.JENKINS_DEFAULT_BRANCH_NOVA! },
+    merge: { targetBranch: process.env.MERGE_TARGET_BRANCH_NOVA!, runRelease: false },
   },
   {
     codes: ['mdf-biz'],
     path: process.env.PROJECT_PATH_MDF_BIZ!,
     devCmd: process.env.PROJECT_DEV_CMD_MDF_BIZ || 'yarn w',
+    jenkins: { jobName: process.env.JENKINS_JOB_MDF_BIZ!, defaultBranch: process.env.JENKINS_DEFAULT_BRANCH_NOVA! },
+    merge: { targetBranch: process.env.MERGE_TARGET_BRANCH_NOVA!, runRelease: false },
   },
   {
     codes: ['ai-import'],

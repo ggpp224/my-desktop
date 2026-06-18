@@ -21,6 +21,18 @@ alwaysApply: false
 | `OLLAMA_KB_TEMPERATURE` | 知识库问答/预处理/重排 temperature，宜偏低 | `0.1` |
 | `OLLAMA_WEEKLY_REPORT_TEMPERATURE` | 写周报生成 temperature | `0.4` |
 | `OLLAMA_TEAM_SUMMARY_TEMPERATURE` | 组内总结生成 temperature | `0.4` |
+| `OLLAMA_TECH_DIGEST_TEMPERATURE` | 技术趋势页签 digest 分析 temperature | `0.3` |
+| `TECH_DIGEST_GITHUB_LIMIT` | GitHub Trending 抓取条数 | `50` |
+| `TECH_DIGEST_HN_LIMIT` | Hacker News Top 条数 | `30` |
+| `TECH_DIGEST_REDDIT_LIMIT` | 每个 Reddit 版块 Top 条数 | `20` |
+| `TECH_DIGEST_FETCH_TIMEOUT_MS` | 单数据源抓取超时（毫秒） | `30000` |
+| `TECH_DIGEST_LLM_TIMEOUT_MS` | digest LLM 分析总超时（毫秒） | `600000` |
+| `GITHUB_TOKEN` | 可选：GitHub API Token，提升 repo 元数据质量 | 留空 |
+| `REDDIT_USER_AGENT` | Reddit 抓取 UA（建议 `desktop:app:version (by /u/你的用户名)`） | 内置默认 |
+| `REDDIT_CLIENT_ID` | 可选：Reddit App Client ID，配置后优先走 OAuth JSON API | 留空 |
+| `REDDIT_CLIENT_SECRET` | 可选：与 Client ID 配对的 Secret | 留空 |
+| `TECH_DIGEST_REDDIT_GAP_MS` | 串行 Reddit 请求最小间隔（毫秒），6 次抓取约需 48s+ | `8000` |
+| `TECH_DIGEST_REDDIT_429_COOLDOWN_MS` | Reddit 返回 429 后的全局冷却（毫秒） | `45000` |
 | `OLLAMA_THINK` | 是否在 `/api/chat` 传 `think`；**默认不传**（兼容非 thinking 模型）；`true`/`1`/`low`/`medium`/`high` 开启；若开启而模型不支持，会自动去掉 `think` 重试 | 留空 |
 | `API_PORT` | 本应用 API 端口（**勿用 `PORT`**，cc-web cjet dev 会读 `PORT` 抢端口） | `41738` |
 | `SHELL_CWD` | Shell 工具允许的工作目录 | 空则用 `process.cwd()` |
@@ -67,6 +79,8 @@ alwaysApply: false
 | `JENKINS_JOB_CC_WEB` | cc-web |
 | `JENKINS_JOB_CC_NODE` | cc-node |
 | `JENKINS_JOB_NOVA` | nova / nova-next |
+| `JENKINS_JOB_MDF_UI` | mdf-ui |
+| `JENKINS_JOB_MDF_BIZ` | mdf-biz |
 
 ## 五、项目路径（config/projects.ts）
 

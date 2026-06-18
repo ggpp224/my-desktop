@@ -11,7 +11,7 @@ const JSON_CONFIG_CENTER_URL = 'https://inte-feconfig.chanjet.com.cn/#/project/p
 import { config } from '../config/default.js';
 import { getJenkinsPreset } from '../config/jenkins-presets.js';
 import { existsSync, statSync } from 'fs';
-import { getProjectByCode, getProjectPath } from '../config/projects.js';
+import { getProjectByCode, getProjectPath, getProjectsWithMerge } from '../config/projects.js';
 import { resolveWorkflowForTaskKey } from '../config/workflow-task-registry.js';
 import { run as shellRun } from '../tools/shell-tool.js';
 import { open as browserOpen } from '../tools/browser-tool.js';
@@ -21,13 +21,7 @@ import { startProjectDev } from '../tools/project-start-tool.js';
 import { openEmbeddedTerminalWorkspace, startEmbeddedWorkflow } from '../tools/workflow-embedded-service.js';
 import { deployNovaPretest, deployByJobKey } from '../tools/deploy-jenkins-helper.js';
 import { runCompositeNovaMergeAndDeploy } from '../tools/composite-nova-workflow-tool.js';
-import {
-  mergeNova,
-  mergeNovaPretest,
-  mergeBizSolution,
-  mergeBizSolutionPretest,
-  mergeScm,
-} from '../tools/merge-tool.js';
+import { mergeByCode, mergeNovaPretest, mergeBizSolutionPretest } from '../tools/merge-tool.js';
 import { openInIde } from '../tools/open-ide-tool.js';
 import { closeIdeProject } from '../tools/close-ide-tool.js';
 import { searchMyBugs, searchOnlineBugs, searchWeeklyDoneTasks, searchWeeklyHandoffBugs } from '../tools/jira-tool.js';
@@ -279,6 +273,12 @@ export async function routeAndExecute(call: ToolCall, ctx?: RouteExecuteContext)
     case 'merge_repo': {
       const repo = ((args?.repo as string) ?? '').trim().toLowerCase();
       const intent = ((args?.intent as string) ?? (args?.message as string) ?? '').trim();
+      const mergeOptions = ctx?.onToolProgress
+        ? {
+            onStep: (message: string) =>
+              ctx.onToolProgress?.({ phase: 'progress', tool: 'merge_repo', message }),
+          }
+        : undefined;
       const novaPretest =
         repo === 'nova-pretest' ||
         repo === 'nova集测' ||
@@ -287,14 +287,15 @@ export async function routeAndExecute(call: ToolCall, ctx?: RouteExecuteContext)
         repo === 'biz-solution-pretest' ||
         repo === 'biz-solution集测' ||
         (repo === 'biz-solution' && /集测/.test(intent));
-      if (novaPretest) return mergeNovaPretest();
-      if (bizSolutionPretest) return mergeBizSolutionPretest();
-      if (repo === 'nova') return mergeNova();
-      if (repo === 'biz-solution') return mergeBizSolution();
-      if (repo === 'scm') return mergeScm();
-      throw new Error(
-        `不支持的 merge_repo: ${repo}，应为 nova、nova-pretest、biz-solution、biz-solution-pretest 或 scm`
-      );
+      if (novaPretest) return mergeNovaPretest(mergeOptions);
+      if (bizSolutionPretest) return mergeBizSolutionPretest(mergeOptions);
+      if (getProjectByCode(repo)?.merge) return mergeByCode(repo, mergeOptions);
+      const supported = [
+        ...getProjectsWithMerge().flatMap((p) => p.codes),
+        'nova-pretest',
+        'biz-solution-pretest',
+      ];
+      throw new Error(`不支持的 merge_repo: ${repo}，应为 ${supported.join('、')}`);
     }
     case 'composite_nova_merge_and_deploy':
       return runCompositeNovaMergeAndDeploy({

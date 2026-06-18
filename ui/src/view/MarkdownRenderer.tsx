@@ -6,13 +6,57 @@ import remarkGfm from 'remark-gfm';
 import { APP_THEME_TOKENS, type AppThemeTokens } from '../domain/theme/appTheme';
 import { Button } from './Button';
 
+export type MarkdownRendererVariant = 'default' | 'tech-digest';
+
 type MarkdownRendererProps = {
   markdown: string;
   onLinkClick?: (href: string) => boolean;
   themeTokens?: AppThemeTokens;
+  variant?: MarkdownRendererVariant;
 };
 
 const MARKDOWN_SYNTAX_REG = /(^|\n)\s{0,3}(#{1,6}\s|[-*+]\s|\d+\.\s|>\s|```)|\[[^\]]+\]\([^)]+\)|\|.+\|/m;
+
+/** 将榜单条目中断行缩进，修复旧缓存中描述段落顶格的问题 */
+function normalizeTechDigestMarkdown(markdown: string): string {
+  const lines = markdown.split('\n');
+  const result: string[] = [];
+  let inNumberedEntry = false;
+
+  for (const line of lines) {
+    const isNumberedTitle = /^\d+\.\s+\*\*/.test(line);
+    const isHeading = /^#{1,6}\s/.test(line);
+    const isBlockquote = /^>\s/.test(line);
+    const isHorizontalRule = /^---\s*$/.test(line);
+    const isEmpty = line.trim() === '';
+    const isAlreadyIndented = /^    /.test(line);
+
+    if (isNumberedTitle) {
+      inNumberedEntry = true;
+      result.push(line);
+      continue;
+    }
+
+    if (isHeading || isHorizontalRule) {
+      inNumberedEntry = false;
+      result.push(line);
+      continue;
+    }
+
+    if (inNumberedEntry && !isEmpty && !isAlreadyIndented && !isBlockquote) {
+      result.push(`    ${line}`);
+      continue;
+    }
+
+    if (!isEmpty && !isAlreadyIndented && !isBlockquote) {
+      inNumberedEntry = false;
+    }
+
+    result.push(line);
+  }
+
+  return result.join('\n');
+}
 
 export function isLikelyMarkdown(text: string): boolean {
   return MARKDOWN_SYNTAX_REG.test(text);
@@ -84,9 +128,21 @@ function CodeBlock({
   );
 }
 
-export function MarkdownRenderer({ markdown, onLinkClick, themeTokens = APP_THEME_TOKENS.blue }: MarkdownRendererProps) {
+export function MarkdownRenderer({
+  markdown,
+  onLinkClick,
+  themeTokens = APP_THEME_TOKENS.blue,
+  variant = 'default',
+}: MarkdownRendererProps) {
+  const rootClass =
+    variant === 'tech-digest'
+      ? 'markdown-body gitlab-markdown-body tech-digest-markdown'
+      : 'markdown-body gitlab-markdown-body';
+
+  const renderedMarkdown = variant === 'tech-digest' ? normalizeTechDigestMarkdown(markdown) : markdown;
+
   return (
-    <div className="markdown-body gitlab-markdown-body">
+    <div className={rootClass}>
       <ReactMarkdown
         remarkPlugins={[remarkGfm]}
         rehypePlugins={[rehypeHighlight]}
@@ -116,7 +172,7 @@ export function MarkdownRenderer({ markdown, onLinkClick, themeTokens = APP_THEM
           },
         }}
       >
-        {markdown}
+        {renderedMarkdown}
       </ReactMarkdown>
     </div>
   );

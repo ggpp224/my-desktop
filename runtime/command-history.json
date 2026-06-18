@@ -1,14 +1,14 @@
 {
   "items": [
-    "部署 biz-solution",
-    "启动 scm",
-    "合并 biz-solution",
-    "部署 biz-solution",
-    "合并 biz-solution",
-    "部署 biz-solution",
-    "合并 nova",
     "部署 nova",
-    "统计常用指令",
-    "合并 biz-solution"
+    "开始工作",
+    "开始工作，使用外部终端",
+    "合并 mdf-ui",
+    "部署 mdf-ui",
+    "合并 mdf-biz",
+    "部署 mdf-biz",
+    "合并 nova",
+    "部署 novan",
+    "部署 nova"
   ]
 }
