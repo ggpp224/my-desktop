@@ -15,6 +15,12 @@ export function getHelpCommands(): HelpCommandItem[] {
     },
     {
       section: '快速开始',
+      command: '技术趋势（顶部页签）',
+      description:
+        '点击顶部「技术趋势」：聚合 GitHub/HN/Reddit 抓取 + LLM 解读；今日与中长周期（本月+半年度）独立刷新，SSE 进度',
+    },
+    {
+      section: '快速开始',
       command: '开始工作',
       description: '一键启动常用开发环境（cpxy、react18、cc-web、biz-solution、uikit、shared、docker）',
     },

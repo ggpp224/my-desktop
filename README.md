@@ -14,10 +14,12 @@
 - **知识库能力**：支持私人知识库目录导入、索引重建、来源文档打开与文档内相对链接跳转。
 - **协同能力**：Jira 固定查询（我的 bug / 线上 bug / 本周完成 / 本周经我手 bug）、Wiki 周报定位/抓取、周报自动编写、组内总结生成。
 - **工程辅助能力**：Cursor 用量查询与 Cookie 自动同步；命令历史持久化（`runtime/command-history.json`）；主题持久化。
+- **技术趋势能力**：聚合 GitHub Trending、Hacker News、Reddit 多源抓取，经关键词过滤与 LLM 分析生成日/月/半年度 Markdown 报告；支持 SSE 流式刷新与本地缓存（`runtime/tech-digest/`）。
 - **SDK 自动化能力（PoC）**：支持基于 Cursor SDK 的仓库健康检查与 PR 自动审查脚本（本地运行，可落盘审查报告）。
 
-## 近期新增能力（2026-05）
+## 近期新增能力（2026-05 ~ 2026-06）
 
+- **技术趋势页签**：顶部常驻「技术趋势」，聚合 GitHub / HN / Reddit 抓取 + LLM 解读；`GET /tech-digest/latest`、`POST /tech-digest/refresh/stream`（SSE）；缓存 `runtime/tech-digest/`。
 - **主题系统**：新增浅色/深色/高对比主题切换，前端会记忆上次主题。
 - **模型设置面板**：新增本地/外部模式切换；Gemini API Key、模型、Base URL 可视化配置与连通性测试。
 - **流式体验增强**：`/agent/chat/stream` 增加 `llm_delta`、`tool_progress`、`token_usage` 事件，聊天体验更平滑。
@@ -173,6 +175,10 @@ npm run sdk:pr-review -- --base main --model default
   - `CURSOR_SDK_MODEL`
   - `CURSOR_SDK_REVIEW_MODEL`
   - `CURSOR_SDK_REVIEW_BASE`
+- **技术趋势**
+  - `OLLAMA_TECH_DIGEST_TEMPERATURE`、`TECH_DIGEST_*` 抓取/超时/Reddit 限流参数
+  - 可选：`GITHUB_TOKEN`、`REDDIT_USER_AGENT`、`REDDIT_CLIENT_ID` / `REDDIT_CLIENT_SECRET`
+  - 出站代理与 Gemini 共用：`HTTPS_PROXY` / `HTTP_PROXY` / `ALL_PROXY` / macOS 系统 SOCKS
 
 完整环境变量说明见：`.cursor/rules/env-constants.mdc`。
 
@@ -241,17 +247,18 @@ npm run sdk:pr-review -- --base main --model default
 - 查询：`我的bug`、`本周已完成任务`
 - 周报：`周报`、`写周报`、`组内总结`
 - Cursor：`cursor用量`、`cursor今日用量`
+- 技术趋势：点击顶部「技术趋势」页签 → 刷新今日 / 中长周期报告
 
 ## 主要目录
 
 ```text
 agent/       Agent 编排、工具 schema、模型调用
-server/      Express API（含 SSE、终端会话、部署/合并接口）
+server/      Express API（含 SSE、终端会话、部署/合并、技术趋势 trends/）
 tools/       Shell/Jenkins/Jira/Wiki/Cursor/Workflow 等工具实现
 workflows/   工作流配置（start-work/standalone/upgrade-*）
 desktop/     Electron 主进程与 preload
-ui/          React + Vite 前端
+ui/          React + Vite 前端（含 TechDigestPanel）
 config/      项目映射、Jenkins 预设、默认配置
-runtime/     运行时数据（如命令历史）
+runtime/     运行时数据（命令历史、技术趋势缓存 tech-digest/ 等）
 docs/        使用文档（自然语言指令等）
 ```
