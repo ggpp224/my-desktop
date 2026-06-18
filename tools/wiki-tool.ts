@@ -1,6 +1,7 @@
 /* AI 生成 By Peng.Guo */
 import { open as browserOpen } from './browser-tool.js';
 import { config } from '../config/default.js';
+import { formatWikiWeekRangeTitleInTimeZone, getCalendarQuarterInTimeZone } from './jira-weekly-window.js';
 
 export type WeeklyReportResult = {
   quarter: string;
@@ -55,17 +56,6 @@ interface ConfluenceContentResponse {
     view?: ConfluenceContentBody;
   };
   version?: { number?: number; when?: string };
-}
-
-function pad2(value: number): string {
-  return String(value).padStart(2, '0');
-}
-
-function toYYMMDD(date: Date): string {
-  const yy = date.getFullYear() % 100;
-  const mm = date.getMonth() + 1;
-  const dd = date.getDate();
-  return `${pad2(yy)}${pad2(mm)}${pad2(dd)}`;
 }
 
 function normalizeBaseUrl(value: string): string {
@@ -137,24 +127,63 @@ function parseWeekRangeTitle(title: string): { start: string; end: string } | nu
   return { start: match[1], end: match[2] };
 }
 
-function pickLatestQuarterPage(pages: ConfluencePageItem[]): ConfluencePageItem | null {
+export function pickQuarterPageForDate(pages: ConfluencePageItem[], now: Date, timeZone: string): ConfluencePageItem | null {
+  const { year: targetYear, quarter: targetQuarter } = getCalendarQuarterInTimeZone(now, timeZone);
   const quarterPages = pages
     .map((page) => ({ page, parsed: parseQuarterTitle(page.title ?? '') }))
     .filter((item): item is { page: ConfluencePageItem; parsed: { year: number; quarter: number } } => Boolean(item.parsed));
   if (quarterPages.length === 0) return null;
-  quarterPages.sort((a, b) => {
+
+  const exact = quarterPages.find(
+    (item) => item.parsed.year === targetYear && item.parsed.quarter === targetQuarter,
+  );
+  if (exact) return exact.page;
+
+  const notFuture = quarterPages.filter((item) => {
+    if (item.parsed.year !== targetYear) return item.parsed.year < targetYear;
+    return item.parsed.quarter <= targetQuarter;
+  });
+  if (notFuture.length === 0) return null;
+  notFuture.sort((a, b) => {
     if (a.parsed.year !== b.parsed.year) return b.parsed.year - a.parsed.year;
     return b.parsed.quarter - a.parsed.quarter;
   });
-  return quarterPages[0].page;
+  return notFuture[0].page;
 }
 
-function pickLatestWeekPageInQuarter(pages: ConfluencePageItem[], quarterPageId: string): ConfluencePageItem | null {
+export function pickWeekPageForDate(
+  pages: ConfluencePageItem[],
+  quarterPageId: string,
+  now: Date,
+  timeZone: string,
+): ConfluencePageItem | null {
+  const expectedWeekRange = formatWikiWeekRangeTitleInTimeZone(now, timeZone);
+  const mondayYyMmDd = expectedWeekRange.slice(0, 6);
+  const sundayYyMmDd = expectedWeekRange.slice(7, 13);
   const weeklyPages = pages
     .filter((page) => (page.ancestors ?? []).some((ancestor) => (ancestor.id ?? '').trim() === quarterPageId))
     .map((page) => ({ page, parsed: parseWeekRangeTitle(page.title ?? '') }))
     .filter((item): item is { page: ConfluencePageItem; parsed: { start: string; end: string } } => Boolean(item.parsed));
   if (weeklyPages.length === 0) return null;
+
+  const exact = weeklyPages.find((item) => (item.page.title ?? '').trim() === expectedWeekRange);
+  if (exact) return exact.page;
+
+  const matchingMondayWeek = weeklyPages.find(
+    (item) => item.parsed.start === mondayYyMmDd && item.parsed.end === sundayYyMmDd,
+  );
+  if (matchingMondayWeek) return matchingMondayWeek.page;
+
+  const endedBeforeThisWeek = weeklyPages.filter((item) => item.parsed.end < mondayYyMmDd);
+  if (endedBeforeThisWeek.length > 0) {
+    endedBeforeThisWeek.sort((a, b) => {
+      const byEnd = b.parsed.end.localeCompare(a.parsed.end);
+      if (byEnd !== 0) return byEnd;
+      return b.parsed.start.localeCompare(a.parsed.start);
+    });
+    return endedBeforeThisWeek[0].page;
+  }
+
   weeklyPages.sort((a, b) => {
     const byEnd = b.parsed.end.localeCompare(a.parsed.end);
     if (byEnd !== 0) return byEnd;
@@ -168,14 +197,15 @@ export async function resolveWeeklyReportNavigation(): Promise<WeeklyReportResul
   const baseUrl = normalizeBaseUrl(config.wiki.baseUrl);
   const spaceName = config.wiki.weeklySpaceName.trim() || '低代码单据前端空间';
   const rootPageId = config.wiki.weeklyRootPageId.trim() || '405143687';
+  const timeZone = config.jira.weeklyReportTimeZone.trim() || 'Asia/Shanghai';
 
   const rootUrl = `${baseUrl}/pages/viewpage.action?pageId=${encodeURIComponent(rootPageId)}`;
   const now = new Date();
-  const nowHint = `${toYYMMDD(now)}`;
-  const searchUrl = `${baseUrl}/dosearchsite.action?queryString=${encodeURIComponent(`${spaceName} ${nowHint}`)}`;
+  const weekRangeHint = formatWikiWeekRangeTitleInTimeZone(now, timeZone);
+  const searchUrl = `${baseUrl}/dosearchsite.action?queryString=${encodeURIComponent(`${spaceName} ${weekRangeHint}`)}`;
   const baseResult: WeeklyReportResult = {
     quarter: '',
-    weekRange: '',
+    weekRange: weekRangeHint,
     rootUrl,
     searchUrl,
     targetUrl: searchUrl,
@@ -187,13 +217,13 @@ export async function resolveWeeklyReportNavigation(): Promise<WeeklyReportResul
   }
 
   const allDescendants = await fetchAllDescendantPages(baseUrl, rootPageId);
-  const quarterPage = pickLatestQuarterPage(allDescendants);
+  const quarterPage = pickQuarterPageForDate(allDescendants, now, timeZone);
   const quarterId = (quarterPage?.id ?? '').trim();
   if (!quarterPage || !quarterId) {
     return baseResult;
   }
   baseResult.quarter = (quarterPage.title ?? '').trim();
-  const weeklyPage = pickLatestWeekPageInQuarter(allDescendants, quarterId);
+  const weeklyPage = pickWeekPageForDate(allDescendants, quarterId, now, timeZone);
   const weekTitle = (weeklyPage?.title ?? '').trim();
   const webui = (weeklyPage?._links?.webui ?? '').trim();
   if (weekTitle && webui) {

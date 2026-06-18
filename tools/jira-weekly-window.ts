@@ -31,7 +31,7 @@ function extractYmdHmInTz(utcMillis: number, timeZone: string): YmdHm {
   return { y: m.year, mon: m.month, d: m.day, h: m.hour, min: m.minute };
 }
 
-function extractYmdInTz(d: Date, timeZone: string): { y: number; m: number; d: number } {
+export function extractYmdInTz(d: Date, timeZone: string): { y: number; m: number; d: number } {
   const f = new Intl.DateTimeFormat('en-CA', { timeZone, year: 'numeric', month: '2-digit', day: '2-digit' });
   const m: Record<string, number> = {};
   for (const p of f.formatToParts(d)) {
@@ -94,6 +94,30 @@ export function formatJiraDateTimeInZone(d: Date, timeZone: string): string {
     f.formatToParts(d).filter((x) => x.type !== 'literal').map((x) => [x.type, x.value]),
   ) as { year: string; month: string; day: string; hour: string; minute: string };
   return `${parts.year}/${parts.month}/${parts.day} ${parts.hour}:${parts.minute}`;
+}
+
+/** 业务时区下的日历季度（Q1=1–3 月，Q2=4–6 月，Q3=7–9 月，Q4=10–12 月）。 */
+export function getCalendarQuarterInTimeZone(now: Date, timeZone: string): { year: number; quarter: number } {
+  const { y, m } = extractYmdInTz(now, timeZone);
+  return { year: y, quarter: Math.ceil(m / 3) };
+}
+
+/** 业务时区下的 yymmdd（与 wiki 周页标题一致）。 */
+export function formatYyMmDdInTimeZone(now: Date, timeZone: string): string {
+  const { y, m, d } = extractYmdInTz(now, timeZone);
+  return formatYmdAsYyMmDd(y, m, d);
+}
+
+function formatYmdAsYyMmDd(y: number, m: number, d: number): string {
+  return `${String(y % 100).padStart(2, '0')}${String(m).padStart(2, '0')}${String(d).padStart(2, '0')}`;
+}
+
+/** wiki 周页标题：本周一～本周日（yymmdd-yymmdd，与 Jira 业务周一致）。 */
+export function formatWikiWeekRangeTitleInTimeZone(now: Date, timeZone: string): string {
+  const { start } = getMondayWeekBoundsInTimeZone(now, timeZone);
+  const monday = extractYmdInTz(start, timeZone);
+  const sunday = addCalendarDays(monday.y, monday.m, monday.d, 6, timeZone);
+  return `${formatYmdAsYyMmDd(monday.y, monday.m, monday.d)}-${formatYmdAsYyMmDd(sunday.y, sunday.m, sunday.d)}`;
 }
 
 export function buildWeeklyReportDuringClause(timeZone: string, now = new Date()): string {
