@@ -142,6 +142,8 @@ export const config = {
     hnLimit: Math.max(1, Number(process.env.TECH_DIGEST_HN_LIMIT) || 30),
     redditLimit: Math.max(1, Number(process.env.TECH_DIGEST_REDDIT_LIMIT) || 20),
     fetchTimeoutMs: Math.max(5000, Number(process.env.TECH_DIGEST_FETCH_TIMEOUT_MS) || 30_000),
+    /** Reddit 单版块抓取总超时（含限流重试，毫秒） */
+    redditFetchTimeoutMs: Math.max(30_000, Number(process.env.TECH_DIGEST_REDDIT_FETCH_TIMEOUT_MS) || 180_000),
     llmTimeoutMs: Math.max(60_000, Number(process.env.TECH_DIGEST_LLM_TIMEOUT_MS) || 600_000),
     ollamaTemperature: parseOllamaTemperatureFromEnv('OLLAMA_TECH_DIGEST_TEMPERATURE', 0.3),
     githubToken: (process.env.GITHUB_TOKEN ?? '').trim(),

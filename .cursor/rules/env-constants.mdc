@@ -33,6 +33,7 @@ alwaysApply: false
 | `REDDIT_CLIENT_SECRET` | 可选：与 Client ID 配对的 Secret | 留空 |
 | `TECH_DIGEST_REDDIT_GAP_MS` | 串行 Reddit 请求最小间隔（毫秒），6 次抓取约需 48s+ | `8000` |
 | `TECH_DIGEST_REDDIT_429_COOLDOWN_MS` | Reddit 返回 429 后的全局冷却（毫秒） | `45000` |
+| `TECH_DIGEST_REDDIT_FETCH_TIMEOUT_MS` | Reddit 单版块抓取总超时（含限流重试，毫秒） | `180000` |
 | `OLLAMA_THINK` | 是否在 `/api/chat` 传 `think`；**默认不传**（兼容非 thinking 模型）；`true`/`1`/`low`/`medium`/`high` 开启；若开启而模型不支持，会自动去掉 `think` 重试 | 留空 |
 | `API_PORT` | 本应用 API 端口（**勿用 `PORT`**，cc-web cjet dev 会读 `PORT` 抢端口） | `41738` |
 | `SHELL_CWD` | Shell 工具允许的工作目录 | 空则用 `process.cwd()` |

@@ -36,7 +36,7 @@ async function safeFetch(
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
     warnings.push(`${label} 抓取失败：${msg}`);
-    hooks?.onProgress?.(`${label} 抓取失败，已跳过`);
+    hooks?.onProgress?.(`${label} 抓取失败：${msg}`);
     return [];
   }
 }
@@ -70,7 +70,8 @@ export async function fetchRawForSinglePeriod(
   hooks?.onProgress?.(`[${label}] 抓取 Reddit r/LocalLLaMA`);
   const redditLlama = await safeFetch(
     `${label} Reddit r/LocalLLaMA`,
-    () => fetchRedditLocalLlama(redditWindow, signal),
+    () =>
+      fetchRedditLocalLlama(redditWindow, signal, (msg) => hooks?.onProgress?.(`[${label}] ${msg}`)),
     warnings,
     hooks
   );
@@ -78,7 +79,8 @@ export async function fetchRawForSinglePeriod(
   hooks?.onProgress?.(`[${label}] 抓取 Reddit r/OpenAI`);
   const redditOpenai = await safeFetch(
     `${label} Reddit r/OpenAI`,
-    () => fetchRedditOpenAI(redditWindow, signal),
+    () =>
+      fetchRedditOpenAI(redditWindow, signal, (msg) => hooks?.onProgress?.(`[${label}] ${msg}`)),
     warnings,
     hooks
   );

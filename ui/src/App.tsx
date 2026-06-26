@@ -628,6 +628,7 @@ export default function App() {
               apiBase={apiBase ?? DEFAULT_API_BASE}
               themeTokens={themeTokens}
               agentChatLlmBody={agentChatLlmBody}
+              addLog={addLog}
             />
           </div>
           {activeHeaderTab === 'my-work' && (

@@ -39,17 +39,22 @@ function redditHeaders(extra?: Record<string, string>): Record<string, string> {
   };
 }
 
-async function sleep(ms: number): Promise<void> {
-  await new Promise((resolve) => setTimeout(resolve, ms));
+function redditFetchSignal(outer?: AbortSignal): AbortSignal {
+  const timeout = AbortSignal.timeout(config.techDigest.redditFetchTimeoutMs);
+  return outer ? AbortSignal.any([outer, timeout]) : timeout;
 }
 
-async function getRedditOAuthToken(signal?: AbortSignal): Promise<string | null> {
+type OAuthTokenResult = { ok: true; token: string } | { ok: false; reason: string };
+
+async function getRedditOAuthToken(signal?: AbortSignal): Promise<OAuthTokenResult> {
   const clientId = config.techDigest.redditClientId;
   const clientSecret = config.techDigest.redditClientSecret;
-  if (!clientId || !clientSecret) return null;
+  if (!clientId || !clientSecret) {
+    return { ok: false, reason: '未配置 REDDIT_CLIENT_ID/REDDIT_CLIENT_SECRET' };
+  }
 
   if (cachedOAuthToken && cachedOAuthToken.expiresAtMs > Date.now() + 60_000) {
-    return cachedOAuthToken.token;
+    return { ok: true, token: cachedOAuthToken.token };
   }
 
   return scheduleRedditFetch(async () => {
@@ -63,14 +68,18 @@ async function getRedditOAuthToken(signal?: AbortSignal): Promise<string | null>
       }),
       body: 'grant_type=client_credentials',
     });
-    if (!res.ok) return null;
+    if (!res.ok) {
+      return { ok: false, reason: `OAuth token HTTP ${res.status}` } satisfies OAuthTokenResult;
+    }
 
     const json = (await res.json()) as { access_token?: string; expires_in?: number };
     const token = json.access_token?.trim();
-    if (!token) return null;
+    if (!token) {
+      return { ok: false, reason: 'OAuth token 响应缺少 access_token' } satisfies OAuthTokenResult;
+    }
     const expiresInSec = Number(json.expires_in) || 3600;
     cachedOAuthToken = { token, expiresAtMs: Date.now() + expiresInSec * 1000 };
-    return token;
+    return { ok: true, token } satisfies OAuthTokenResult;
   });
 }
 
@@ -95,30 +104,40 @@ function mapJsonListing(json: RedditListing, source: TrendSource): RawTrendItem[
     });
 }
 
+type JsonFetchResult =
+  | { ok: true; items: RawTrendItem[] }
+  | { ok: false; reason: string };
+
 async function fetchSubredditJson(
   subreddit: string,
   source: TrendSource,
   window: RedditTopWindow,
   signal?: AbortSignal
-): Promise<RawTrendItem[] | null> {
+): Promise<JsonFetchResult> {
   const limit = config.techDigest.redditLimit;
-  const token = await getRedditOAuthToken(signal);
-  if (!token) return null;
+  const tokenResult = await getRedditOAuthToken(signal);
+  if (!tokenResult.ok) return { ok: false, reason: tokenResult.reason };
 
   return scheduleRedditFetch(async () => {
     const url = `https://oauth.reddit.com/r/${subreddit}/top.json?t=${window}&limit=${limit}&raw_json=1`;
     const res = await proxyFetch(url, {
       signal,
-      headers: redditHeaders({ Authorization: `Bearer ${token}` }),
+      headers: redditHeaders({ Authorization: `Bearer ${tokenResult.token}` }),
     });
     if (res.status === 429) {
       const retryAfter = Number(res.headers.get('retry-after'));
       markRedditRateLimited(Number.isFinite(retryAfter) ? retryAfter : undefined);
-      return null;
+      return { ok: false, reason: 'OAuth API HTTP 429（限流）' } satisfies JsonFetchResult;
     }
-    if (!res.ok) return null;
+    if (!res.ok) {
+      return { ok: false, reason: `OAuth API HTTP ${res.status}` } satisfies JsonFetchResult;
+    }
     const json = (await res.json()) as RedditListing;
-    return mapJsonListing(json, source);
+    const items = mapJsonListing(json, source);
+    if (items.length === 0) {
+      return { ok: false, reason: 'OAuth API 返回空列表' } satisfies JsonFetchResult;
+    }
+    return { ok: true, items } satisfies JsonFetchResult;
   });
 }
 
@@ -126,67 +145,96 @@ async function fetchSubredditRss(
   subreddit: string,
   source: TrendSource,
   window: RedditTopWindow,
-  signal?: AbortSignal
+  signal?: AbortSignal,
+  onProgress?: (message: string) => void
 ): Promise<RawTrendItem[]> {
   const limit = config.techDigest.redditLimit;
-  const hosts = ['https://www.reddit.com', 'https://old.reddit.com'];
+  const fetchSignal = redditFetchSignal(signal);
+  const url = `https://www.reddit.com/r/${subreddit}/top/.rss?t=${window}&limit=${limit}`;
   let lastStatus = 0;
+  const maxAttempts = 4;
 
-  return scheduleRedditFetch(async () => {
-    for (const host of hosts) {
-      const url = `${host}/r/${subreddit}/top/.rss?t=${window}&limit=${limit}`;
-      for (let attempt = 0; attempt < 5; attempt++) {
-        if (attempt > 0) {
-          await sleep(Math.min(60_000, config.techDigest.reddit429CooldownMs * attempt));
-        }
-        const res = await proxyFetch(url, {
-          signal,
-          headers: redditHeaders({ Accept: 'application/atom+xml, text/xml, */*' }),
-        });
-        lastStatus = res.status;
-        if (res.status === 429 || res.status === 403) {
-          const retryAfter = Number(res.headers.get('retry-after'));
-          markRedditRateLimited(Number.isFinite(retryAfter) ? retryAfter : undefined);
-          continue;
-        }
-        if (!res.ok) continue;
-        const xml = await res.text();
-        const entries = parseRedditRssFeed(xml, limit);
-        if (entries.length === 0) continue;
-        return mapRssEntriesToTrendItems(entries, source, parseGithubRepoFullName);
-      }
-    }
-
-    throw new Error(
-      `Reddit r/${subreddit} RSS HTTP ${lastStatus}（可能被限流；请稍后重试，或配置 REDDIT_CLIENT_ID/REDDIT_CLIENT_SECRET 走 OAuth）`
+  for (let attempt = 0; attempt < maxAttempts; attempt++) {
+    onProgress?.(
+      attempt === 0
+        ? `Reddit r/${subreddit} RSS 请求中…`
+        : `Reddit r/${subreddit} RSS 第 ${attempt + 1}/${maxAttempts} 次重试…`
     );
-  });
+    const items = await scheduleRedditFetch(async () => {
+      const res = await proxyFetch(url, {
+        signal: fetchSignal,
+        headers: redditHeaders({ Accept: 'application/atom+xml, text/xml, */*' }),
+      });
+      lastStatus = res.status;
+      if (res.status === 429 || res.status === 403) {
+        const retryAfter = Number(res.headers.get('retry-after'));
+        markRedditRateLimited(Number.isFinite(retryAfter) ? retryAfter : undefined);
+        onProgress?.(`Reddit r/${subreddit} RSS HTTP ${res.status}，等待冷却后重试…`);
+        return null;
+      }
+      if (!res.ok) return null;
+      const xml = await res.text();
+      const entries = parseRedditRssFeed(xml, limit);
+      if (entries.length === 0) return null;
+      return mapRssEntriesToTrendItems(entries, source, parseGithubRepoFullName);
+    });
+    if (items) {
+      onProgress?.(`Reddit r/${subreddit} 抓取完成（${items.length} 条）`);
+      return items;
+    }
+  }
+
+  const oauthHint =
+    config.techDigest.redditClientId && config.techDigest.redditClientSecret
+      ? 'OAuth 已配置但 RSS 兜底仍失败，请稍后重试'
+      : '请配置 REDDIT_CLIENT_ID/REDDIT_CLIENT_SECRET 走 OAuth，或稍后重试';
+  throw new Error(`Reddit r/${subreddit} RSS HTTP ${lastStatus}（可能被限流；${oauthHint}）`);
 }
 
 async function fetchSubredditTop(
   subreddit: string,
   source: TrendSource,
   window: RedditTopWindow,
-  signal?: AbortSignal
+  signal?: AbortSignal,
+  onProgress?: (message: string) => void
 ): Promise<RawTrendItem[]> {
+  const fetchSignal = redditFetchSignal(signal);
   const hasOAuth = Boolean(config.techDigest.redditClientId && config.techDigest.redditClientSecret);
   if (hasOAuth) {
-    const jsonItems = await fetchSubredditJson(subreddit, source, window, signal);
-    if (jsonItems && jsonItems.length > 0) return jsonItems;
+    onProgress?.(`Reddit r/${subreddit} OAuth API 请求中…`);
   }
-  return fetchSubredditRss(subreddit, source, window, signal);
+  const jsonResult = hasOAuth
+    ? await fetchSubredditJson(subreddit, source, window, fetchSignal)
+    : ({ ok: false, reason: '未配置 REDDIT_CLIENT_ID/REDDIT_CLIENT_SECRET' } satisfies JsonFetchResult);
+
+  if (jsonResult.ok) {
+    onProgress?.(`Reddit r/${subreddit} OAuth 抓取完成（${jsonResult.items.length} 条）`);
+    return jsonResult.items;
+  }
+  if (hasOAuth) {
+    onProgress?.(`Reddit r/${subreddit} OAuth 失败（${jsonResult.reason}），改用 RSS…`);
+  }
+
+  try {
+    return await fetchSubredditRss(subreddit, source, window, fetchSignal, onProgress);
+  } catch (rssErr) {
+    const rssMsg = rssErr instanceof Error ? rssErr.message : String(rssErr);
+    throw new Error(`${rssMsg}；OAuth 路径：${jsonResult.reason}`);
+  }
 }
 
 export async function fetchRedditLocalLlama(
   window: RedditTopWindow = 'day',
-  signal?: AbortSignal
+  signal?: AbortSignal,
+  onProgress?: (message: string) => void
 ): Promise<RawTrendItem[]> {
-  return fetchSubredditTop('LocalLLaMA', 'reddit_localllama', window, signal);
+  return fetchSubredditTop('LocalLLaMA', 'reddit_localllama', window, signal, onProgress);
 }
 
 export async function fetchRedditOpenAI(
   window: RedditTopWindow = 'day',
-  signal?: AbortSignal
+  signal?: AbortSignal,
+  onProgress?: (message: string) => void
 ): Promise<RawTrendItem[]> {
-  return fetchSubredditTop('OpenAI', 'reddit_openai', window, signal);
+  return fetchSubredditTop('OpenAI', 'reddit_openai', window, signal, onProgress);
 }

@@ -12,6 +12,7 @@ type TechDigestPanelProps = {
   apiBase: string;
   themeTokens: AppThemeTokens;
   agentChatLlmBody?: AgentChatLlmBody;
+  addLog?: (line: string) => void;
 };
 
 const DIGEST_DESCRIPTION =
@@ -57,8 +58,8 @@ function ReportBlock({
   );
 }
 
-export function TechDigestPanel({ apiBase, themeTokens, agentChatLlmBody }: TechDigestPanelProps) {
-  const digest = useTechDigest(apiBase, agentChatLlmBody);
+export function TechDigestPanel({ apiBase, themeTokens, agentChatLlmBody, addLog }: TechDigestPanelProps) {
+  const digest = useTechDigest(apiBase, agentChatLlmBody, addLog);
   const [infoOpen, setInfoOpen] = useState(false);
   const toolbarRef = useRef<HTMLDivElement>(null);
 

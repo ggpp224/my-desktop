@@ -40,7 +40,7 @@ async function runScopeRefresh(
   return { report, error };
 }
 
-export function useTechDigest(apiBase: string, llmBody?: AgentChatLlmBody) {
+export function useTechDigest(apiBase: string, llmBody?: AgentChatLlmBody, addLog?: (line: string) => void) {
   const [dailyReport, setDailyReport] = useState<TechDigestReport | null>(null);
   const [monthlyReport, setMonthlyReport] = useState<TechDigestReport | null>(null);
   const [halfYearReport, setHalfYearReport] = useState<TechDigestReport | null>(null);
@@ -54,6 +54,20 @@ export function useTechDigest(apiBase: string, llmBody?: AgentChatLlmBody) {
   const [streamPreviewDaily, setStreamPreviewDaily] = useState('');
   const [streamPreviewLongTerm, setStreamPreviewLongTerm] = useState('');
   const [activeInnerTab, setActiveInnerTab] = useState<TechDigestInnerTab>('daily');
+  const logDigest = useCallback(
+    (line: string) => {
+      addLog?.(`[技术趋势] ${line}`);
+    },
+    [addLog]
+  );
+
+  const emitProgress = useCallback(
+    (setProgress: (message: string) => void, message: string) => {
+      setProgress(message);
+      logDigest(message);
+    },
+    [logDigest]
+  );
   const abortDailyRef = useRef<AbortController | null>(null);
   const abortLongTermRef = useRef<AbortController | null>(null);
 
@@ -88,14 +102,16 @@ export function useTechDigest(apiBase: string, llmBody?: AgentChatLlmBody) {
     abortDailyRef.current = null;
     setRefreshingDaily(false);
     setProgressDaily('');
-  }, []);
+    logDigest('已取消今日刷新');
+  }, [logDigest]);
 
   const cancelRefreshLongTerm = useCallback(() => {
     abortLongTermRef.current?.abort();
     abortLongTermRef.current = null;
     setRefreshingLongTerm(false);
     setProgressLongTerm('');
-  }, []);
+    logDigest('已取消中长周期刷新');
+  }, [logDigest]);
 
   const refreshDaily = useCallback(async () => {
     if (!apiBase || refreshingDaily) return;
@@ -104,12 +120,12 @@ export function useTechDigest(apiBase: string, llmBody?: AgentChatLlmBody) {
     abortDailyRef.current = ac;
     setRefreshingDaily(true);
     setErrorDaily('');
-    setProgressDaily('准备刷新今日…');
+    emitProgress(setProgressDaily, '准备刷新今日…');
     setStreamPreviewDaily('');
 
     try {
       const { report, error } = await runScopeRefresh(apiBase, 'daily', ac.signal, llmBody, {
-        onProgress: setProgressDaily,
+        onProgress: (message) => emitProgress(setProgressDaily, message),
         onLlmDelta: (d) => {
           if (d.contentDelta) setStreamPreviewDaily((prev) => prev + d.contentDelta);
         },
@@ -117,15 +133,17 @@ export function useTechDigest(apiBase: string, llmBody?: AgentChatLlmBody) {
 
       if (report) {
         setDailyReport(report);
+        logDigest('今日刷新完成');
       } else if (!ac.signal.aborted && error) {
         setErrorDaily(error);
+        logDigest(`今日刷新失败：${error}`);
       }
     } finally {
       setRefreshingDaily(false);
       setProgressDaily('');
       abortDailyRef.current = null;
     }
-  }, [apiBase, llmBody, refreshingDaily]);
+  }, [apiBase, emitProgress, llmBody, logDigest, refreshingDaily]);
 
   const refreshLongTerm = useCallback(async () => {
     if (!apiBase || refreshingLongTerm) return;
@@ -134,12 +152,12 @@ export function useTechDigest(apiBase: string, llmBody?: AgentChatLlmBody) {
     abortLongTermRef.current = ac;
     setRefreshingLongTerm(true);
     setErrorLongTerm('');
-    setProgressLongTerm('准备刷新本月…');
+    emitProgress(setProgressLongTerm, '准备刷新本月…');
     setStreamPreviewLongTerm('');
 
     try {
       const monthly = await runScopeRefresh(apiBase, 'monthly', ac.signal, llmBody, {
-        onProgress: (msg) => setProgressLongTerm(`[本月] ${msg}`),
+        onProgress: (message) => emitProgress(setProgressLongTerm, `[本月] ${message}`),
         onLlmDelta: (d) => {
           if (d.contentDelta) setStreamPreviewLongTerm((prev) => prev + d.contentDelta);
         },
@@ -147,18 +165,20 @@ export function useTechDigest(apiBase: string, llmBody?: AgentChatLlmBody) {
 
       if (monthly.report) {
         setMonthlyReport(monthly.report);
+        logDigest('本月刷新完成');
       } else if (!ac.signal.aborted && monthly.error) {
         setErrorLongTerm(monthly.error);
+        logDigest(`本月刷新失败：${monthly.error}`);
         return;
       }
 
       if (ac.signal.aborted) return;
 
-      setProgressLongTerm('准备刷新半年度…');
+      emitProgress(setProgressLongTerm, '准备刷新半年度…');
       setStreamPreviewLongTerm('');
 
       const halfYear = await runScopeRefresh(apiBase, 'halfYear', ac.signal, llmBody, {
-        onProgress: (msg) => setProgressLongTerm(`[半年度] ${msg}`),
+        onProgress: (message) => emitProgress(setProgressLongTerm, `[半年度] ${message}`),
         onLlmDelta: (d) => {
           if (d.contentDelta) setStreamPreviewLongTerm((prev) => prev + d.contentDelta);
         },
@@ -166,15 +186,17 @@ export function useTechDigest(apiBase: string, llmBody?: AgentChatLlmBody) {
 
       if (halfYear.report) {
         setHalfYearReport(halfYear.report);
+        logDigest('半年度刷新完成');
       } else if (!ac.signal.aborted) {
         setErrorLongTerm((prev) => prev || halfYear.error || '半年度刷新未完成');
+        logDigest(`半年度刷新失败：${halfYear.error || '未完成'}`);
       }
     } finally {
       setRefreshingLongTerm(false);
       setProgressLongTerm('');
       abortLongTermRef.current = null;
     }
-  }, [apiBase, llmBody, refreshingLongTerm]);
+  }, [apiBase, emitProgress, llmBody, logDigest, refreshingLongTerm]);
 
   const refreshing = activeInnerTab === 'daily' ? refreshingDaily : refreshingLongTerm;
   const progress = activeInnerTab === 'daily' ? progressDaily : progressLongTerm;
