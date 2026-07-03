@@ -72,6 +72,8 @@ export const config = {
     weeklyReportTimeZone: process.env.JIRA_WEEKLY_REPORT_TZ || 'Asia/Shanghai',
     /** 开发人员自定义字段 id（如 customfield_10001）；留空则启动时向 Jira 拉取 /rest/api/2/field 按名称「开发人员」解析 */
     developerFieldId: process.env.JIRA_DEVELOPER_FIELD_ID || '',
+    /** 特性自定义字段 id（如 customfield_16202）；留空则启动时向 Jira 拉取 /rest/api/2/field 按名称「特性」解析 */
+    featureFieldId: process.env.JIRA_FEATURE_FIELD_ID || '',
   },
   cursor: {
     usageApiUrl:

@@ -24,7 +24,13 @@ import { runCompositeNovaMergeAndDeploy } from '../tools/composite-nova-workflow
 import { mergeByCode, mergeNovaPretest, mergeBizSolutionPretest } from '../tools/merge-tool.js';
 import { openInIde } from '../tools/open-ide-tool.js';
 import { closeIdeProject } from '../tools/close-ide-tool.js';
-import { searchMyBugs, searchOnlineBugs, searchWeeklyDoneTasks, searchWeeklyHandoffBugs } from '../tools/jira-tool.js';
+import {
+  searchAssigneeBugs,
+  searchMyBugs,
+  searchOnlineBugs,
+  searchWeeklyDoneTasks,
+  searchWeeklyHandoffBugs,
+} from '../tools/jira-tool.js';
 import { getCursorTodayUsage, getCursorUsage } from '../tools/cursor-usage-tool.js';
 import { syncCursorCookieFromChrome } from '../tools/cursor-cookie-sync-tool.js';
 import { fetchWeeklyReportPageInfo, openWeeklyReportPage } from '../tools/wiki-tool.js';
@@ -207,6 +213,10 @@ export async function routeAndExecute(call: ToolCall, ctx?: RouteExecuteContext)
     case 'search_my_bugs': {
       const maxResults = Number(args?.maxResults ?? 100);
       return searchMyBugs(maxResults);
+    }
+    case 'search_assignee_bugs': {
+      const maxResults = Number(args?.maxResults ?? 100);
+      return searchAssigneeBugs(maxResults);
     }
     case 'search_online_bugs': {
       const maxResults = Number(args?.maxResults ?? 100);

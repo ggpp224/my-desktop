@@ -11,6 +11,15 @@ const MY_BUG_JQL_IN_PROGRESS =
   'filter = bus AND (assignee in (liuweiaq, guopengb, wangjuan3, zhangjinz, liyzb, wangmingg) AND status not in (Closed, 遗留, Resolved, 关闭, 待测试环境验证, 待集测环境验证, 待验证) OR 开发人员 in (liuweiaq, guopengb, wangjuan3, zhangjinz, liyzb, wangmingg)) AND 开发人员 = guopengb AND status = "In Progress" ORDER BY updated';
 const ONLINE_BUG_JQL =
   'issuetype in (线上需求, 线上缺陷, 线上BUG, 线上环境, 线上其他, 线上效率, "业务运维 - 线上问题", "业务运维 - 线上故障报告", 支持网-需求, 支持网-缺陷, 安全漏洞缺陷, 运维问题, 运维任务) AND assignee in (liuweiaq, guopengb, wangjuan3, zhangjinz, liyzb, wangmingg) AND status not in (Closed, 关闭) AND issuetype = 线上缺陷 AND assignee = guopengb ORDER BY updated DESC';
+const UNRESOLVED_STATUSES =
+  '(Closed, 遗留, Resolved, 关闭, 待测试环境验证, 待集测环境验证, 待验证)';
+
+/** 经办人为当前 Jira 账号、类型为缺陷、且未关闭/未解决的 bug（不用 filter=bus：部分 Open bug 不在该筛选器内）。 */
+function buildAssigneeBugJql(): string {
+  const username = config.jira.username.trim();
+  const assigneeClause = username ? `assignee = ${username}` : 'assignee = currentUser()';
+  return `${assigneeClause} AND issuetype = 缺陷 AND status not in ${UNRESOLVED_STATUSES} ORDER BY fixVersion ASC`;
+}
 
 const WEEKLY_TEAM_ACTORS = '(liuweiaq, guopengb, wangjuan3, zhangjinz, liyzb, wangmingg)';
 
@@ -47,6 +56,8 @@ export interface MyBugItem {
   assignee: string;
   /** Jira 自定义字段「开发人员」展示名（多选时逗号拼接） */
   developer: string;
+  /** Jira 自定义字段「特性」展示名（多选时逗号拼接） */
+  feature: string;
   updated: string;
   url: string;
 }
@@ -77,12 +88,14 @@ function buildIssueUrl(baseUrl: string, issueKey: string): string {
 // AI 生成 By Peng.Guo
 let developerFieldIdCache: string | undefined = undefined;
 let developerFieldIdFetchAttempted = false;
+let featureFieldIdCache: string | undefined = undefined;
+let featureFieldIdFetchAttempted = false;
 
-function formatJiraDeveloperField(raw: unknown): string {
+function formatJiraCustomField(raw: unknown): string {
   if (raw == null || raw === '') return '';
   if (typeof raw === 'string') return raw.trim();
   if (Array.isArray(raw)) {
-    return raw.map(formatJiraDeveloperField).filter(Boolean).join(', ');
+    return raw.map(formatJiraCustomField).filter(Boolean).join(', ');
   }
   if (typeof raw === 'object' && raw !== null) {
     const u = raw as { displayName?: string; name?: string; value?: string };
@@ -96,23 +109,57 @@ function formatJiraDeveloperField(raw: unknown): string {
   return '';
 }
 
-async function resolveDeveloperFieldId(baseUrl: string, authHeader: string): Promise<string | undefined> {
-  const configured = config.jira.developerFieldId.trim();
+async function resolveJiraFieldId(
+  baseUrl: string,
+  authHeader: string,
+  fieldName: string,
+  configuredId: string,
+  cache: { attempted: boolean; value: string | undefined },
+): Promise<string | undefined> {
+  const configured = configuredId.trim();
   if (configured) return configured;
-  if (developerFieldIdFetchAttempted) return developerFieldIdCache;
-  developerFieldIdFetchAttempted = true;
+  if (cache.attempted) return cache.value;
+  cache.attempted = true;
   try {
     const res = await fetch(`${baseUrl}/rest/api/2/field`, {
       headers: { Accept: 'application/json', Authorization: authHeader },
     });
     if (!res.ok) return undefined;
     const list = (await res.json()) as Array<{ id?: string; name?: string }>;
-    const hit = list.find((f) => (f.name ?? '').trim() === '开发人员');
-    developerFieldIdCache = hit?.id?.trim() || undefined;
+    const hit = list.find((f) => (f.name ?? '').trim() === fieldName);
+    cache.value = hit?.id?.trim() || undefined;
   } catch {
-    developerFieldIdCache = undefined;
+    cache.value = undefined;
   }
-  return developerFieldIdCache;
+  return cache.value;
+}
+
+async function resolveDeveloperFieldId(baseUrl: string, authHeader: string): Promise<string | undefined> {
+  return resolveJiraFieldId(
+    baseUrl,
+    authHeader,
+    '开发人员',
+    config.jira.developerFieldId,
+    { attempted: developerFieldIdFetchAttempted, value: developerFieldIdCache },
+  ).then((id) => {
+    developerFieldIdCache = id;
+    developerFieldIdFetchAttempted = true;
+    return id;
+  });
+}
+
+async function resolveFeatureFieldId(baseUrl: string, authHeader: string): Promise<string | undefined> {
+  return resolveJiraFieldId(
+    baseUrl,
+    authHeader,
+    '特性',
+    config.jira.featureFieldId,
+    { attempted: featureFieldIdFetchAttempted, value: featureFieldIdCache },
+  ).then((id) => {
+    featureFieldIdCache = id;
+    featureFieldIdFetchAttempted = true;
+    return id;
+  });
 }
 
 async function searchByJql(jql: string, maxResults: number): Promise<MyBugResult> {
@@ -121,10 +168,14 @@ async function searchByJql(jql: string, maxResults: number): Promise<MyBugResult
     throw new Error('Jira 地址未配置：请设置 JIRA_BASE_URL。');
   }
   const authHeader = getAuthHeader();
-  const devFieldId = await resolveDeveloperFieldId(baseUrl, authHeader);
-  const fieldsParam = devFieldId
-    ? `summary,status,resolution,fixVersions,assignee,updated,${devFieldId}`
-    : 'summary,status,resolution,fixVersions,assignee,updated';
+  const [devFieldId, featureFieldId] = await Promise.all([
+    resolveDeveloperFieldId(baseUrl, authHeader),
+    resolveFeatureFieldId(baseUrl, authHeader),
+  ]);
+  const fields = ['summary', 'status', 'resolution', 'fixVersions', 'assignee', 'updated'];
+  if (devFieldId) fields.push(devFieldId);
+  if (featureFieldId) fields.push(featureFieldId);
+  const fieldsParam = fields.join(',');
   const params = new URLSearchParams({
     jql,
     startAt: '0',
@@ -153,6 +204,7 @@ async function searchByJql(jql: string, maxResults: number): Promise<MyBugResult
       const fixVersions = f.fixVersions as Array<{ name?: string }> | undefined;
       const assigneeObj = f.assignee as { displayName?: string; name?: string } | undefined;
       const rawDev = devFieldId ? f[devFieldId] : undefined;
+      const rawFeature = featureFieldId ? f[featureFieldId] : undefined;
       return {
         key,
         summary: String(f.summary ?? '').trim(),
@@ -160,7 +212,8 @@ async function searchByJql(jql: string, maxResults: number): Promise<MyBugResult
         resolution: (resolutionObj?.name ?? '未解决').trim(),
         fixVersion: (fixVersions?.map((v) => (v.name ?? '').trim()).filter(Boolean).join(', ') ?? '无').trim() || '无',
         assignee: (assigneeObj?.displayName ?? assigneeObj?.name ?? '未分配').trim(),
-        developer: formatJiraDeveloperField(rawDev).trim() || '—',
+        developer: formatJiraCustomField(rawDev).trim() || '—',
+        feature: formatJiraCustomField(rawFeature).trim() || '—',
         updated: String(f.updated ?? '').trim(),
         url: key ? buildIssueUrl(baseUrl, key) : (item.self ?? '').trim(),
       };
@@ -219,6 +272,10 @@ export async function searchMyBugs(maxResults = 100): Promise<MyBugResult> {
 
 export async function searchOnlineBugs(maxResults = 100): Promise<MyBugResult> {
   return searchByMultipleJql([ONLINE_BUG_JQL], maxResults);
+}
+
+export async function searchAssigneeBugs(maxResults = 100): Promise<MyBugResult> {
+  return searchByJql(buildAssigneeBugJql(), maxResults);
 }
 
 export async function searchWeeklyDoneTasks(maxResults = 100): Promise<MyBugResult> {

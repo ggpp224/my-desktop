@@ -51,6 +51,8 @@ type JiraBugItem = {
   assignee?: string;
   /** Jira 自定义字段「开发人员」 */
   developer?: string;
+  /** Jira 自定义字段「特性」 */
+  feature?: string;
   url?: string;
 };
 type JiraBugPayload = { total?: number; issues?: JiraBugItem[] };
@@ -240,6 +242,7 @@ const QUICK_ACTIONS: Array<{ label: string; message: string }> = [
   { label: '开始工作（外部终端）', message: '开始工作，使用外部终端' },
   { label: '打开终端', message: '打开终端' },
   { label: '我的bug', message: '我的bug' },
+  { label: '经办人bug', message: '经办人bug' },
   { label: '线上bug', message: '线上bug' },
   { label: 'cursor用量', message: 'cursor用量' },
   { label: 'cursor今日用量', message: 'cursor今日用量' },
@@ -351,6 +354,7 @@ function extractMyBugsResult(toolResults?: unknown[]): JiraBugPayload | null {
   const row = toolResults.find(
     (item) =>
       ((item as ToolResultItem | undefined)?.tool === 'search_my_bugs' ||
+        (item as ToolResultItem | undefined)?.tool === 'search_assignee_bugs' ||
         (item as ToolResultItem | undefined)?.tool === 'search_online_bugs' ||
         (item as ToolResultItem | undefined)?.tool === 'search_weekly_done_tasks' ||
         (item as ToolResultItem | undefined)?.tool === 'search_weekly_handoff_bugs') &&
@@ -1141,13 +1145,14 @@ function renderToolResults(
           <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12, color: themeTokens.textPrimary, tableLayout: 'fixed' }}>
             <thead>
               <tr style={{ background: themeTokens.workspacePanelBackground }}>
-                <th style={{ width: '12%', textAlign: 'left', padding: '8px 10px', borderBottom: `1px solid ${themeTokens.inputBorder}` }}>关键字</th>
-                <th style={{ width: '30%', textAlign: 'left', padding: '8px 10px', borderBottom: `1px solid ${themeTokens.inputBorder}` }}>摘要</th>
-                <th style={{ width: '9%', textAlign: 'left', padding: '8px 10px', borderBottom: `1px solid ${themeTokens.inputBorder}` }}>状态</th>
-                <th style={{ width: '9%', textAlign: 'left', padding: '8px 10px', borderBottom: `1px solid ${themeTokens.inputBorder}` }}>解决结果</th>
-                <th style={{ width: '11%', textAlign: 'left', padding: '8px 10px', borderBottom: `1px solid ${themeTokens.inputBorder}` }}>修复版本</th>
-                <th style={{ width: '11%', textAlign: 'left', padding: '8px 10px', borderBottom: `1px solid ${themeTokens.inputBorder}` }}>经办人</th>
-                <th style={{ width: '18%', textAlign: 'left', padding: '8px 10px', borderBottom: `1px solid ${themeTokens.inputBorder}` }}>开发人员</th>
+                <th style={{ width: '11%', textAlign: 'left', padding: '8px 10px', borderBottom: `1px solid ${themeTokens.inputBorder}` }}>关键字</th>
+                <th style={{ width: '26%', textAlign: 'left', padding: '8px 10px', borderBottom: `1px solid ${themeTokens.inputBorder}` }}>摘要</th>
+                <th style={{ width: '8%', textAlign: 'left', padding: '8px 10px', borderBottom: `1px solid ${themeTokens.inputBorder}` }}>状态</th>
+                <th style={{ width: '8%', textAlign: 'left', padding: '8px 10px', borderBottom: `1px solid ${themeTokens.inputBorder}` }}>解决结果</th>
+                <th style={{ width: '10%', textAlign: 'left', padding: '8px 10px', borderBottom: `1px solid ${themeTokens.inputBorder}` }}>修复版本</th>
+                <th style={{ width: '10%', textAlign: 'left', padding: '8px 10px', borderBottom: `1px solid ${themeTokens.inputBorder}` }}>经办人</th>
+                <th style={{ width: '14%', textAlign: 'left', padding: '8px 10px', borderBottom: `1px solid ${themeTokens.inputBorder}` }}>开发人员</th>
+                <th style={{ width: '13%', textAlign: 'left', padding: '8px 10px', borderBottom: `1px solid ${themeTokens.inputBorder}` }}>特性</th>
               </tr>
             </thead>
             <tbody>
@@ -1168,11 +1173,12 @@ function renderToolResults(
                   <td style={{ padding: '8px 10px', borderBottom: `1px solid ${themeTokens.inputBorder}`, wordBreak: 'break-word' }}>{issue.fixVersion || '--'}</td>
                   <td style={{ padding: '8px 10px', borderBottom: `1px solid ${themeTokens.inputBorder}`, wordBreak: 'break-word' }}>{issue.assignee || '--'}</td>
                   <td style={{ padding: '8px 10px', borderBottom: `1px solid ${themeTokens.inputBorder}`, wordBreak: 'break-word' }}>{issue.developer ?? '—'}</td>
+                  <td style={{ padding: '8px 10px', borderBottom: `1px solid ${themeTokens.inputBorder}`, wordBreak: 'break-word' }}>{issue.feature ?? '—'}</td>
                 </tr>
               ))}
               {issues.length === 0 && (
                 <tr>
-                  <td colSpan={7} style={{ padding: '10px', color: themeTokens.textSecondary }}>
+                  <td colSpan={8} style={{ padding: '10px', color: themeTokens.textSecondary }}>
                     暂无数据
                   </td>
                 </tr>
