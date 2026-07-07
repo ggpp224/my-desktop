@@ -158,4 +158,8 @@ export const config = {
     /** 遇到 429 后全局冷却（毫秒） */
     reddit429CooldownMs: Math.max(5000, Number(process.env.TECH_DIGEST_REDDIT_429_COOLDOWN_MS) || 45_000),
   },
+  gemini: {
+    /** 外部 Gemini 默认模型；UI 未指定 model 时与后端 fallback 一致 */
+    defaultModel: (process.env.GEMINI_DEFAULT_MODEL ?? '').trim() || 'gemini-3.1-flash-lite',
+  },
 };

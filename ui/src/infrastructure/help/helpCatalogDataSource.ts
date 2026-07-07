@@ -105,8 +105,9 @@ export function getHelpCommands(): HelpCommandItem[] {
     },
     {
       section: 'Jira',
-      command: '我的bug / 经办人bug / 线上bug / 本周已完成任务',
-      description: '按固定 JQL 查询任务；经办人bug 为经办人是当前用户、类型为缺陷且未解决，按修复版本升序',
+      command: '我的bug / 我的任务 / 经办人bug / 线上bug / 本周已完成任务',
+      description:
+        '按固定 JQL 查询；我的任务为经办人或开发人员是当前用户、全量未完成（不限迭代，不含缺陷）；经办人bug 为类型为缺陷且未解决，按修复版本升序',
     },
     {
       section: 'Cursor',

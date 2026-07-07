@@ -201,6 +201,20 @@ export const toolsSchema = [
   {
     type: 'function' as const,
     function: {
+      name: 'search_my_tasks',
+      description:
+        '查询 Jira 中“我的任务”固定条件列表（Jira 8.8，非 token 鉴权）：经办人或开发人员为当前用户、全量未完成且不含缺陷（不限当前迭代）。用户说「我的任务」「查询我的任务」时调用，可选 maxResults',
+      parameters: {
+        type: 'object',
+        properties: {
+          maxResults: { type: 'number', description: '可选，返回数量上限，默认 100，最大 100' },
+        },
+      },
+    },
+  },
+  {
+    type: 'function' as const,
+    function: {
       name: 'search_assignee_bugs',
       description:
         '查询 Jira 中“经办人bug”固定条件列表（Jira 8.8，非 token 鉴权）：经办人为当前用户、类型为缺陷且未解决。用户说「经办人bug」「查询经办人bug」时调用，可选 maxResults',

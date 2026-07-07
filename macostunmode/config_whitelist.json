@@ -1,0 +1,314 @@
+{
+  "log": {
+    "level": "warn",
+    "timestamp": true
+  },
+  "dns": {
+    "servers": [
+      {
+        "tag": "remote",
+        "address": "tcp://8.8.8.8",
+        "strategy": "prefer_ipv4",
+        "detour": "proxy"
+      },
+      {
+        "tag": "local",
+        "address": "223.5.5.5",
+        "strategy": "prefer_ipv4",
+        "detour": "direct"
+      },
+      {
+        "tag": "block",
+        "address": "rcode://success"
+      },
+      {
+        "tag": "local_local",
+        "address": "223.5.5.5",
+        "detour": "direct"
+      }
+    ],
+    "rules": [
+      {
+        "server": "local_local",
+        "domain": [
+          "userdatax18.nodeok.icu"
+        ]
+      },
+      {
+        "server": "remote",
+        "clash_mode": "Global"
+      },
+      {
+        "server": "local_local",
+        "clash_mode": "Direct"
+      },
+      {
+        "server": "local",
+        "rule_set": [
+          "geosite-cn",
+          "geosite-geolocation-cn"
+        ]
+      }
+    ],
+    "final": "remote"
+  },
+  "inbounds": [
+    {
+      "type": "tun",
+      "tag": "tun-in",
+      "interface_name": "",
+      "address": [
+        "172.18.0.1/30"
+      ],
+      "mtu": 9000,
+      "auto_route": true,
+      "strict_route": true,
+      "stack": "gvisor",
+      "sniff": true
+    }
+  ],
+  "outbounds": [
+    {
+      "type": "vmess",
+      "tag": "proxy",
+      "server": "userdatax18.nodeok.icu",
+      "server_port": 41001,
+      "uuid": "8c0c8045-7d2e-3fc1-5171-c8fdcb21e6d8",
+      "security": "auto",
+      "alter_id": 0,
+      "tls": {
+        "enabled": true,
+        "server_name": "",
+        "insecure": true
+      },
+      "transport": {
+        "type": "ws",
+        "path": "/v2ray/"
+      }
+    },
+    {
+      "type": "direct",
+      "tag": "direct"
+    },
+    {
+      "type": "block",
+      "tag": "block"
+    },
+    {
+      "type": "dns",
+      "tag": "dns_out"
+    }
+  ],
+  "route": {
+    "auto_detect_interface": true,
+    "rules": [
+      {
+        "outbound": "dns_out",
+        "protocol": [
+          "dns"
+        ]
+      },
+      {
+        "outbound": "dns_out",
+        "port": [
+          53
+        ],
+        "process_name": [
+          "v2ray.exe",
+          "xray.exe",
+          "mihomo-windows-amd64-compatible.exe",
+          "mihomo-windows-amd64.exe",
+          "mihomo-linux-amd64.exe",
+          "clash.exe",
+          "mihomo.exe",
+          "hysteria.exe",
+          "naive.exe",
+          "naiveproxy.exe",
+          "tuic-client.exe",
+          "tuic.exe",
+          "juicity-client.exe",
+          "juicity.exe",
+          "hysteria-windows-amd64.exe",
+          "hysteria-linux-amd64.exe",
+          "brook_windows_amd64.exe",
+          "brook_linux_amd64.exe",
+          "brook.exe",
+          "overtls-bin.exe",
+          "overtls.exe",
+          "shadowquic.exe"
+        ]
+      },
+      {
+        "outbound": "direct",
+        "process_name": [
+          "v2ray.exe",
+          "xray.exe",
+          "mihomo-windows-amd64-compatible.exe",
+          "mihomo-windows-amd64.exe",
+          "mihomo-linux-amd64.exe",
+          "clash.exe",
+          "mihomo.exe",
+          "hysteria.exe",
+          "naive.exe",
+          "naiveproxy.exe",
+          "tuic-client.exe",
+          "tuic.exe",
+          "sing-box-client.exe",
+          "sing-box.exe",
+          "juicity-client.exe",
+          "juicity.exe",
+          "hysteria-windows-amd64.exe",
+          "hysteria-linux-amd64.exe",
+          "brook_windows_amd64.exe",
+          "brook_linux_amd64.exe",
+          "brook.exe",
+          "overtls-bin.exe",
+          "overtls.exe",
+          "shadowquic.exe"
+        ]
+      },
+      {
+        "outbound": "direct",
+        "clash_mode": "Direct"
+      },
+      {
+        "outbound": "proxy",
+        "clash_mode": "Global"
+      },
+      {
+        "outbound": "proxy",
+        "domain": [
+          "googleapis.cn",
+          "gstatic.com"
+        ],
+        "domain_suffix": [
+          ".googleapis.cn",
+          ".gstatic.com"
+        ]
+      },
+      {
+        "outbound": "block",
+        "network": [
+          "udp"
+        ],
+        "port": [
+          443
+        ]
+      },
+      {
+        "outbound": "direct",
+        "ip_is_private": true
+      },
+      {
+        "outbound": "direct",
+        "rule_set": [
+          "geosite-private"
+        ]
+      },
+      {
+        "outbound": "direct",
+        "ip_cidr": [
+          "223.5.5.5",
+          "223.6.6.6",
+          "2400:3200::1",
+          "2400:3200:baba::1",
+          "119.29.29.29",
+          "1.12.12.12",
+          "120.53.53.53",
+          "2402:4e00::",
+          "2402:4e00:1::",
+          "180.76.76.76",
+          "2400:da00::6666",
+          "114.114.114.114",
+          "114.114.115.115",
+          "114.114.114.119",
+          "114.114.115.119",
+          "114.114.114.110",
+          "114.114.115.110",
+          "180.184.1.1",
+          "180.184.2.2",
+          "101.226.4.6",
+          "218.30.118.6",
+          "123.125.81.6",
+          "140.207.198.6",
+          "1.2.4.8",
+          "210.2.4.8",
+          "52.80.66.66",
+          "117.50.22.22",
+          "2400:7fc0:849e:200::4",
+          "2404:c2c0:85d8:901::4",
+          "117.50.10.10",
+          "52.80.52.52",
+          "2400:7fc0:849e:200::8",
+          "2404:c2c0:85d8:901::8",
+          "117.50.60.30",
+          "52.80.60.30"
+        ]
+      },
+      {
+        "outbound": "direct",
+        "domain": [
+          "alidns.com",
+          "doh.pub",
+          "dot.pub",
+          "360.cn",
+          "onedns.net"
+        ],
+        "domain_suffix": [
+          ".alidns.com",
+          ".doh.pub",
+          ".dot.pub",
+          ".360.cn",
+          ".onedns.net"
+        ]
+      },
+      {
+        "outbound": "direct",
+        "rule_set": [
+          "geoip-cn"
+        ]
+      },
+      {
+        "outbound": "direct",
+        "rule_set": [
+          "geosite-cn"
+        ]
+      }
+    ],
+    "rule_set": [
+      {
+        "tag": "geosite-private",
+        "type": "local",
+        "format": "binary",
+        "path": "srss/geosite-private.srs"
+      },
+      {
+        "tag": "geosite-cn",
+        "type": "local",
+        "format": "binary",
+        "path": "srss/geosite-cn.srs"
+      },
+      {
+        "tag": "geoip-cn",
+        "type": "local",
+        "format": "binary",
+        "path": "srss/geoip-cn.srs"
+      },
+      {
+        "tag": "geosite-geolocation-cn",
+        "type": "local",
+        "format": "binary",
+        "path": "srss/geosite-geolocation-cn.srs"
+      }
+    ]
+  },
+  "experimental": {
+    "cache_file": {
+      "enabled": true,
+      "path": "srss/cache.db"
+    },
+    "clash_api": {
+      "external_controller": "127.0.0.1:10814"
+    }
+  }
+}

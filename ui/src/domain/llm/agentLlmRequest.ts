@@ -15,7 +15,7 @@ export type GeminiUserSettings = {
   baseUrl: string;
 };
 
-export const DEFAULT_GEMINI_MODEL = 'gemini-2.0-flash';
+export const DEFAULT_GEMINI_MODEL = 'gemini-3.1-flash-lite';
 
 export function buildAgentChatLlmBody(mode: LlmRuntimeMode, gemini: GeminiUserSettings): AgentChatLlmBody | undefined {
   if (mode === 'local') return undefined;

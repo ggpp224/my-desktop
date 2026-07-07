@@ -12,6 +12,7 @@ import dns from 'node:dns';
 import { socksDispatcher } from 'fetch-socks';
 import { Agent, ProxyAgent, fetch as undiciFetch } from 'undici';
 import type { Dispatcher } from 'undici';
+import { config } from '../config/default.js';
 import { FunctionCallingConfigMode, GoogleGenAI, type FunctionDeclaration } from '@google/genai';
 import { mergeStreamFragment } from './ollama-client.js';
 import type { ChatMessage, ToolCall } from './ollama-client.js';
@@ -216,7 +217,7 @@ export async function testGeminiConnection(cfg: GeminiClientConfig): Promise<Gem
   if (!apiKey) {
     return { ok: false, error: '缺少 API Key：请在输入框填写，或在启动 API 的进程中设置 GEMINI_API_KEY' };
   }
-  const model = (cfg.model ?? '').trim() || 'gemini-2.0-flash';
+  const model = (cfg.model ?? '').trim() || config.gemini.defaultModel;
   const base = (cfg.baseUrl ?? '').trim().replace(/\/$/, '');
 
   return withPatchedGlobalFetch(async () => {
@@ -253,7 +254,7 @@ export async function streamGeminiText(
       '缺少 Gemini API Key：请在运行 API 的 shell 中执行 `export GEMINI_API_KEY=...`（与 A2UI 一致），或在界面「设置」中填写并保存。'
     );
   }
-  const model = (cfg.model ?? '').trim() || 'gemini-2.0-flash';
+  const model = (cfg.model ?? '').trim() || config.gemini.defaultModel;
   const base = (cfg.baseUrl ?? '').trim().replace(/\/$/, '');
   return withPatchedGlobalFetch(async () => {
     const ai = new GoogleGenAI({
@@ -317,7 +318,7 @@ export async function chatWithToolsGeminiStream(
     );
   }
 
-  const model = (cfg.model ?? '').trim() || 'gemini-2.0-flash';
+  const model = (cfg.model ?? '').trim() || config.gemini.defaultModel;
   const base = (cfg.baseUrl ?? '').trim().replace(/\/$/, '');
 
   return withPatchedGlobalFetch(async () => {

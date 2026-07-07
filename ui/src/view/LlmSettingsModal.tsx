@@ -2,6 +2,7 @@
 import { useEffect, useState, type FormEvent } from 'react';
 import type { GeminiUserSettings, LlmRuntimeMode } from '../domain/llm/agentLlmRequest.js';
 import { DEFAULT_GEMINI_MODEL } from '../domain/llm/agentLlmRequest.js';
+import type { GeminiEnvSettingsSnapshot } from '../infrastructure/llm/geminiSettingsApi.js';
 import { useGeminiConnectionTest } from '../viewmodel/llm/useGeminiConnectionTest';
 import type { AppThemeTokens } from '../domain/theme/appTheme';
 import { Button } from './Button';
@@ -11,12 +12,13 @@ export type LlmSettingsModalProps = {
   apiBase: string;
   mode: LlmRuntimeMode;
   gemini: GeminiUserSettings;
+  envSaved?: GeminiEnvSettingsSnapshot | null;
   themeTokens: AppThemeTokens;
   onClose: () => void;
-  onSave: (next: { mode: LlmRuntimeMode; gemini: GeminiUserSettings }) => void;
+  onSave: (next: { mode: LlmRuntimeMode; gemini: GeminiUserSettings }) => void | Promise<void>;
 };
 
-export function LlmSettingsModal({ open, apiBase, mode, gemini, themeTokens, onClose, onSave }: LlmSettingsModalProps) {
+export function LlmSettingsModal({ open, apiBase, mode, gemini, envSaved, themeTokens, onClose, onSave }: LlmSettingsModalProps) {
   if (!open) return null;
   return (
     <div
@@ -53,10 +55,11 @@ export function LlmSettingsModal({ open, apiBase, mode, gemini, themeTokens, onC
           模型设置
         </h2>
         <p style={{ margin: '0 0 16px', fontSize: 12, color: themeTokens.textSecondary, lineHeight: 1.55 }}>
-          外部模型密钥仅保存在本机浏览器 localStorage，经本机后端转发至 Google API，不会写入服务端磁盘。若出现「无法连接 Gemini」或 fetch
-          失败，多为本机无法直连 Google。处理方式：① 在启动 API 的终端设置环境变量 `HTTPS_PROXY`（如 Clash 的 `http://127.0.0.1:7890`）后重启服务；② 或在下方填写可访问的「API 根地址」；③ 服务端已默认「DNS 优先 IPv4」与更长连接超时，仍超时可将 `GEMINI_CONNECT_TIMEOUT_MS` 调大。
+          外部模型 Key 保存后会写入本机项目根目录 <code style={{ color: themeTokens.textPrimary }}>.env</code>（
+          <code style={{ color: themeTokens.textPrimary }}>GEMINI_API_KEY</code>），并同步到浏览器 localStorage；重开设置页会显示「已记住」提示（密码框留空表示沿用已保存 Key）。若无法连接 Gemini，可在启动
+          API 的终端设置 <code style={{ color: themeTokens.textPrimary }}>HTTPS_PROXY</code> 后重启，或填写可访问的 API 根地址。
         </p>
-        <LlmSettingsForm apiBase={apiBase} mode={mode} gemini={gemini} themeTokens={themeTokens} onSave={onSave} onCancel={onClose} />
+        <LlmSettingsForm apiBase={apiBase} mode={mode} gemini={gemini} envSaved={envSaved} themeTokens={themeTokens} onSave={onSave} onCancel={onClose} />
       </div>
     </div>
   );
@@ -66,17 +69,25 @@ type FormProps = {
   apiBase: string;
   mode: LlmRuntimeMode;
   gemini: GeminiUserSettings;
+  envSaved?: GeminiEnvSettingsSnapshot | null;
   themeTokens: AppThemeTokens;
-  onSave: (next: { mode: LlmRuntimeMode; gemini: GeminiUserSettings }) => void;
+  onSave: (next: { mode: LlmRuntimeMode; gemini: GeminiUserSettings }) => void | Promise<void>;
   onCancel: () => void;
 };
 
-function LlmSettingsForm({ apiBase, mode, gemini, themeTokens, onSave, onCancel }: FormProps) {
+function LlmSettingsForm({ apiBase, mode, gemini, envSaved, themeTokens, onSave, onCancel }: FormProps) {
   const [apiKey, setApiKey] = useState(gemini.apiKey);
   const [model, setModel] = useState(gemini.model || DEFAULT_GEMINI_MODEL);
   const [baseUrl, setBaseUrl] = useState(gemini.baseUrl);
   const [error, setError] = useState('');
+  const [saving, setSaving] = useState(false);
   const { state: testState, runTest, clear: clearTest } = useGeminiConnectionTest(apiBase);
+  const hasSavedKey = Boolean(envSaved?.hasApiKey || gemini.apiKey.trim());
+  const savedKeyHint = envSaved?.hasApiKey
+    ? `已记住 Key（末尾 ${envSaved.apiKeySuffix || '****'}）`
+    : gemini.apiKey.trim()
+      ? '已记住 Key（来自本页缓存）'
+      : '';
 
   useEffect(() => {
     setApiKey(gemini.apiKey);
@@ -88,12 +99,22 @@ function LlmSettingsForm({ apiBase, mode, gemini, themeTokens, onSave, onCancel 
 
   const handleSubmit = (e: FormEvent) => {
     e.preventDefault();
-    if (mode === 'external' && !apiKey.trim()) {
+    if (mode === 'external' && !apiKey.trim() && !hasSavedKey) {
       setError('使用外部模型时请填写 Gemini API Key');
       return;
     }
     setError('');
-    onSave({ mode, gemini: { apiKey: apiKey.trim(), model: model.trim() || DEFAULT_GEMINI_MODEL, baseUrl: baseUrl.trim() } });
+    setSaving(true);
+    void Promise.resolve(
+      onSave({
+        mode,
+        gemini: {
+          apiKey: apiKey.trim() || gemini.apiKey.trim(),
+          model: model.trim() || DEFAULT_GEMINI_MODEL,
+          baseUrl: baseUrl.trim(),
+        },
+      })
+    ).finally(() => setSaving(false));
   };
 
   return (
@@ -101,12 +122,15 @@ function LlmSettingsForm({ apiBase, mode, gemini, themeTokens, onSave, onCancel 
       {mode === 'external' ? (
         <>
           <label style={{ display: 'block', fontSize: 12, color: themeTokens.textSecondary, marginBottom: 6 }}>Gemini API Key</label>
+          {savedKeyHint ? (
+            <div style={{ marginBottom: 6, fontSize: 12, color: themeTokens.statusSuccess }}>{savedKeyHint}；留空则沿用已保存</div>
+          ) : null}
           <input
             type="password"
             autoComplete="off"
             value={apiKey}
             onChange={(ev) => setApiKey(ev.target.value)}
-            placeholder="AIza…"
+            placeholder={hasSavedKey ? '留空沿用已保存的 Key' : 'AIza…'}
             style={{
               width: '100%',
               boxSizing: 'border-box',
@@ -202,8 +226,9 @@ function LlmSettingsForm({ apiBase, mode, gemini, themeTokens, onSave, onCancel 
           type="submit"
           variant="solid"
           size="md"
+          disabled={saving}
         >
-          保存
+          {saving ? '保存中…' : '保存'}
         </Button>
       </div>
     </form>

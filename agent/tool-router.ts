@@ -27,6 +27,7 @@ import { closeIdeProject } from '../tools/close-ide-tool.js';
 import {
   searchAssigneeBugs,
   searchMyBugs,
+  searchMyTasks,
   searchOnlineBugs,
   searchWeeklyDoneTasks,
   searchWeeklyHandoffBugs,
@@ -217,6 +218,10 @@ export async function routeAndExecute(call: ToolCall, ctx?: RouteExecuteContext)
     case 'search_assignee_bugs': {
       const maxResults = Number(args?.maxResults ?? 100);
       return searchAssigneeBugs(maxResults);
+    }
+    case 'search_my_tasks': {
+      const maxResults = Number(args?.maxResults ?? 100);
+      return searchMyTasks(maxResults);
     }
     case 'search_online_bugs': {
       const maxResults = Number(args?.maxResults ?? 100);

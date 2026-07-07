@@ -6,6 +6,8 @@ import express from 'express';
 import cors from 'cors';
 import { runAgent, type AgentLlmOptions } from '../agent/agent.js';
 import { testGeminiConnection } from '../agent/gemini-client.js';
+import { getGeminiEnvSettingsSnapshot, saveGeminiEnvSettings } from './gemini-env-settings.js';
+import { config } from '../config/default.js';
 import { healthCheck } from '../agent/ollama-client.js';
 import {
   fetchOllamaInstalledModelNames,
@@ -14,7 +16,6 @@ import {
   syncActiveModelFromOllamaPs,
   unloadOllamaModel,
 } from '../agent/ollama-runtime.js';
-import { config } from '../config/default.js';
 import { getJenkinsPreset } from '../config/jenkins-presets.js';
 import { deploy as jenkinsDeploy, getDeployStatus, getDeployStatusByBuildHistory } from '../tools/jenkins-tool.js';
 import { open as openBrowser } from '../tools/browser-tool.js';
@@ -243,7 +244,7 @@ function parseAgentLlmFromBody(body: unknown): AgentLlmOptions | undefined {
   if (!apiKeyFromBody && !apiKeyFromEnv) {
     throw new Error('外部模型需要提供 API Key：在请求 body.llm.apiKey 中传入，或在启动 API 的进程中设置 GEMINI_API_KEY / GOOGLE_API_KEY（与 A2UI 一致）');
   }
-  const model = String(l.model ?? '').trim() || 'gemini-2.0-flash';
+  const model = String(l.model ?? '').trim() || config.gemini.defaultModel;
   const baseUrlRaw = String(l.baseUrl ?? '').trim();
   return {
     mode: 'external',
@@ -254,6 +255,27 @@ function parseAgentLlmFromBody(body: unknown): AgentLlmOptions | undefined {
   };
 }
 
+/** 设置页：读取 .env 中已保存的 Gemini 配置（不回传完整 Key） */
+app.get('/agent/gemini/settings', (_req, res) => {
+  res.json(getGeminiEnvSettingsSnapshot());
+});
+
+/** 设置页：保存 Gemini API Key / 默认模型到 .env，并立即写入当前 API 进程环境 */
+app.post('/agent/gemini/settings', (req, res) => {
+  try {
+    const apiKey = String(req.body?.apiKey ?? '').trim();
+    const model = String(req.body?.model ?? '').trim();
+    const snapshot = saveGeminiEnvSettings({
+      ...(apiKey ? { apiKey } : {}),
+      ...(model ? { model } : {}),
+    });
+    res.json(snapshot);
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    res.status(500).json({ ok: false, error: msg });
+  }
+});
+
 /** 设置页：测试当前表单或环境变量中的 Gemini 是否可达（不落盘） */
 app.post('/agent/gemini/test', async (req, res) => {
   const apiKeyFromBody = String(req.body?.apiKey ?? '').trim();
@@ -263,7 +285,7 @@ app.post('/agent/gemini/test', async (req, res) => {
     res.status(400).json({ ok: false, error: '缺少 API Key：在请求体中传入 apiKey，或配置 GEMINI_API_KEY / GOOGLE_API_KEY' });
     return;
   }
-  const model = String(req.body?.model ?? '').trim() || 'gemini-2.0-flash';
+  const model = String(req.body?.model ?? '').trim() || config.gemini.defaultModel;
   const baseUrlRaw = String(req.body?.baseUrl ?? '').trim();
   try {
     const result = await testGeminiConnection({ apiKey, model, baseUrl: baseUrlRaw || undefined });

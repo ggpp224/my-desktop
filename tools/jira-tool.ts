@@ -13,6 +13,10 @@ const ONLINE_BUG_JQL =
   'issuetype in (线上需求, 线上缺陷, 线上BUG, 线上环境, 线上其他, 线上效率, "业务运维 - 线上问题", "业务运维 - 线上故障报告", 支持网-需求, 支持网-缺陷, 安全漏洞缺陷, 运维问题, 运维任务) AND assignee in (liuweiaq, guopengb, wangjuan3, zhangjinz, liyzb, wangmingg) AND status not in (Closed, 关闭) AND issuetype = 线上缺陷 AND assignee = guopengb ORDER BY updated DESC';
 const UNRESOLVED_STATUSES =
   '(Closed, 遗留, Resolved, 关闭, 待测试环境验证, 待集测环境验证, 待验证)';
+/** nextbus 筛选器下未完成任务排除的状态（含 Reopened，与 Jira 任务板一致） */
+const TASK_UNRESOLVED_STATUSES =
+  '(Closed, 遗留, Reopened, 关闭, 待测试环境验证, 待集测环境验证, 待验证)';
+const NOT_DEFECT_CLAUSE = 'issuetype != 缺陷';
 
 /** 经办人为当前 Jira 账号、类型为缺陷、且未关闭/未解决的 bug（不用 filter=bus：部分 Open bug 不在该筛选器内）。 */
 function buildAssigneeBugJql(): string {
@@ -22,6 +26,17 @@ function buildAssigneeBugJql(): string {
 }
 
 const WEEKLY_TEAM_ACTORS = '(liuweiaq, guopengb, wangjuan3, zhangjinz, liyzb, wangmingg)';
+
+function jiraUserToken(): string {
+  const username = config.jira.username.trim();
+  return username || 'currentUser()';
+}
+
+/** 我的任务：经办人或开发人员为当前用户，全量未完成（不限迭代），排除缺陷。 */
+function buildMyTaskJql(): string {
+  const u = jiraUserToken();
+  return `(assignee = ${u} OR 开发人员 = ${u}) AND status not in ${TASK_UNRESOLVED_STATUSES} AND ${NOT_DEFECT_CLAUSE} ORDER BY updated DESC`;
+}
 
 function buildWeeklyDonePrimaryJql(weeklyDuring: string): string {
   return `(status changed to (待测试环境验证) by ${WEEKLY_TEAM_ACTORS} ${weeklyDuring} OR resolution changed to 已解决 by ${WEEKLY_TEAM_ACTORS} ${weeklyDuring} OR resolution changed to Fixed by ${WEEKLY_TEAM_ACTORS} ${weeklyDuring} OR status changed to Closed by currentUser() ${weeklyDuring}) AND 开发人员 = guopengb ORDER BY updated DESC`;
@@ -276,6 +291,10 @@ export async function searchOnlineBugs(maxResults = 100): Promise<MyBugResult> {
 
 export async function searchAssigneeBugs(maxResults = 100): Promise<MyBugResult> {
   return searchByJql(buildAssigneeBugJql(), maxResults);
+}
+
+export async function searchMyTasks(maxResults = 100): Promise<MyBugResult> {
+  return searchByJql(buildMyTaskJql(), maxResults);
 }
 
 export async function searchWeeklyDoneTasks(maxResults = 100): Promise<MyBugResult> {

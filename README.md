@@ -244,7 +244,7 @@ npm run sdk:pr-review -- --base main --model default
 - 部署：`部署 nova 分支是 sprint-260326`
 - 合并：`合并 biz-solution` / `合并 biz-solution 集测`
 - 知识库：`增量重建知识库索引`、`重建知识库索引`
-- 查询：`我的bug`、`本周已完成任务`
+- 查询：`我的bug`、`我的任务`、`本周已完成任务`
 - 周报：`周报`、`写周报`、`组内总结`
 - Cursor：`cursor用量`、`cursor今日用量`
 - 技术趋势：点击顶部「技术趋势」页签 → 刷新今日 / 中长周期报告

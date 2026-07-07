@@ -4,6 +4,15 @@ import { DEFAULT_GEMINI_MODEL } from '../../domain/llm/agentLlmRequest.js';
 
 const STORAGE_KEY = 'adc-llm-settings-v1';
 
+/** 旧默认模型：自动迁移到 DEFAULT_GEMINI_MODEL */
+const LEGACY_GEMINI_MODELS = new Set(['gemini-2.0-flash', 'gemini-2.0-flash-lite', 'gemini-2.5-flash-lite']);
+
+function normalizeGeminiModel(model: string): string {
+  const trimmed = model.trim();
+  if (!trimmed || LEGACY_GEMINI_MODELS.has(trimmed)) return DEFAULT_GEMINI_MODEL;
+  return trimmed;
+}
+
 export type PersistedLlmSettings = {
   mode: LlmRuntimeMode;
   gemini: GeminiUserSettings;
@@ -23,7 +32,7 @@ function safeParse(raw: string | null): PersistedLlmSettings | null {
     const mode = o.mode === 'external' ? 'external' : 'local';
     const g = o.gemini && typeof o.gemini === 'object' ? (o.gemini as Record<string, unknown>) : {};
     const apiKey = typeof g.apiKey === 'string' ? g.apiKey : '';
-    const model = typeof g.model === 'string' && g.model.trim() ? g.model : DEFAULT_GEMINI_MODEL;
+    const model = normalizeGeminiModel(typeof g.model === 'string' ? g.model : '');
     const baseUrl = typeof g.baseUrl === 'string' ? g.baseUrl : '';
     return { mode, gemini: { apiKey, model, baseUrl } };
   } catch {

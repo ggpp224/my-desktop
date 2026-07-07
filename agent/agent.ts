@@ -12,6 +12,7 @@ import { routeAndExecute } from './tool-router.js';
 import { AGENT_SYSTEM_PROMPT } from './system-prompt.js';
 import { resolveToolsFromIntent } from './tool-scope.js';
 import { getAllProjects } from '../config/projects.js';
+import { config } from '../config/default.js';
 import { getOllamaActiveModel } from './ollama-runtime.js';
 import {
   formatIntentLogLine,
@@ -153,7 +154,7 @@ export async function runAgent(userMessage: string, options?: RunAgentOptions): 
       const t0 = Date.now();
       const streamCb = options?.onFirstLLMStream;
       if (useGemini) {
-        const model = (llm.model ?? '').trim() || 'gemini-2.0-flash';
+        const model = (llm.model ?? '').trim() || config.gemini.defaultModel;
         const { message: gemMsg, tokenUsage: gemUsage } = await chatWithToolsGeminiStream(
           messages,
           tools,

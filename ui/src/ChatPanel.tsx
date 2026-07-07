@@ -240,7 +240,6 @@ interface ChatPanelProps {
 const QUICK_ACTIONS: Array<{ label: string; message: string }> = [
   { label: '开始工作', message: '开始工作' },
   { label: '开始工作（外部终端）', message: '开始工作，使用外部终端' },
-  { label: '打开终端', message: '打开终端' },
   { label: '我的bug', message: '我的bug' },
   { label: '经办人bug', message: '经办人bug' },
   { label: '线上bug', message: '线上bug' },
@@ -354,6 +353,7 @@ function extractMyBugsResult(toolResults?: unknown[]): JiraBugPayload | null {
   const row = toolResults.find(
     (item) =>
       ((item as ToolResultItem | undefined)?.tool === 'search_my_bugs' ||
+        (item as ToolResultItem | undefined)?.tool === 'search_my_tasks' ||
         (item as ToolResultItem | undefined)?.tool === 'search_assignee_bugs' ||
         (item as ToolResultItem | undefined)?.tool === 'search_online_bugs' ||
         (item as ToolResultItem | undefined)?.tool === 'search_weekly_done_tasks' ||

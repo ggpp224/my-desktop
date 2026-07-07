@@ -19,7 +19,8 @@ import { ThemeSwitcher } from './view/ThemeSwitcher';
 import { Button } from './view/Button';
 import { IconButton } from './view/IconButton';
 import { loadLlmSettings, saveLlmSettings } from './infrastructure/llm/llmSettingsRepository';
-import { buildAgentChatLlmBody } from './domain/llm/agentLlmRequest';
+import { fetchGeminiEnvSettings, saveGeminiEnvSettings, type GeminiEnvSettingsSnapshot } from './infrastructure/llm/geminiSettingsApi';
+import { buildAgentChatLlmBody, DEFAULT_GEMINI_MODEL } from './domain/llm/agentLlmRequest';
 import type { GeminiUserSettings, LlmRuntimeMode } from './domain/llm/agentLlmRequest';
 import { useAppTheme } from './viewmodel/theme/useAppTheme';
 import { getHelpCodebook, getHelpCommands } from './infrastructure/help/helpCatalogDataSource';
@@ -62,6 +63,7 @@ export default function App() {
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [llmMode, setLlmMode] = useState<LlmRuntimeMode>(() => loadLlmSettings().mode);
   const [geminiSettings, setGeminiSettings] = useState<GeminiUserSettings>(() => loadLlmSettings().gemini);
+  const [geminiEnvSaved, setGeminiEnvSaved] = useState<GeminiEnvSettingsSnapshot | null>(null);
   const agentChatLlmBody = useMemo(() => buildAgentChatLlmBody(llmMode, geminiSettings), [llmMode, geminiSettings]);
   const [activeHeaderTab, setActiveHeaderTab] = useState<string>(HEADER_TABS[0].key);
   const [headerTabs, setHeaderTabs] = useState<HeaderTab[]>(HEADER_TABS);
@@ -82,6 +84,13 @@ export default function App() {
       `${new Date()
         .toLocaleTimeString('zh-CN', { hour12: false, hour: '2-digit', minute: '2-digit', second: '2-digit' })} ${line}`,
     ]);
+
+  useEffect(() => {
+    if (!apiBase) return;
+    void fetchGeminiEnvSettings(apiBase)
+      .then(setGeminiEnvSaved)
+      .catch(() => setGeminiEnvSaved(null));
+  }, [apiBase]);
 
   useEffect(() => {
     if (!resizing) return;
@@ -359,7 +368,7 @@ export default function App() {
               请先安装并启动 Ollama，并拉取模型（如 ollama pull qwen2.5）。<a href="https://ollama.com" target="_blank" rel="noreferrer" style={{ color: themeTokens.tabActiveBorder }}>文档</a>
             </p>
           )}
-          {llmMode === 'external' && !geminiSettings.apiKey.trim() && (
+          {llmMode === 'external' && !geminiSettings.apiKey.trim() && !geminiEnvSaved?.hasApiKey && (
             <p style={{ margin: '8px 0 0', fontSize: 12, color: themeTokens.textSecondary }}>
               外部模式：未在界面填写 Key 时，将使用启动 API 进程中的 <code style={{ color: themeTokens.textPrimary }}>GEMINI_API_KEY</code> /{' '}
               <code style={{ color: themeTokens.textPrimary }}>GOOGLE_API_KEY</code>（与 A2UI 相同，可在 shell 中 export）。
@@ -410,6 +419,19 @@ export default function App() {
               icon="⚙"
               onClick={(e) => {
                 e.stopPropagation();
+                const persisted = loadLlmSettings();
+                setGeminiSettings(persisted.gemini);
+                setLlmMode(persisted.mode);
+                if (apiBase) {
+                  void fetchGeminiEnvSettings(apiBase)
+                    .then((snapshot) => {
+                      setGeminiEnvSaved(snapshot);
+                      if (snapshot.model) {
+                        setGeminiSettings((prev) => ({ ...prev, model: snapshot.model }));
+                      }
+                    })
+                    .catch(() => setGeminiEnvSaved(null));
+                }
                 setSettingsOpen((v) => !v);
                 setHelpOpen(false);
               }}
@@ -424,12 +446,25 @@ export default function App() {
                 apiBase={apiBase}
                 mode={llmMode}
                 gemini={geminiSettings}
+                envSaved={geminiEnvSaved}
                 themeTokens={themeTokens}
                 onClose={() => setSettingsOpen(false)}
-                onSave={(next) => {
-                  setGeminiSettings(next.gemini);
+                onSave={async (next) => {
+                  if (apiBase && next.mode === 'external') {
+                    await saveGeminiEnvSettings(apiBase, {
+                      ...(next.gemini.apiKey.trim() ? { apiKey: next.gemini.apiKey.trim() } : {}),
+                      model: next.gemini.model.trim() || DEFAULT_GEMINI_MODEL,
+                    });
+                    const snapshot = await fetchGeminiEnvSettings(apiBase);
+                    setGeminiEnvSaved(snapshot);
+                  }
+                  const gemini = {
+                    ...next.gemini,
+                    apiKey: next.gemini.apiKey.trim() || geminiSettings.apiKey.trim(),
+                  };
+                  setGeminiSettings(gemini);
                   setLlmMode(next.mode);
-                  saveLlmSettings({ mode: next.mode, gemini: next.gemini });
+                  saveLlmSettings({ mode: next.mode, gemini });
                   setSettingsOpen(false);
                 }}
               />
