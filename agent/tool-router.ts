@@ -29,6 +29,7 @@ import {
   searchMyBugs,
   searchMyTasks,
   searchOnlineBugs,
+  searchTodoBugs,
   searchWeeklyDoneTasks,
   searchWeeklyHandoffBugs,
 } from '../tools/jira-tool.js';
@@ -218,6 +219,10 @@ export async function routeAndExecute(call: ToolCall, ctx?: RouteExecuteContext)
     case 'search_assignee_bugs': {
       const maxResults = Number(args?.maxResults ?? 100);
       return searchAssigneeBugs(maxResults);
+    }
+    case 'search_todo_bugs': {
+      const maxResults = Number(args?.maxResults ?? 100);
+      return searchTodoBugs(maxResults);
     }
     case 'search_my_tasks': {
       const maxResults = Number(args?.maxResults ?? 100);

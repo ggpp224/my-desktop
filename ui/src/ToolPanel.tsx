@@ -36,6 +36,7 @@ const TOOL_GROUPS: ToolGroup[] = [
       { name: 'search_my_bugs', desc: '查询 Jira 我的 bug（如：我的bug）' },
       { name: 'search_my_tasks', desc: '查询我的全量未完成任务，不含缺陷（如：我的任务）' },
       { name: 'search_assignee_bugs', desc: '查询经办人为我、类型为缺陷且未解决的 bug（如：经办人bug）' },
+      { name: 'search_todo_bugs', desc: '查询当前迭代、状态为打开的待办缺陷（如：待办bug）' },
       { name: 'search_online_bugs', desc: '查询 Jira 线上 bug（如：线上bug）' },
       { name: 'search_weekly_done_tasks', desc: '查询 Jira 本周已完成任务（如：本周已完成任务）' },
       { name: 'search_weekly_handoff_bugs', desc: '查询本周经我手但已转交的 bug（如：本周经我手的bug）' },

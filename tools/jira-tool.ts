@@ -25,6 +25,13 @@ function buildAssigneeBugJql(): string {
   return `${assigneeClause} AND issuetype = 缺陷 AND status not in ${UNRESOLVED_STATUSES} ORDER BY fixVersion ASC`;
 }
 
+/** 待办 bug：当前迭代（filter=nextbus）、经办人为当前用户、类型为缺陷、状态为打开。 */
+function buildTodoBugJql(): string {
+  const username = config.jira.username.trim();
+  const assigneeClause = username ? `assignee = ${username}` : 'assignee = currentUser()';
+  return `filter = nextbus AND ${assigneeClause} AND issuetype = 缺陷 AND status = Open ORDER BY fixVersion ASC`;
+}
+
 const WEEKLY_TEAM_ACTORS = '(liuweiaq, guopengb, wangjuan3, zhangjinz, liyzb, wangmingg)';
 
 function jiraUserToken(): string {
@@ -291,6 +298,10 @@ export async function searchOnlineBugs(maxResults = 100): Promise<MyBugResult> {
 
 export async function searchAssigneeBugs(maxResults = 100): Promise<MyBugResult> {
   return searchByJql(buildAssigneeBugJql(), maxResults);
+}
+
+export async function searchTodoBugs(maxResults = 100): Promise<MyBugResult> {
+  return searchByJql(buildTodoBugJql(), maxResults);
 }
 
 export async function searchMyTasks(maxResults = 100): Promise<MyBugResult> {

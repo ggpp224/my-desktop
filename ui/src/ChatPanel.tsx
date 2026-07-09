@@ -31,6 +31,7 @@ import {
   type ReportCopyLlmContext,
 } from './domain/llm/reportCopyLeadLine';
 import { extractNovaUpgradeVerifyMarkdown } from './domain/workflow/novaUpgradeVerifyReport';
+import { JiraBugListPanel } from './view/JiraBugListPanel';
 
 type AgentTiming = { firstLLMMs?: number; tools?: { name: string; ms: number }[]; secondLLMMs?: number; tokenUsage?: { promptTokens?: number; completionTokens?: number } };
 type AgentResult = {
@@ -88,31 +89,6 @@ type FetchWeeklyReportInfoPayload = {
   bodyStorage?: string;
   versionNumber?: number;
   versionWhen?: string;
-};
-type CursorUsageToolResult = {
-  success?: boolean;
-  fetchedAt?: string;
-  data?: unknown;
-};
-type CursorUsageRow = {
-  item: string;
-  tokensText: string;
-  costText: string;
-  includedText: string;
-  tokensNumber?: number;
-  costNumber?: number;
-};
-type CursorTodayUsageEvent = {
-  timestamp?: string;
-  model?: string;
-  kind?: string;
-  chargedCents?: number;
-  tokenUsage?: {
-    inputTokens?: number;
-    outputTokens?: number;
-    cacheReadTokens?: number;
-    cacheWriteTokens?: number;
-  };
 };
 type KnowledgeCitation = {
   path?: string;
@@ -240,11 +216,8 @@ interface ChatPanelProps {
 const QUICK_ACTIONS: Array<{ label: string; message: string }> = [
   { label: '开始工作', message: '开始工作' },
   { label: '开始工作（外部终端）', message: '开始工作，使用外部终端' },
-  { label: '我的bug', message: '我的bug' },
   { label: '经办人bug', message: '经办人bug' },
-  { label: '线上bug', message: '线上bug' },
-  { label: 'cursor用量', message: 'cursor用量' },
-  { label: 'cursor今日用量', message: 'cursor今日用量' },
+  { label: '待办bug', message: '待办bug' },
 ];
 
 /** 合并菜单项：走 SSE 流式接口，每步实时写入 Logs */
@@ -348,14 +321,41 @@ function buildCommandHints(projects: ProjectInfo[], inputHistory: string[]): str
   return buildSupportedCommandHints(projects, inputHistory);
 }
 
+/** 仅保留指令与 Agent 文本回复，不展示专用结果 UI */
+const TOOL_RESULT_UI_SUPPRESSED = new Set([
+  'search_my_bugs',
+  'search_online_bugs',
+  'get_cursor_usage',
+  'get_cursor_today_usage',
+]);
+
+function shouldSuppressToolResultDisplay(toolResults?: unknown[]): boolean {
+  if (!Array.isArray(toolResults) || toolResults.length === 0) return false;
+  return toolResults.every((item) => {
+    const tool = (item as ToolResultItem | undefined)?.tool;
+    return typeof tool === 'string' && TOOL_RESULT_UI_SUPPRESSED.has(tool);
+  });
+}
+
+function extractTodoBugsResult(toolResults?: unknown[]): JiraBugPayload | null {
+  if (!Array.isArray(toolResults)) return null;
+  const row = toolResults.find(
+    (item) =>
+      (item as ToolResultItem | undefined)?.tool === 'search_todo_bugs' &&
+      (item as ToolResultItem | undefined)?.result,
+  ) as ToolResultItem | undefined;
+  if (!row || typeof row.result !== 'object' || row.result == null) return null;
+  const payload = row.result as JiraBugPayload;
+  if (!Array.isArray(payload.issues)) return null;
+  return payload;
+}
+
 function extractMyBugsResult(toolResults?: unknown[]): JiraBugPayload | null {
   if (!Array.isArray(toolResults)) return null;
   const row = toolResults.find(
     (item) =>
-      ((item as ToolResultItem | undefined)?.tool === 'search_my_bugs' ||
-        (item as ToolResultItem | undefined)?.tool === 'search_my_tasks' ||
+      ((item as ToolResultItem | undefined)?.tool === 'search_my_tasks' ||
         (item as ToolResultItem | undefined)?.tool === 'search_assignee_bugs' ||
-        (item as ToolResultItem | undefined)?.tool === 'search_online_bugs' ||
         (item as ToolResultItem | undefined)?.tool === 'search_weekly_done_tasks' ||
         (item as ToolResultItem | undefined)?.tool === 'search_weekly_handoff_bugs') &&
       (item as ToolResultItem | undefined)?.result
@@ -397,18 +397,6 @@ function extractFetchWeeklyReportInfoResult(toolResults?: unknown[]): FetchWeekl
   ) as ToolResultItem | undefined;
   if (!row || typeof row.result !== 'object' || row.result == null) return null;
   return row.result as FetchWeeklyReportInfoPayload;
-}
-
-function extractCursorUsageResult(toolResults?: unknown[]): CursorUsageToolResult | null {
-  if (!Array.isArray(toolResults)) return null;
-  const row = toolResults.find(
-    (item) =>
-      ((item as ToolResultItem | undefined)?.tool === 'get_cursor_usage' ||
-        (item as ToolResultItem | undefined)?.tool === 'get_cursor_today_usage') &&
-      (item as ToolResultItem | undefined)?.result
-  ) as ToolResultItem | undefined;
-  if (!row || typeof row.result !== 'object' || row.result == null) return null;
-  return row.result as CursorUsageToolResult;
 }
 
 function extractKnowledgeBaseResult(toolResults?: unknown[]): KnowledgeBasePayload | null {
@@ -458,290 +446,6 @@ function extractListKnowledgeDocsResult(toolResults?: unknown[]): ListKnowledgeD
   return row.result as ListKnowledgeDocsPayload;
 }
 
-function pickString(obj: Record<string, unknown>, keys: string[]): string {
-  for (const key of keys) {
-    const value = obj[key];
-    if (typeof value === 'string' && value.trim()) return value.trim();
-  }
-  return '';
-}
-
-function pickNumber(obj: Record<string, unknown>, keys: string[]): number | undefined {
-  for (const key of keys) {
-    const value = obj[key];
-    if (typeof value === 'number' && Number.isFinite(value)) return value;
-    if (typeof value === 'string' && value.trim()) {
-      const n = Number(value);
-      if (Number.isFinite(n)) return n;
-    }
-  }
-  return undefined;
-}
-
-function formatTokens(value: number | undefined, fallback = '--'): string {
-  if (value == null || !Number.isFinite(value)) return fallback;
-  const compact = new Intl.NumberFormat('zh-CN', { notation: 'compact', maximumFractionDigits: 1 }).format(value);
-  return `${compact} tokens`;
-}
-
-function formatCost(value: number | undefined, fallback = '--'): string {
-  if (value == null || !Number.isFinite(value)) return fallback;
-  return `US$${value.toFixed(2)}`;
-}
-
-function formatTokenCompact(value: number | undefined, fallback = '--'): string {
-  if (value == null || !Number.isFinite(value)) return fallback;
-  return new Intl.NumberFormat('zh-CN', { notation: 'compact', maximumFractionDigits: 1 }).format(value);
-}
-
-function toNumberSafe(value: unknown): number | undefined {
-  if (typeof value === 'number' && Number.isFinite(value)) return value;
-  if (typeof value === 'string' && value.trim()) {
-    const n = Number(value);
-    if (Number.isFinite(n)) return n;
-  }
-  return undefined;
-}
-
-function formatUsageDate(timestamp: string | undefined): string {
-  const ms = toNumberSafe(timestamp);
-  if (ms == null) return '--';
-  const d = new Date(ms);
-  const pad = (n: number) => String(n).padStart(2, '0');
-  const yyyy = d.getFullYear();
-  const mm = pad(d.getMonth() + 1);
-  const dd = pad(d.getDate());
-  const hh = pad(d.getHours());
-  const mi = pad(d.getMinutes());
-  return `${yyyy}-${mm}-${dd} ${hh}:${mi}`;
-}
-
-function mapUsageKind(kind: string | undefined): string {
-  if (!kind) return '--';
-  if (kind.includes('INCLUDED')) return 'Included';
-  if (kind.includes('PREMIUM')) return 'Premium';
-  return kind.replace(/^USAGE_EVENT_KIND_/, '').toLowerCase();
-}
-
-function normalizeCursorRows(data: unknown): CursorUsageRow[] {
-  const rows: CursorUsageRow[] = [];
-  const pushAggregationRow = (record: Record<string, unknown>) => {
-    const item = pickString(record, ['modelIntent', 'model_intent', 'intent', 'name']) || 'unknown';
-    const input = pickNumber(record, ['inputTokens', 'input_tokens']) ?? 0;
-    const output = pickNumber(record, ['outputTokens', 'output_tokens']) ?? 0;
-    const cacheRead = pickNumber(record, ['cacheReadTokens', 'cache_read_tokens']) ?? 0;
-    const cacheWrite = pickNumber(record, ['cacheWriteTokens', 'cache_write_tokens']) ?? 0;
-    const tokensNumber = input + output + cacheRead + cacheWrite;
-    const costCents = pickNumber(record, ['totalCents', 'total_cents']);
-    const costNumber = costCents != null ? costCents / 100 : undefined;
-    rows.push({
-      item,
-      tokensText: formatTokens(tokensNumber),
-      costText: formatCost(costNumber),
-      includedText: 'Included',
-      tokensNumber,
-      costNumber,
-    });
-  };
-  const pushRow = (record: Record<string, unknown>) => {
-    const item = pickString(record, ['item', 'name', 'model', 'label', 'type']);
-    const tokensNumber = pickNumber(record, ['tokens', 'tokenCount', 'totalTokens', 'usageTokens']);
-    const costNumber = pickNumber(record, ['cost', 'totalCost', 'usdCost', 'amount']);
-    const tokensText = pickString(record, ['tokensText', 'tokenText']) || formatTokens(tokensNumber);
-    const costText = pickString(record, ['costText']) || formatCost(costNumber);
-    const includedFlag = record.included ?? record.includedInPro ?? record.isIncluded;
-    const includedText =
-      typeof record.includedText === 'string'
-        ? record.includedText
-        : includedFlag === true
-          ? 'Included'
-          : includedFlag === false
-            ? '--'
-            : 'Included';
-    if (!item) return;
-    rows.push({ item, tokensText, costText, includedText, tokensNumber, costNumber });
-  };
-
-  const scanArray = (input: unknown[]) => {
-    for (const item of input) {
-      if (item && typeof item === 'object' && !Array.isArray(item)) {
-        pushRow(item as Record<string, unknown>);
-      }
-    }
-  };
-
-  if (Array.isArray(data)) {
-    scanArray(data);
-    return rows;
-  }
-  if (!data || typeof data !== 'object') return rows;
-  const dataRecord = data as Record<string, unknown>;
-  const root =
-    dataRecord.response && typeof dataRecord.response === 'object'
-      ? (dataRecord.response as Record<string, unknown>)
-      : dataRecord;
-  const aggregations = root.aggregations;
-  if (Array.isArray(aggregations)) {
-    for (const item of aggregations) {
-      if (item && typeof item === 'object' && !Array.isArray(item)) {
-        pushAggregationRow(item as Record<string, unknown>);
-      }
-    }
-    if (rows.length > 0) return rows;
-  }
-  const candidateLists = ['items', 'rows', 'models', 'usage', 'events', 'data', 'aggregatedUsage', 'aggregated_usage'];
-  for (const key of candidateLists) {
-    const value = root[key];
-    if (Array.isArray(value)) scanArray(value);
-  }
-  if (rows.length > 0) return rows;
-  for (const [key, value] of Object.entries(root)) {
-    if (!value || typeof value !== 'object' || Array.isArray(value)) continue;
-    const obj = value as Record<string, unknown>;
-    const tokensNumber = pickNumber(obj, ['tokens', 'tokenCount', 'totalTokens', 'usageTokens']);
-    const costNumber = pickNumber(obj, ['cost', 'totalCost', 'usdCost', 'amount']);
-    if (tokensNumber == null && costNumber == null) continue;
-    rows.push({
-      item: key,
-      tokensText: formatTokens(tokensNumber),
-      costText: formatCost(costNumber),
-      includedText: 'Included',
-      tokensNumber,
-      costNumber,
-    });
-  }
-  return rows;
-}
-
-function renderCursorUsage(toolResults: unknown[] | undefined, themeTokens: AppThemeTokens) {
-  const payload = extractCursorUsageResult(toolResults);
-  if (!payload) return null;
-  const dataObj = payload.data && typeof payload.data === 'object' ? (payload.data as Record<string, unknown>) : {};
-  const rows = normalizeCursorRows(payload.data);
-  if (!rows.length) return null;
-  const rangeText = (() => {
-    const startRaw =
-      pickString(dataObj, ['startDate', 'start_date', 'from', 'periodStart']) ||
-      pickString((dataObj.request as Record<string, unknown>) || {}, ['startDate', 'start_date', 'from', 'periodStart']);
-    const startNum =
-      pickNumber(dataObj, ['startDate', 'start_date', 'from', 'periodStart']) ??
-      pickNumber((dataObj.request as Record<string, unknown>) || {}, ['startDate', 'start_date', 'from', 'periodStart']);
-    const end = pickString(dataObj, ['endDate', 'end_date', 'to', 'periodEnd']);
-    const startText =
-      startRaw ||
-      (startNum != null && Number.isFinite(startNum)
-        ? new Date(startNum).toLocaleString('zh-CN', { hour12: false })
-        : '');
-    if (startText && end) return `${startText} - ${end}`;
-    if (startText) return `Start: ${startText}`;
-    return '';
-  })();
-  const totalTokens = rows.reduce((sum, row) => sum + (row.tokensNumber ?? 0), 0);
-  const totalCost = rows.reduce((sum, row) => sum + (row.costNumber ?? 0), 0);
-  return (
-    <div style={{ marginTop: 8, background: themeTokens.workspacePanelSubtleBackground, color: themeTokens.textPrimary, borderRadius: 6, border: `1px solid ${themeTokens.inputBorder}`, padding: 12 }}>
-      {rangeText && <div style={{ fontSize: 13, marginBottom: 10, color: themeTokens.textSecondary }}>{rangeText}</div>}
-      <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 14 }}>
-        <thead>
-          <tr>
-            <th style={{ textAlign: 'left', padding: '8px 10px', borderBottom: `1px solid ${themeTokens.inputBorder}`, color: themeTokens.textSecondary }}>Item</th>
-            <th style={{ textAlign: 'right', padding: '8px 10px', borderBottom: `1px solid ${themeTokens.inputBorder}`, color: themeTokens.textSecondary }}>Tokens</th>
-            <th style={{ textAlign: 'right', padding: '8px 10px', borderBottom: `1px solid ${themeTokens.inputBorder}`, color: themeTokens.textSecondary }}>Cost</th>
-          </tr>
-        </thead>
-        <tbody>
-          <tr>
-            <td style={{ padding: '10px', borderBottom: `1px solid ${themeTokens.inputBorder}`, fontWeight: 600 }}>Included in Pro</td>
-            <td style={{ borderBottom: `1px solid ${themeTokens.inputBorder}` }} />
-            <td style={{ borderBottom: `1px solid ${themeTokens.inputBorder}` }} />
-          </tr>
-          {rows.map((row, idx) => (
-            <tr key={`${row.item}-${idx}`}>
-              <td style={{ padding: '9px 10px', borderBottom: `1px solid ${themeTokens.inputBorder}` }}>{row.item}</td>
-              <td style={{ padding: '9px 10px', borderBottom: `1px solid ${themeTokens.inputBorder}`, textAlign: 'right', whiteSpace: 'nowrap' }}>{row.tokensText}</td>
-              <td style={{ padding: '9px 10px', borderBottom: `1px solid ${themeTokens.inputBorder}`, textAlign: 'right', whiteSpace: 'nowrap' }}>
-                {row.costText} <span style={{ color: themeTokens.textSecondary }}>{row.includedText}</span>
-              </td>
-            </tr>
-          ))}
-          <tr>
-            <td style={{ padding: '10px', fontWeight: 600 }}>Total</td>
-            <td style={{ padding: '10px', textAlign: 'right', fontWeight: 600, whiteSpace: 'nowrap' }}>{formatTokens(totalTokens, '--')}</td>
-            <td style={{ padding: '10px', textAlign: 'right', fontWeight: 600, whiteSpace: 'nowrap' }}>
-              {formatCost(totalCost, '--')} <span style={{ color: themeTokens.textSecondary, fontWeight: 400 }}>Included</span>
-            </td>
-          </tr>
-        </tbody>
-      </table>
-    </div>
-  );
-}
-
-function renderCursorTodayUsage(toolResults: unknown[] | undefined, themeTokens: AppThemeTokens) {
-  if (!Array.isArray(toolResults)) return null;
-  const row = toolResults.find(
-    (item) => (item as ToolResultItem | undefined)?.tool === 'get_cursor_today_usage' && (item as ToolResultItem | undefined)?.result
-  ) as ToolResultItem | undefined;
-  if (!row || typeof row.result !== 'object' || row.result == null) return null;
-  const payload = row.result as CursorUsageToolResult;
-  const dataObj =
-    payload.data && typeof payload.data === 'object' ? (payload.data as Record<string, unknown>) : {};
-  const response =
-    dataObj.response && typeof dataObj.response === 'object'
-      ? (dataObj.response as Record<string, unknown>)
-      : {};
-  const usageEvents = Array.isArray(response.usageEventsDisplay)
-    ? (response.usageEventsDisplay as CursorTodayUsageEvent[])
-    : [];
-  if (!usageEvents.length) return null;
-
-  const rows = usageEvents.map((event) => {
-    const input = toNumberSafe(event.tokenUsage?.inputTokens) ?? 0;
-    const output = toNumberSafe(event.tokenUsage?.outputTokens) ?? 0;
-    const cacheRead = toNumberSafe(event.tokenUsage?.cacheReadTokens) ?? 0;
-    const cacheWrite = toNumberSafe(event.tokenUsage?.cacheWriteTokens) ?? 0;
-    const tokens = input + output + cacheRead + cacheWrite;
-    const cents = toNumberSafe(event.chargedCents);
-    const usd = cents != null ? cents / 100 : undefined;
-    return {
-      date: formatUsageDate(event.timestamp),
-      type: mapUsageKind(event.kind),
-      model: event.model || '--',
-      tokensText: formatTokenCompact(tokens),
-      costText: `${formatCost(usd)} Included`,
-    };
-  });
-
-  return (
-    <div style={{ marginTop: 8, background: themeTokens.workspacePanelSubtleBackground, color: themeTokens.textPrimary, borderRadius: 10, border: `1px solid ${themeTokens.inputBorder}`, padding: 10 }}>
-      <div style={{ overflowX: 'auto' }}>
-        <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 14 }}>
-          <thead>
-            <tr>
-              <th style={{ textAlign: 'left', padding: '8px 10px', borderBottom: `1px solid ${themeTokens.inputBorder}`, color: themeTokens.textSecondary }}>Date</th>
-              <th style={{ textAlign: 'left', padding: '8px 10px', borderBottom: `1px solid ${themeTokens.inputBorder}`, color: themeTokens.textSecondary }}>Type</th>
-              <th style={{ textAlign: 'left', padding: '8px 10px', borderBottom: `1px solid ${themeTokens.inputBorder}`, color: themeTokens.textSecondary }}>Model</th>
-              <th style={{ textAlign: 'right', padding: '8px 10px', borderBottom: `1px solid ${themeTokens.inputBorder}`, color: themeTokens.textSecondary }}>Tokens</th>
-              <th style={{ textAlign: 'right', padding: '8px 10px', borderBottom: `1px solid ${themeTokens.inputBorder}`, color: themeTokens.textSecondary }}>Cost</th>
-            </tr>
-          </thead>
-          <tbody>
-            {rows.map((item, idx) => (
-              <tr key={`${item.date}-${idx}`}>
-                <td style={{ padding: '10px', borderBottom: `1px solid ${themeTokens.inputBorder}` }}>{item.date}</td>
-                <td style={{ padding: '10px', borderBottom: `1px solid ${themeTokens.inputBorder}` }}>{item.type}</td>
-                <td style={{ padding: '10px', borderBottom: `1px solid ${themeTokens.inputBorder}` }}>{item.model}</td>
-                <td style={{ padding: '10px', borderBottom: `1px solid ${themeTokens.inputBorder}`, textAlign: 'right', whiteSpace: 'nowrap' }}>{item.tokensText}</td>
-                <td style={{ padding: '10px', borderBottom: `1px solid ${themeTokens.inputBorder}`, textAlign: 'right', whiteSpace: 'nowrap' }}>{item.costText}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
-    </div>
-  );
-}
-
 /* AI 生成 By Peng.Guo：Confluence 新版/表格粘贴优先写 text/html，纯文本槽位放 Wiki 作降级；HTML 顶部带与纯文本一致的首行说明 */
 async function copyWeeklyReportToClipboard(leadLine: string, htmlFragment: string, wikiPlain: string, leadColor: string): Promise<void> {
   const leadHtml = `<p style="margin:0 0 0.75em;font-size:13px;color:${leadColor};">${escapeHtmlForClipboard(leadLine)}</p>`;
@@ -765,6 +469,7 @@ function renderToolResults(
   copyCtx: ReportCopyLlmContext,
   themeTokens: AppThemeTokens,
   onOpenKnowledgeDoc?: (sourcePath: string) => void,
+  apiBase?: string,
 ) {
   const novaVerifyMd = extractNovaUpgradeVerifyMarkdown(toolResults);
   if (novaVerifyMd) {
@@ -1133,66 +838,14 @@ function renderToolResults(
       </div>
     );
   }
+  const todoBugs = extractTodoBugsResult(toolResults);
+  if (todoBugs) {
+    return <JiraBugListPanel initial={todoBugs} themeTokens={themeTokens} apiBase={apiBase} refreshable />;
+  }
   const myBugs = extractMyBugsResult(toolResults);
   if (myBugs) {
-    const issues = myBugs.issues ?? [];
-    return (
-      <div style={{ marginTop: 8, background: themeTokens.workspacePanelSubtleBackground, borderRadius: 6, border: `1px solid ${themeTokens.inputBorder}`, overflow: 'hidden' }}>
-        <div style={{ padding: '8px 10px', fontSize: 12, color: themeTokens.textSecondary, borderBottom: `1px solid ${themeTokens.inputBorder}` }}>
-          共 {myBugs.total ?? issues.length} 条，当前展示 {issues.length} 条
-        </div>
-        <div style={{ overflowX: 'auto' }}>
-          <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12, color: themeTokens.textPrimary, tableLayout: 'fixed' }}>
-            <thead>
-              <tr style={{ background: themeTokens.workspacePanelBackground }}>
-                <th style={{ width: '11%', textAlign: 'left', padding: '8px 10px', borderBottom: `1px solid ${themeTokens.inputBorder}` }}>关键字</th>
-                <th style={{ width: '26%', textAlign: 'left', padding: '8px 10px', borderBottom: `1px solid ${themeTokens.inputBorder}` }}>摘要</th>
-                <th style={{ width: '8%', textAlign: 'left', padding: '8px 10px', borderBottom: `1px solid ${themeTokens.inputBorder}` }}>状态</th>
-                <th style={{ width: '8%', textAlign: 'left', padding: '8px 10px', borderBottom: `1px solid ${themeTokens.inputBorder}` }}>解决结果</th>
-                <th style={{ width: '10%', textAlign: 'left', padding: '8px 10px', borderBottom: `1px solid ${themeTokens.inputBorder}` }}>修复版本</th>
-                <th style={{ width: '10%', textAlign: 'left', padding: '8px 10px', borderBottom: `1px solid ${themeTokens.inputBorder}` }}>经办人</th>
-                <th style={{ width: '14%', textAlign: 'left', padding: '8px 10px', borderBottom: `1px solid ${themeTokens.inputBorder}` }}>开发人员</th>
-                <th style={{ width: '13%', textAlign: 'left', padding: '8px 10px', borderBottom: `1px solid ${themeTokens.inputBorder}` }}>特性</th>
-              </tr>
-            </thead>
-            <tbody>
-              {issues.map((issue, idx) => (
-                <tr key={`${issue.key ?? 'issue'}-${idx}`} style={{ background: idx % 2 === 0 ? themeTokens.workspacePanelSubtleBackground : themeTokens.workspacePanelBackground }}>
-                  <td style={{ padding: '8px 10px', borderBottom: `1px solid ${themeTokens.inputBorder}`, whiteSpace: 'nowrap' }}>
-                    {issue.url ? (
-                      <a href={issue.url} target="_blank" rel="noreferrer" style={{ color: themeTokens.tabActiveBorder, textDecoration: 'none' }}>
-                        {issue.key || '--'}
-                      </a>
-                    ) : (
-                      issue.key || '--'
-                    )}
-                  </td>
-                  <td style={{ padding: '8px 10px', borderBottom: `1px solid ${themeTokens.inputBorder}`, wordBreak: 'break-word' }}>{issue.summary || '--'}</td>
-                  <td style={{ padding: '8px 10px', borderBottom: `1px solid ${themeTokens.inputBorder}`, wordBreak: 'break-word' }}>{issue.status || '--'}</td>
-                  <td style={{ padding: '8px 10px', borderBottom: `1px solid ${themeTokens.inputBorder}`, wordBreak: 'break-word' }}>{issue.resolution || '--'}</td>
-                  <td style={{ padding: '8px 10px', borderBottom: `1px solid ${themeTokens.inputBorder}`, wordBreak: 'break-word' }}>{issue.fixVersion || '--'}</td>
-                  <td style={{ padding: '8px 10px', borderBottom: `1px solid ${themeTokens.inputBorder}`, wordBreak: 'break-word' }}>{issue.assignee || '--'}</td>
-                  <td style={{ padding: '8px 10px', borderBottom: `1px solid ${themeTokens.inputBorder}`, wordBreak: 'break-word' }}>{issue.developer ?? '—'}</td>
-                  <td style={{ padding: '8px 10px', borderBottom: `1px solid ${themeTokens.inputBorder}`, wordBreak: 'break-word' }}>{issue.feature ?? '—'}</td>
-                </tr>
-              ))}
-              {issues.length === 0 && (
-                <tr>
-                  <td colSpan={8} style={{ padding: '10px', color: themeTokens.textSecondary }}>
-                    暂无数据
-                  </td>
-                </tr>
-              )}
-            </tbody>
-          </table>
-        </div>
-      </div>
-    );
+    return <JiraBugListPanel initial={myBugs} themeTokens={themeTokens} />;
   }
-  const cursorTodayUsage = renderCursorTodayUsage(toolResults, themeTokens);
-  if (cursorTodayUsage) return cursorTodayUsage;
-  const cursorUsage = renderCursorUsage(toolResults, themeTokens);
-  if (cursorUsage) return cursorUsage;
   const compositeDeployMd = formatCompositeWorkflowStepsMarkdown(extractCompositeWorkflowResult(toolResults));
   if (compositeDeployMd) {
     return (
@@ -1212,6 +865,7 @@ function renderToolResults(
       </div>
     );
   }
+  if (shouldSuppressToolResultDisplay(toolResults)) return null;
   if (toolResults && toolResults.length > 0 && !isCompositeNovaMergeDeployToolResults(toolResults)) {
     return (
       <pre
@@ -2060,7 +1714,8 @@ export function ChatPanel({ apiBase, addLog, onStartWorkEmbedded, onOpenKnowledg
                 agentChatLlmBody,
               },
               themeTokens,
-              onOpenKnowledgeDoc
+              onOpenKnowledgeDoc,
+              apiBase,
             )}
           </div>
         ))}

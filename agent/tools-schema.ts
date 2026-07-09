@@ -229,6 +229,20 @@ export const toolsSchema = [
   {
     type: 'function' as const,
     function: {
+      name: 'search_todo_bugs',
+      description:
+        '查询 Jira 中“待办bug”固定条件列表（Jira 8.8，非 token 鉴权）：当前迭代（filter=nextbus）、经办人为当前用户、类型为缺陷、状态为打开。用户说「待办bug」「查询待办bug」时调用，可选 maxResults',
+      parameters: {
+        type: 'object',
+        properties: {
+          maxResults: { type: 'number', description: '可选，返回数量上限，默认 100，最大 100' },
+        },
+      },
+    },
+  },
+  {
+    type: 'function' as const,
+    function: {
       name: 'search_online_bugs',
       description:
         '查询 Jira 中“线上bug”固定条件列表（Jira 8.8，非 token 鉴权）。用户说「线上bug」「查询线上bug」时调用，可选 maxResults',

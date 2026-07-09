@@ -20,6 +20,7 @@ import { getJenkinsPreset } from '../config/jenkins-presets.js';
 import { deploy as jenkinsDeploy, getDeployStatus, getDeployStatusByBuildHistory } from '../tools/jenkins-tool.js';
 import { open as openBrowser } from '../tools/browser-tool.js';
 import { getAllProjects, getProjectByCode } from '../config/projects.js';
+import { searchTodoBugs } from '../tools/jira-tool.js';
 import { deployNovaPretest, deployByJobKey } from '../tools/deploy-jenkins-helper.js';
 import {
   mergeByCode,
@@ -655,6 +656,18 @@ function parseStatsSourceParam(raw: string): CommandStatSource | undefined {
   if (['chat', 'workflow', 'deploy', 'merge', 'browser', 'knowledge'].includes(s)) return s;
   return undefined;
 }
+
+/** 待办 bug 列表（当前迭代、打开状态），供聊天区表格刷新 */
+app.get('/jira/todo-bugs', async (req, res) => {
+  try {
+    const maxResults = Number(req.query.maxResults ?? 100);
+    const result = await searchTodoBugs(maxResults);
+    res.json(result);
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    res.status(500).json({ success: false, error: msg });
+  }
+});
 
 /** 指令统计：按 canonical_key 聚合（柱状图/饼图） */
 app.get('/stats/commands', (req, res) => {
