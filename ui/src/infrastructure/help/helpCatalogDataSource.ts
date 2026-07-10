@@ -21,6 +21,12 @@ export function getHelpCommands(): HelpCommandItem[] {
     },
     {
       section: '快速开始',
+      command: 'tun',
+      description:
+        '在系统终端启动 macostunmode（sing-box TUN）：cd 到 macostunmode 目录并 sudo ./macostunmode.sh；sudo 密码可在 .env 配置 MACOSTUNMODE_SUDO_PASSWORD',
+    },
+    {
+      section: '快速开始',
       command: '开始工作',
       description: '一键启动常用开发环境（cpxy、react18、cc-web、biz-solution、uikit、shared、docker）',
     },

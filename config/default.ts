@@ -97,6 +97,12 @@ export const config = {
   shell: {
     allowedCwd: process.env.SHELL_CWD || process.cwd(),
   },
+  macostunmode: {
+    /** macostunmode 控制器目录；留空则使用仓库根目录下的 macostunmode */
+    dir: (process.env.MACOSTUNMODE_DIR ?? '').trim(),
+    /** sudo 密码；留空则在系统终端中手动输入 */
+    sudoPassword: process.env.MACOSTUNMODE_SUDO_PASSWORD ?? '',
+  },
   knowledgeBase: {
     /** 问答模型（Ollama） */
     chatModel: process.env.KB_CHAT_MODEL || 'qwen2.5:7b',

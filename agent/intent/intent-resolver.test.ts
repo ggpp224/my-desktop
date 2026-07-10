@@ -64,6 +64,12 @@ describe('resolveIntent', () => {
     }
   });
 
+  it('固定口令：tun → start_macostunmode', () => {
+    const intent = resolveIntent('tun', { projects: STUB_PROJECTS });
+    assert.equal(intent.kind, 'direct');
+    assert.equal(toolOf(intent), 'start_macostunmode');
+  });
+
   it('知识库正向：如何使用 AdvanceGrid 条件格式化', () => {
     const intent = resolveIntent('如何使用 AdvanceGrid 条件格式化', { projects: STUB_PROJECTS });
     assert.equal(intent.kind, 'knowledge');

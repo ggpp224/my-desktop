@@ -216,6 +216,7 @@ interface ChatPanelProps {
 const QUICK_ACTIONS: Array<{ label: string; message: string }> = [
   { label: '开始工作', message: '开始工作' },
   { label: '开始工作（外部终端）', message: '开始工作，使用外部终端' },
+  { label: 'tun', message: 'tun' },
   { label: '经办人bug', message: '经办人bug' },
   { label: '待办bug', message: '待办bug' },
 ];

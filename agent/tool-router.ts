@@ -38,6 +38,7 @@ import { syncCursorCookieFromChrome } from '../tools/cursor-cookie-sync-tool.js'
 import { fetchWeeklyReportPageInfo, openWeeklyReportPage } from '../tools/wiki-tool.js';
 import { writeWeeklyReport } from '../tools/weekly-report-tool.js';
 import { generateWeeklyTeamSummary } from '../tools/weekly-team-summary-tool.js';
+import { startMacostunmode } from '../tools/macostunmode-tool.js';
 import { clearPrivateKnowledgeBase, incrementalRebuildKnowledgeBaseIndex, queryKnowledgeBase, rebuildKnowledgeBaseIndex, listKnowledgeDocs } from './knowledge/knowledge-service.js';
 import type { ToolCall } from './ollama-client.js';
 import type { RouteExecuteContext } from './tool-progress.js';
@@ -67,6 +68,8 @@ export async function routeAndExecute(call: ToolCall, ctx?: RouteExecuteContext)
       return { openCommandStats: true };
     case 'open_md_to_pdf':
       return { openMdToPdf: true };
+    case 'start_macostunmode':
+      return startMacostunmode();
     case 'clear_private_knowledge_base':
       ctx?.onToolProgress?.({
         phase: 'progress',

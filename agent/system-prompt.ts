@@ -13,6 +13,7 @@ export const AGENT_SYSTEM_PROMPT = `你是开发流程助手。固定口令与�
 知识库管理：用户说「添加私人知识库」时，调用 open_knowledge_base_manager()，打开知识库管理页签，供用户选择目录导入 Markdown 文档。
 统计：用户说「统计常用指令」时，调用 open_command_stats()，打开指令统计页签（柱状/饼图/折线图）。
 MD 转 PDF：用户说「md生成pdf」「MD生成PDF」时，调用 open_md_to_pdf()，打开 MD 生成 PDF 页签（选择/上传 .md，在同目录生成 GitLab 风格 PDF）。
+TUN：用户说「tun」时，调用 start_macostunmode()，在系统终端 cd 到 macostunmode 并 sudo 执行 macostunmode.sh（非内嵌终端）。
 用户说「清除私人知识库」「清空私人知识库」时，调用 clear_private_knowledge_base()，删除已导入私人文档并清理索引。
 用户说「重建知识库索引」时，调用 rebuild_knowledge_base_index()，执行索引清理与重建。
 用户说「增量重建知识库索引」时，调用 incremental_rebuild_knowledge_base_index()，仅对变更文档执行增量预处理后重建索引。

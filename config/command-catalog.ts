@@ -40,6 +40,7 @@ export const COMMAND_CATALOG_EXACT_LABELS = [
   '打开测试环境',
   '打开json配置中心',
   '打开 Jenkins',
+  'tun',
 ] as const;
 
 export type FixedCommandLabel = (typeof COMMAND_CATALOG_EXACT_LABELS)[number];
@@ -87,6 +88,7 @@ export const EXACT_COMMAND_RULES: readonly ExactCommandRule[] = [
     tool: 'open_browser',
     buildArguments: () => ({ url: jenkinsRootUrl() }),
   },
+  { label: 'tun', tool: 'start_macostunmode', arguments: {} },
 ];
 
 /** 归一化用户输入：去首尾空白、合并连续空白 */
@@ -113,6 +115,7 @@ export const ACTION_PREFIX_PATTERNS: readonly RegExp[] = [
   /^关闭(ws|cursor|code)的/i,
   /^关闭\s*(WebStorm|Cursor|VS\s*Code)\s*的\s+/i,
   /^升级\s*集测\s+/i,
+  /^tun\s*$/i,
 ];
 
 export const TERMINAL_TOOL_NAME = 'open_terminal';

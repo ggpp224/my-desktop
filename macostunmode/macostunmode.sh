@@ -132,7 +132,13 @@ check_and_disable_gatekeeper() {
         echo "开启状态: 允许运行应用从App Store和被认可的开发者"
         echo "禁止状态: 允许运行应用从任意来源"
         echo "目前为开启状态, 会阻止 sing-box 核心程序的运行。"
-        read -p "是否允许脚本尝试使用 'sudo spctl --master-disable' 将其禁用？[y/N]: " confirm
+        local confirm=""
+        if [ "${MACOSTUNMODE_AUTO_GATEKEEPER:-0}" = "1" ]; then
+            confirm="y"
+            echo -e "${YELLOW}已自动确认：尝试禁用 Gatekeeper（MACOSTUNMODE_AUTO_GATEKEEPER=1）。${NC}"
+        else
+            read -p "是否允许脚本尝试使用 'sudo spctl --master-disable' 将其禁用？[y/N]: " confirm
+        fi
         
         if [[ "$confirm" == "y" || "$confirm" == "Y" ]]; then
             echo "正在尝试禁用 Gatekeeper..."

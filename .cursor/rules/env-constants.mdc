@@ -37,6 +37,8 @@ alwaysApply: false
 | `OLLAMA_THINK` | 是否在 `/api/chat` 传 `think`；**默认不传**（兼容非 thinking 模型）；`true`/`1`/`low`/`medium`/`high` 开启；若开启而模型不支持，会自动去掉 `think` 重试 | 留空 |
 | `API_PORT` | 本应用 API 端口（**勿用 `PORT`**，cc-web cjet dev 会读 `PORT` 抢端口） | `41738` |
 | `SHELL_CWD` | Shell 工具允许的工作目录 | 空则用 `process.cwd()` |
+| `MACOSTUNMODE_DIR` | 「tun」指令：macostunmode 控制器目录 | 空则用仓库根目录下 `macostunmode` |
+| `MACOSTUNMODE_SUDO_PASSWORD` | 「tun」指令：sudo 密码；留空则在系统终端手动输入 | 留空 |
 | `JENKINS_BASE_URL` | Jenkins 根地址 | `https://jenkins.rd.chanjet.com/` |
 | `JENKINS_USERNAME` | Jenkins Basic 认证用户名 | - |
 | `JENKINS_TOKEN` | Jenkins API Token（Basic 密码） | - |

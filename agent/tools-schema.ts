@@ -38,6 +38,18 @@ export const toolsSchema = [
   {
     type: 'function' as const,
     function: {
+      name: 'start_macostunmode',
+      description:
+        '在系统终端启动 macostunmode（sing-box TUN 管理脚本）。用户说「tun」时调用；等价于 cd macostunmode 后 sudo ./macostunmode.sh，无参数',
+      parameters: {
+        type: 'object',
+        properties: {},
+      },
+    },
+  },
+  {
+    type: 'function' as const,
+    function: {
       name: 'clear_private_knowledge_base',
       description:
         '清除私人知识库。用户说「清除私人知识库」「清空私人知识库」时调用；删除 runtime/private-kb 下已导入文档并清理知识库索引',
