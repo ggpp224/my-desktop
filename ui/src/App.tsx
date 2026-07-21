@@ -12,6 +12,7 @@ import { CommandStatsPanel } from './CommandStatsPanel';
 import { CommandCapabilityPanel } from './CommandCapabilityPanel';
 import { KnowledgeDocPanel } from './KnowledgeDocPanel';
 import { MdToPdfPanel } from './MdToPdfPanel';
+import { VideoGeneratorPanel } from './VideoGeneratorPanel';
 import { TechDigestPanel } from './TechDigestPanel';
 import { LlmSettingsModal } from './view/LlmSettingsModal';
 import { HeaderTabNav } from './view/HeaderTabNav';
@@ -186,8 +187,9 @@ export default function App() {
     if (!apiBase) return;
     let cancelled = false;
     let ollamaTick = 0;
-    const apiDownHint = () =>
-      `后端 API（${apiBase}）无响应。它是本应用自带的 Node 服务（默认 41738/API_PORT），负责「开始工作」、内嵌终端、Agent 工具。请 Cmd+Q 退出后重新 yarn dev。`;
+    /** 瞬态探活失败（休眠唤醒等）不清会话，仅提示等待重连 */
+    const apiTransientDownHint = () =>
+      `后端 API（${apiBase}）暂时无响应（常见于休眠唤醒）。已保留「开始工作」会话，等待自动重连…`;
 
     let healthFailStreak = 0;
     const pollHealth = async () => {
@@ -195,8 +197,10 @@ export default function App() {
         const r = await fetch(`${apiBase}/health`, { signal: AbortSignal.timeout(4000) });
         if (!r.ok) throw new Error(`health ${r.status}`);
         if (cancelled) return;
+        const wasDown = healthFailStreak > 0;
         healthFailStreak = 0;
         setApiServerOk(true);
+        if (wasDown) setMyWorkInvalidHint('');
         ollamaTick += 1;
         if (ollamaTick % 3 === 0) {
           fetch(`${apiBase}/health/ollama`)
@@ -214,8 +218,7 @@ export default function App() {
         setApiServerOk(false);
         setOllamaOk(false);
         if (healthFailStreak < 3) return;
-        if (myWorkSessionId) clearMyWorkSession(apiDownHint());
-        else setMyWorkInvalidHint(apiDownHint());
+        setMyWorkInvalidHint(apiTransientDownHint());
       }
     };
     void pollHealth();
@@ -224,24 +227,27 @@ export default function App() {
       cancelled = true;
       window.clearInterval(timer);
     };
-  }, [apiBase, myWorkSessionId]);
+  }, [apiBase]);
 
   useEffect(() => {
-    if (!apiBase) return;
+    if (!apiBase || !apiServerOk) return;
     const storedSessionId = localStorage.getItem(MY_WORK_SESSION_STORAGE_KEY)?.trim();
-    if (!storedSessionId || storedSessionId === myWorkSessionId) return;
+    if (!storedSessionId) return;
+    // 内存中已有同一会话时，终端由 MyWorkPanel 轮询同步；此处只做冷恢复
+    if (storedSessionId === myWorkSessionId) return;
     const restoreMyWorkSession = async () => {
       try {
         const response = await fetch(`${apiBase}/workflow/sessions/${encodeURIComponent(storedSessionId)}`);
         if (!response.ok) {
-          localStorage.removeItem(MY_WORK_SESSION_STORAGE_KEY);
-          setMyWorkInvalidHint('内嵌工作流会话已过期（后端 API 已重启或退出过），请重新「开始工作」。');
+          // 仅在 API 明确表示会话不存在时清理；5xx/瞬态错误保留指针以便重试
+          if (response.status === 404) {
+            clearMyWorkSession('内嵌工作流会话已过期（后端已无此会话），请重新「开始工作」。');
+          }
           return;
         }
         const payload = (await response.json()) as { success?: boolean; terminals?: WorkTerminal[] };
         if (!payload.success || !Array.isArray(payload.terminals)) {
-          localStorage.removeItem(MY_WORK_SESSION_STORAGE_KEY);
-          setMyWorkInvalidHint('内嵌终端会话已过期，请重新「开始工作」。');
+          clearMyWorkSession('内嵌终端会话已过期，请重新「开始工作」。');
           return;
         }
         setMyWorkInvalidHint('');
@@ -252,11 +258,11 @@ export default function App() {
           return [...prev, { key: 'my-work', label: '终端' }];
         });
       } catch {
-        // 保留本地会话标记，下次聚焦窗口时继续尝试恢复。
+        // 网络抖动时保留本地会话标记，下次聚焦或探活恢复后继续尝试。
       }
     };
     void restoreMyWorkSession();
-  }, [apiBase, myWorkSessionId, resumeTick]);
+  }, [apiBase, apiServerOk, myWorkSessionId, resumeTick]);
 
   useEffect(() => {
     if (!myWorkSessionId) return;
@@ -311,6 +317,14 @@ export default function App() {
     setActiveHeaderTab('md-to-pdf');
   };
 
+  const openVideoGeneratorTab = () => {
+    setHeaderTabs((prev) => {
+      if (prev.some((tab) => tab.key === 'video-generator')) return prev;
+      return [...prev, { key: 'video-generator', label: 'AI 视频生成' }];
+    });
+    setActiveHeaderTab('video-generator');
+  };
+
   const openCommandCapabilityTab = () => {
     setHeaderTabs((prev) => {
       if (prev.some((tab) => tab.key === 'command-capability')) return prev;
@@ -360,7 +374,7 @@ export default function App() {
           />
           {!apiServerOk && (
             <p style={{ margin: '8px 0 0', fontSize: 12, color: themeTokens.statusWarning }}>
-              后端 API 不可用（{apiBase}）。请查看终端里是否有 [api-server] exited，然后 Cmd+Q 退出并重新 yarn dev。
+              后端 API 暂时不可用（{apiBase}）。若刚从休眠唤醒，请稍等自动重连；若持续失败，请查看终端 [api-server] exited 后 Cmd+Q 退出并重新 yarn dev。
             </p>
           )}
           {llmMode === 'local' && ollamaOk === false && apiServerOk && (
@@ -576,7 +590,7 @@ export default function App() {
                 onOpenCommandCapability={openCommandCapabilityTab}
                 themeTokens={themeTokens}
               />
-              <ToolPanel themeTokens={themeTokens} />
+              <ToolPanel themeTokens={themeTokens} onOpenVideoGenerator={openVideoGeneratorTab} />
             </>
           )}
         </aside>
@@ -632,6 +646,11 @@ export default function App() {
               <MdToPdfPanel addLog={addLog} themeTokens={themeTokens} />
             </div>
           )}
+          {activeHeaderTab === 'video-generator' && (
+            <div style={{ flex: 1, minHeight: 0, width: '100%', height: '100%', display: 'flex', overflow: 'hidden' }}>
+              <VideoGeneratorPanel apiBase={apiBase} addLog={addLog} themeTokens={themeTokens} />
+            </div>
+          )}
           {activeHeaderTab === 'command-capability' && (
             <div style={{ flex: 1, minHeight: 0, width: '100%', height: '100%', display: 'flex', overflow: 'hidden' }}>
               <CommandCapabilityPanel apiBase={apiBase} themeTokens={themeTokens} />
@@ -667,39 +686,43 @@ export default function App() {
             />
           </div>
           {activeHeaderTab === 'my-work' && (
-            <div style={{ flex: 1, minHeight: 0, width: '100%', height: '100%', display: 'flex', overflow: 'hidden' }}>
-              {myWorkSessionId && apiServerOk ? (
-                <Suspense
-                  fallback={
-                    <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', color: themeTokens.textSecondary }}>
-                      终端加载中…
+            <div style={{ flex: 1, minHeight: 0, width: '100%', height: '100%', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+              {myWorkSessionId ? (
+                <>
+                  {!apiServerOk && (
+                    <div
+                      style={{
+                        flexShrink: 0,
+                        padding: '8px 16px',
+                        fontSize: 12,
+                        color: themeTokens.statusWarning,
+                        background: themeTokens.headerBackground,
+                        borderBottom: `1px solid ${themeTokens.panelBorder}`,
+                        lineHeight: 1.5,
+                      }}
+                    >
+                      {myWorkInvalidHint ||
+                        '后端 API 暂时不可用（常见于休眠唤醒），已暂停终端轮询并保留会话，等待自动重连…'}
                     </div>
-                  }
-                >
-                  <MyWorkPanel
-                    apiBase={apiBase}
-                    apiServerOk={apiServerOk}
-                    sessionId={myWorkSessionId}
-                    initialTerminals={myWorkTerminals}
-                    themeTokens={themeTokens}
-                  />
-                </Suspense>
-              ) : myWorkSessionId && !apiServerOk ? (
-                <div
-                  style={{
-                    flex: 1,
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    padding: 24,
-                    color: themeTokens.statusWarning,
-                    fontSize: 14,
-                    textAlign: 'center',
-                    lineHeight: 1.6,
-                  }}
-                >
-                  后端 API 暂时不可用，已暂停终端轮询。请 Cmd+Q 退出应用后重新 yarn dev，再点「开始工作」。
-                </div>
+                  )}
+                  <div style={{ flex: 1, minHeight: 0, display: 'flex', overflow: 'hidden' }}>
+                    <Suspense
+                      fallback={
+                        <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', color: themeTokens.textSecondary }}>
+                          终端加载中…
+                        </div>
+                      }
+                    >
+                      <MyWorkPanel
+                        apiBase={apiBase}
+                        apiServerOk={apiServerOk}
+                        sessionId={myWorkSessionId}
+                        initialTerminals={myWorkTerminals}
+                        themeTokens={themeTokens}
+                      />
+                    </Suspense>
+                  </div>
+                </>
               ) : (
                 <div
                   style={{

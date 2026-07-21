@@ -28,3 +28,14 @@ export async function fetchTodoBugs(apiBase: string, maxResults = 100): Promise<
   }
   return data;
 }
+
+export async function fetchInProgressBugs(apiBase: string, maxResults = 100): Promise<JiraBugPayload> {
+  const base = apiBase.replace(/\/$/, '');
+  const params = new URLSearchParams({ maxResults: String(maxResults) });
+  const res = await fetch(`${base}/jira/in-progress-bugs?${params.toString()}`);
+  const data = (await res.json()) as JiraBugPayload & { error?: string };
+  if (!res.ok) {
+    throw new Error(data.error || `请求失败 (${res.status})`);
+  }
+  return data;
+}

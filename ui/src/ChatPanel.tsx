@@ -218,7 +218,9 @@ const QUICK_ACTIONS: Array<{ label: string; message: string }> = [
   { label: '开始工作（外部终端）', message: '开始工作，使用外部终端' },
   { label: 'tun', message: 'tun' },
   { label: '经办人bug', message: '经办人bug' },
+  { label: '经办人任务', message: '经办人任务' },
   { label: '待办bug', message: '待办bug' },
+  { label: '处理中bug', message: '处理中bug' },
 ];
 
 /** 合并菜单项：走 SSE 流式接口，每步实时写入 Logs */
@@ -351,12 +353,26 @@ function extractTodoBugsResult(toolResults?: unknown[]): JiraBugPayload | null {
   return payload;
 }
 
+function extractInProgressBugsResult(toolResults?: unknown[]): JiraBugPayload | null {
+  if (!Array.isArray(toolResults)) return null;
+  const row = toolResults.find(
+    (item) =>
+      (item as ToolResultItem | undefined)?.tool === 'search_in_progress_bugs' &&
+      (item as ToolResultItem | undefined)?.result,
+  ) as ToolResultItem | undefined;
+  if (!row || typeof row.result !== 'object' || row.result == null) return null;
+  const payload = row.result as JiraBugPayload;
+  if (!Array.isArray(payload.issues)) return null;
+  return payload;
+}
+
 function extractMyBugsResult(toolResults?: unknown[]): JiraBugPayload | null {
   if (!Array.isArray(toolResults)) return null;
   const row = toolResults.find(
     (item) =>
       ((item as ToolResultItem | undefined)?.tool === 'search_my_tasks' ||
         (item as ToolResultItem | undefined)?.tool === 'search_assignee_bugs' ||
+        (item as ToolResultItem | undefined)?.tool === 'search_assignee_tasks' ||
         (item as ToolResultItem | undefined)?.tool === 'search_weekly_done_tasks' ||
         (item as ToolResultItem | undefined)?.tool === 'search_weekly_handoff_bugs') &&
       (item as ToolResultItem | undefined)?.result
@@ -842,6 +858,18 @@ function renderToolResults(
   const todoBugs = extractTodoBugsResult(toolResults);
   if (todoBugs) {
     return <JiraBugListPanel initial={todoBugs} themeTokens={themeTokens} apiBase={apiBase} refreshable />;
+  }
+  const inProgressBugs = extractInProgressBugsResult(toolResults);
+  if (inProgressBugs) {
+    return (
+      <JiraBugListPanel
+        initial={inProgressBugs}
+        themeTokens={themeTokens}
+        apiBase={apiBase}
+        refreshable
+        listKind="inProgress"
+      />
+    );
   }
   const myBugs = extractMyBugsResult(toolResults);
   if (myBugs) {

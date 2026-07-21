@@ -15,6 +15,10 @@ node_modules
 /runtime/command-stats.sqlite-shm
 /runtime/tech-digest/
 /runtime/embedded-workflow-sessions.json
+/runtime/video-jobs/*
+!/runtime/video-jobs/.gitkeep
+services/video-sidecar/.venv/
+services/video-sidecar/models/
 storage/
 /ui/.npm-cache/
 /.npm-cache/

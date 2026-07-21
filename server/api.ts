@@ -20,7 +20,7 @@ import { getJenkinsPreset } from '../config/jenkins-presets.js';
 import { deploy as jenkinsDeploy, getDeployStatus, getDeployStatusByBuildHistory } from '../tools/jenkins-tool.js';
 import { open as openBrowser } from '../tools/browser-tool.js';
 import { getAllProjects, getProjectByCode } from '../config/projects.js';
-import { searchTodoBugs } from '../tools/jira-tool.js';
+import { searchTodoBugs, searchInProgressBugs } from '../tools/jira-tool.js';
 import { deployNovaPretest, deployByJobKey } from '../tools/deploy-jenkins-helper.js';
 import {
   mergeByCode,
@@ -63,6 +63,7 @@ import {
 import { loadAllDigests, loadDigest } from './trends/trends-repository.js';
 import { runTechDigestRefreshForPeriod } from './trends/trends-service.js';
 import type { TechDigestScope } from './trends/trends-types.js';
+import { registerVideoRoutes } from './video-routes.js';
 
 /** 出站 DNS 优先 IPv4，避免部分网络 IPv6 不通导致 Google 等连接在 IPv6 上卡死至超时 */
 if (typeof dns.setDefaultResultOrder === 'function') {
@@ -315,6 +316,8 @@ app.get('/health/ollama', async (_req, res) => {
   const ollamaReachable = await healthCheck();
   res.status(200).json({ ok: true, ollamaReachable });
 });
+
+registerVideoRoutes(app);
 
 /** 返回当前使用的本地模型名（可运行时切换），供前端展示 */
 app.get('/agent/model', (_req, res) => {
@@ -657,11 +660,23 @@ function parseStatsSourceParam(raw: string): CommandStatSource | undefined {
   return undefined;
 }
 
-/** 待办 bug 列表（当前迭代、打开状态），供聊天区表格刷新 */
+/** 待办 bug 列表（最近修复版本窗口 filter=bus、打开状态），供聊天区表格刷新 */
 app.get('/jira/todo-bugs', async (req, res) => {
   try {
     const maxResults = Number(req.query.maxResults ?? 100);
     const result = await searchTodoBugs(maxResults);
+    res.json(result);
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    res.status(500).json({ success: false, error: msg });
+  }
+});
+
+/** 处理中 bug 列表（最近修复版本窗口 filter=bus、In Progress 状态），供聊天区表格刷新 */
+app.get('/jira/in-progress-bugs', async (req, res) => {
+  try {
+    const maxResults = Number(req.query.maxResults ?? 100);
+    const result = await searchInProgressBugs(maxResults);
     res.json(result);
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);

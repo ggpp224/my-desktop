@@ -36,7 +36,9 @@ const TOOL_GROUPS: ToolGroup[] = [
       { name: 'search_my_bugs', desc: '查询 Jira 我的 bug（如：我的bug）' },
       { name: 'search_my_tasks', desc: '查询我的全量未完成任务，不含缺陷（如：我的任务）' },
       { name: 'search_assignee_bugs', desc: '查询经办人为我、类型为缺陷且未解决的 bug（如：经办人bug）' },
-      { name: 'search_todo_bugs', desc: '查询当前迭代、状态为打开的待办缺陷（如：待办bug）' },
+      { name: 'search_assignee_tasks', desc: '查询经办人为我、类型为任务/子任务/缺陷且未解决（如：经办人任务）' },
+      { name: 'search_todo_bugs', desc: '查询最近修复版本窗口（filter=bus）、状态为打开的待办缺陷（如：待办bug）' },
+      { name: 'search_in_progress_bugs', desc: '查询最近修复版本窗口（filter=bus）、状态为处理中的缺陷（如：处理中bug）' },
       { name: 'search_online_bugs', desc: '查询 Jira 线上 bug（如：线上bug）' },
       { name: 'search_weekly_done_tasks', desc: '查询 Jira 本周已完成任务（如：本周已完成任务）' },
       { name: 'search_weekly_handoff_bugs', desc: '查询本周经我手但已转交的 bug（如：本周经我手的bug）' },
@@ -52,6 +54,7 @@ const TOOL_GROUPS: ToolGroup[] = [
       { name: 'open_knowledge_base_manager', desc: '打开私人知识库管理页（如：添加私人知识库）' },
       { name: 'open_command_stats', desc: '打开指令统计页签（如：统计常用指令）' },
       { name: 'open_md_to_pdf', desc: '打开 MD 生成 PDF 页签（如：md生成pdf）' },
+      { name: 'open_video_generator', desc: '打开 AI 视频生成页签（Prompt → MP4）' },
       { name: 'list_knowledge_docs', desc: '列出知识库文档（如：知识库有哪些文档）' },
       { name: 'query_knowledge_base', desc: '查询知识库内容（如：文档里如何配置）' },
       { name: 'incremental_rebuild_knowledge_base_index', desc: '增量重建索引（如：增量重建知识库索引）' },
@@ -72,12 +75,34 @@ const TOOL_GROUPS: ToolGroup[] = [
 
 type ToolPanelProps = {
   themeTokens: AppThemeTokens;
+  onOpenVideoGenerator?: () => void;
 };
 
-export function ToolPanel({ themeTokens }: ToolPanelProps) {
+export function ToolPanel({ themeTokens, onOpenVideoGenerator }: ToolPanelProps) {
   return (
     <section style={{ padding: 16, flex: 1, overflow: 'auto' }}>
       <h3 style={{ margin: '0 0 12px', fontSize: 14, color: themeTokens.textSecondary }}>Tools</h3>
+      {onOpenVideoGenerator && (
+        <div style={{ marginBottom: 16 }}>
+          <button
+            type="button"
+            onClick={onOpenVideoGenerator}
+            style={{
+              width: '100%',
+              padding: '8px 12px',
+              borderRadius: 6,
+              border: `1px solid ${themeTokens.tabActiveBorder}`,
+              background: themeTokens.workspacePanelSubtleBackground,
+              color: themeTokens.textPrimary,
+              fontSize: 13,
+              cursor: 'pointer',
+              textAlign: 'left',
+            }}
+          >
+            AI 视频生成
+          </button>
+        </div>
+      )}
       {TOOL_GROUPS.map((group, groupIndex) => (
         <div key={group.title} style={{ marginBottom: groupIndex === TOOL_GROUPS.length - 1 ? 0 : 12 }}>
           <div

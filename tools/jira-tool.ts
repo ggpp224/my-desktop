@@ -25,11 +25,30 @@ function buildAssigneeBugJql(): string {
   return `${assigneeClause} AND issuetype = 缺陷 AND status not in ${UNRESOLVED_STATUSES} ORDER BY fixVersion ASC`;
 }
 
-/** 待办 bug：当前迭代（filter=nextbus）、经办人为当前用户、类型为缺陷、状态为打开。 */
+/** 经办人为当前 Jira 账号、类型为任务/子任务/缺陷、且未关闭/未解决（条件同经办人bug，仅扩展 issuetype）。 */
+function buildAssigneeTaskJql(): string {
+  const username = config.jira.username.trim();
+  const assigneeClause = username ? `assignee = ${username}` : 'assignee = currentUser()';
+  return `${assigneeClause} AND issuetype in (任务, 子任务, 缺陷) AND status not in ${UNRESOLVED_STATUSES} ORDER BY fixVersion ASC`;
+}
+
+/**
+ * 待办 bug：最近即将到来的修复版本窗口（filter=bus）、经办人为当前用户、类型为缺陷、状态为打开。
+ * 注意：nextbus 是「再下一档」修复版本，不能用于待办；应取未来离今天最近的修复版本（bus）。
+ */
 function buildTodoBugJql(): string {
   const username = config.jira.username.trim();
   const assigneeClause = username ? `assignee = ${username}` : 'assignee = currentUser()';
-  return `filter = nextbus AND ${assigneeClause} AND issuetype = 缺陷 AND status = Open ORDER BY fixVersion ASC`;
+  return `filter = bus AND ${assigneeClause} AND issuetype = 缺陷 AND status = Open ORDER BY fixVersion ASC`;
+}
+
+/**
+ * 处理中 bug：与待办 bug 相同条件，仅状态为处理中（In Progress）。
+ */
+function buildInProgressBugJql(): string {
+  const username = config.jira.username.trim();
+  const assigneeClause = username ? `assignee = ${username}` : 'assignee = currentUser()';
+  return `filter = bus AND ${assigneeClause} AND issuetype = 缺陷 AND status = "In Progress" ORDER BY fixVersion ASC`;
 }
 
 const WEEKLY_TEAM_ACTORS = '(liuweiaq, guopengb, wangjuan3, zhangjinz, liyzb, wangmingg)';
@@ -300,8 +319,16 @@ export async function searchAssigneeBugs(maxResults = 100): Promise<MyBugResult>
   return searchByJql(buildAssigneeBugJql(), maxResults);
 }
 
+export async function searchAssigneeTasks(maxResults = 100): Promise<MyBugResult> {
+  return searchByJql(buildAssigneeTaskJql(), maxResults);
+}
+
 export async function searchTodoBugs(maxResults = 100): Promise<MyBugResult> {
   return searchByJql(buildTodoBugJql(), maxResults);
+}
+
+export async function searchInProgressBugs(maxResults = 100): Promise<MyBugResult> {
+  return searchByJql(buildInProgressBugJql(), maxResults);
 }
 
 export async function searchMyTasks(maxResults = 100): Promise<MyBugResult> {

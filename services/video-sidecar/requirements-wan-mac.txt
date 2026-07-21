@@ -1,0 +1,17 @@
+# AI 生成 By Peng.Guo
+# Wan2.2 本机（Apple Silicon）运行时依赖
+# 不含 torch/torchaudio（由 install-real-deps.sh 安装 MPS 版）
+# torchvision 与当前 torch 对齐安装；不含 flash_attn / decord（Mac 无可用 wheel）
+torchvision
+opencv-python>=4.9.0.80
+diffusers>=0.31.0
+transformers>=4.49.0,<=4.51.3
+tokenizers>=0.20.3
+accelerate>=1.1.1
+tqdm
+imageio[ffmpeg]
+easydict
+ftfy
+dashscope
+imageio-ffmpeg
+numpy>=1.23.5,<2.2

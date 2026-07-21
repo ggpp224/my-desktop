@@ -1,36 +1,51 @@
 /* AI 生成 By Peng.Guo */
-import { useCallback, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import type { AppThemeTokens } from '../domain/theme/appTheme';
-import { fetchTodoBugs, type JiraBugPayload } from '../infrastructure/jira/todoBugsApi';
-import { IconButton } from './IconButton';
+import { fetchTodoBugs, fetchInProgressBugs, type JiraBugPayload } from '../infrastructure/jira/todoBugsApi';
+import { Button } from './Button';
+
+type JiraBugListKind = 'todo' | 'inProgress';
 
 type JiraBugListPanelProps = {
   initial: JiraBugPayload;
   themeTokens: AppThemeTokens;
   apiBase?: string;
   refreshable?: boolean;
+  listKind?: JiraBugListKind;
 };
 
-export function JiraBugListPanel({ initial, themeTokens, apiBase, refreshable = false }: JiraBugListPanelProps) {
+export function JiraBugListPanel({
+  initial,
+  themeTokens,
+  apiBase,
+  refreshable = false,
+  listKind = 'todo',
+}: JiraBugListPanelProps) {
   const [payload, setPayload] = useState(initial);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const issues = payload.issues ?? [];
 
+  useEffect(() => {
+    setPayload(initial);
+    setError(null);
+  }, [initial]);
+
   const refresh = useCallback(async () => {
     if (!apiBase || refreshing) return;
     setRefreshing(true);
     setError(null);
     try {
-      const next = await fetchTodoBugs(apiBase);
+      const fetcher = listKind === 'inProgress' ? fetchInProgressBugs : fetchTodoBugs;
+      const next = await fetcher(apiBase);
       setPayload(next);
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
     } finally {
       setRefreshing(false);
     }
-  }, [apiBase, refreshing]);
+  }, [apiBase, listKind, refreshing]);
 
   return (
     <>
@@ -60,21 +75,20 @@ export function JiraBugListPanel({ initial, themeTokens, apiBase, refreshable = 
           共 {payload.total ?? issues.length} 条，当前展示 {issues.length} 条
         </span>
         {refreshable ? (
-          <IconButton
+          <Button
             themeTokens={themeTokens}
-            icon={
-              <span style={{ animation: refreshing ? 'jira-bug-list-spin 0.9s linear infinite' : undefined }}>
-                ↻
-              </span>
-            }
-            title={refreshing ? '刷新中…' : '刷新列表'}
-            ariaLabel={refreshing ? '刷新中' : '刷新待办 bug 列表'}
-            variant="soft"
-            size="icon"
+            variant="outline"
+            size="sm"
             disabled={refreshing || !apiBase}
+            loading={refreshing}
             onClick={() => void refresh()}
-            style={{ height: 22, minWidth: 22, padding: 0, borderRadius: 6, flexShrink: 0 }}
-          />
+            title={refreshing ? '刷新中…' : '刷新列表'}
+            ariaLabel={refreshing ? '刷新中' : listKind === 'inProgress' ? '刷新处理中 bug 列表' : '刷新待办 bug 列表'}
+            style={{ flexShrink: 0, gap: 4 }}
+          >
+            <span style={{ animation: refreshing ? 'jira-bug-list-spin 0.9s linear infinite' : undefined, display: refreshing ? 'none' : 'inline' }}>↻</span>
+            刷新
+          </Button>
         ) : null}
       </div>
       {error ? (

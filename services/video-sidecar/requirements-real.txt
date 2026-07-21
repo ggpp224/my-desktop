@@ -1,0 +1,24 @@
+# AI 生成 By Peng.Guo
+# 本机真实推理依赖（由 install-real-deps.sh 安装）
+# AudioCraft 用 pip install audiocraft --no-deps，避免 torch==2.1 / xformers 冲突
+huggingface_hub>=0.26.0
+modelscope>=1.18.0
+soundfile>=0.12.0
+numpy>=1.26.0,<2.2
+# audiocraft 运行时依赖（不含 xformers，Apple Silicon 用 vendor/xformers shim）
+einops
+flashy>=0.0.1
+hydra-core>=1.1
+hydra-colorlog
+julius
+num2words
+sentencepiece
+encodec
+librosa
+av>=12.0.0
+demucs
+lameenc
+transformers>=4.31.0
+torchmetrics
+spacy>=3.6.1
+protobuf

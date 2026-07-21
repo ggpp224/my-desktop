@@ -26,10 +26,12 @@ import { openInIde } from '../tools/open-ide-tool.js';
 import { closeIdeProject } from '../tools/close-ide-tool.js';
 import {
   searchAssigneeBugs,
+  searchAssigneeTasks,
   searchMyBugs,
   searchMyTasks,
   searchOnlineBugs,
   searchTodoBugs,
+  searchInProgressBugs,
   searchWeeklyDoneTasks,
   searchWeeklyHandoffBugs,
 } from '../tools/jira-tool.js';
@@ -223,9 +225,17 @@ export async function routeAndExecute(call: ToolCall, ctx?: RouteExecuteContext)
       const maxResults = Number(args?.maxResults ?? 100);
       return searchAssigneeBugs(maxResults);
     }
+    case 'search_assignee_tasks': {
+      const maxResults = Number(args?.maxResults ?? 100);
+      return searchAssigneeTasks(maxResults);
+    }
     case 'search_todo_bugs': {
       const maxResults = Number(args?.maxResults ?? 100);
       return searchTodoBugs(maxResults);
+    }
+    case 'search_in_progress_bugs': {
+      const maxResults = Number(args?.maxResults ?? 100);
+      return searchInProgressBugs(maxResults);
     }
     case 'search_my_tasks': {
       const maxResults = Number(args?.maxResults ?? 100);

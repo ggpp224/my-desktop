@@ -241,9 +241,37 @@ export const toolsSchema = [
   {
     type: 'function' as const,
     function: {
+      name: 'search_assignee_tasks',
+      description:
+        '查询 Jira 中“经办人任务”固定条件列表（Jira 8.8，非 token 鉴权）：经办人为当前用户、类型为任务/子任务/缺陷且未解决。用户说「经办人任务」「查询经办人任务」时调用，可选 maxResults',
+      parameters: {
+        type: 'object',
+        properties: {
+          maxResults: { type: 'number', description: '可选，返回数量上限，默认 100，最大 100' },
+        },
+      },
+    },
+  },
+  {
+    type: 'function' as const,
+    function: {
       name: 'search_todo_bugs',
       description:
-        '查询 Jira 中“待办bug”固定条件列表（Jira 8.8，非 token 鉴权）：当前迭代（filter=nextbus）、经办人为当前用户、类型为缺陷、状态为打开。用户说「待办bug」「查询待办bug」时调用，可选 maxResults',
+        '查询 Jira 中“待办bug”固定条件列表（Jira 8.8，非 token 鉴权）：最近即将到来的修复版本（filter=bus，非 nextbus）、经办人为当前用户、类型为缺陷、状态为打开。用户说「待办bug」「查询待办bug」时调用，可选 maxResults',
+      parameters: {
+        type: 'object',
+        properties: {
+          maxResults: { type: 'number', description: '可选，返回数量上限，默认 100，最大 100' },
+        },
+      },
+    },
+  },
+  {
+    type: 'function' as const,
+    function: {
+      name: 'search_in_progress_bugs',
+      description:
+        '查询 Jira 中“处理中bug”固定条件列表（Jira 8.8，非 token 鉴权）：最近即将到来的修复版本（filter=bus，非 nextbus）、经办人为当前用户、类型为缺陷、状态为处理中（In Progress）。用户说「处理中bug」「查询处理中bug」时调用，可选 maxResults',
       parameters: {
         type: 'object',
         properties: {

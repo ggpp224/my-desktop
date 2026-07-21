@@ -56,6 +56,23 @@ alwaysApply: false
 | `KB_QUERY_TIMEOUT_MS` | 单次知识库查询超时（毫秒） | `300000`（5 分钟） |
 | `KB_CHAT_MODEL` / `KB_EMBED_MODEL` / `KB_INGEST_MODEL` 等 | 见 `.env.example`「知识库」段 | - |
 
+## 一点七、AI 视频生成（config/default.ts → video）
+
+| 变量 | 含义 | 默认 |
+|------|------|------|
+| `VIDEO_OUTPUT_DIR` | 生成产物目录 | `~/Downloads/ai-video-jobs` |
+| `VIDEO_SCRIPT_MODEL` | 分镜 LLM 模型（Ollama） | `qwen3:8b` |
+| `VIDEO_SCRIPT_TIMEOUT_MS` | 分镜生成超时（毫秒） | `120000` |
+| `VIDEO_PIPELINE_TIMEOUT_MS` | 整管线超时（毫秒） | `1800000` |
+| `VIDEO_SCRIPT_TEMPERATURE` | 分镜 LLM temperature | `0.3` |
+| `FFMPEG_PATH` | FFmpeg 可执行路径 | `ffmpeg` |
+| `VIDEO_MOCK_MODE` | Sidecar Mock 模式（`1` 无 GPU 验证） | `1` |
+| `VIDEO_WAN_BASE` | Wan2.2 Sidecar 地址 | `http://127.0.0.1:5101` |
+| `VIDEO_COSYVOICE_BASE` | CosyVoice Sidecar | `http://127.0.0.1:5102` |
+| `VIDEO_AUDIOCRAFT_BASE` | AudioCraft Sidecar | `http://127.0.0.1:5103` |
+| `VIDEO_FOLEY_BASE` | Foley Sidecar | `http://127.0.0.1:5104` |
+| `VIDEO_GPU_WAN` / `VIDEO_GPU_AUDIO` | GPU 设备编号 | `0` |
+
 ## 二、Jenkins 默认分支（config/projects.ts → 部署时 BRANCH_NAME）
 
 | 变量 | 用途 |

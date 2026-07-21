@@ -111,9 +111,9 @@ export function getHelpCommands(): HelpCommandItem[] {
     },
     {
       section: 'Jira',
-      command: '我的bug / 我的任务 / 经办人bug / 待办bug / 线上bug / 本周已完成任务',
+      command: '我的bug / 我的任务 / 经办人bug / 经办人任务 / 待办bug / 处理中bug / 线上bug / 本周已完成任务',
       description:
-        '按固定 JQL 查询；我的任务为经办人或开发人员是当前用户、全量未完成（不限迭代，不含缺陷）；经办人bug 为类型为缺陷且未解决，按修复版本升序；待办bug 为当前迭代、状态打开的缺陷',
+        '按固定 JQL 查询；我的任务为经办人或开发人员是当前用户、全量未完成（不限迭代，不含缺陷）；经办人bug 为类型为缺陷且未解决，按修复版本升序；经办人任务同经办人bug但类型含任务/子任务/缺陷；待办bug 为最近即将到来的修复版本（filter=bus）、状态打开的缺陷；处理中bug 与待办bug 相同但状态为处理中',
     },
     {
       section: 'Cursor',
