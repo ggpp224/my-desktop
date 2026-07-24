@@ -56,7 +56,16 @@ type JiraBugItem = {
   feature?: string;
   url?: string;
 };
-type JiraBugPayload = { total?: number; issues?: JiraBugItem[] };
+type JiraBugPayload = {
+  total?: number;
+  issues?: JiraBugItem[];
+  iteration?: {
+    previous?: string | null;
+    current?: string;
+    next?: string | null;
+    selected?: string;
+  };
+};
 type WeeklyReportPayload = {
   total?: number;
   jiraTitles?: string[];

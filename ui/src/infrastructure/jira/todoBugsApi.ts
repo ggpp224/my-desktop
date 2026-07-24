@@ -11,16 +11,29 @@ export type JiraBugItem = {
   url?: string;
 };
 
+export type JiraFixIteration = {
+  previous?: string | null;
+  current?: string;
+  next?: string | null;
+  selected?: string;
+};
+
 export type JiraBugPayload = {
   success?: boolean;
   total?: number;
   issues?: JiraBugItem[];
+  iteration?: JiraFixIteration;
   error?: string;
 };
 
-export async function fetchTodoBugs(apiBase: string, maxResults = 100): Promise<JiraBugPayload> {
+export async function fetchTodoBugs(
+  apiBase: string,
+  options?: { maxResults?: number; fixVersion?: string },
+): Promise<JiraBugPayload> {
   const base = apiBase.replace(/\/$/, '');
-  const params = new URLSearchParams({ maxResults: String(maxResults) });
+  const params = new URLSearchParams({ maxResults: String(options?.maxResults ?? 100) });
+  const fixVersion = (options?.fixVersion ?? '').trim();
+  if (fixVersion) params.set('fixVersion', fixVersion);
   const res = await fetch(`${base}/jira/todo-bugs?${params.toString()}`);
   const data = (await res.json()) as JiraBugPayload & { error?: string };
   if (!res.ok) {
@@ -29,9 +42,14 @@ export async function fetchTodoBugs(apiBase: string, maxResults = 100): Promise<
   return data;
 }
 
-export async function fetchInProgressBugs(apiBase: string, maxResults = 100): Promise<JiraBugPayload> {
+export async function fetchInProgressBugs(
+  apiBase: string,
+  options?: { maxResults?: number; fixVersion?: string },
+): Promise<JiraBugPayload> {
   const base = apiBase.replace(/\/$/, '');
-  const params = new URLSearchParams({ maxResults: String(maxResults) });
+  const params = new URLSearchParams({ maxResults: String(options?.maxResults ?? 100) });
+  const fixVersion = (options?.fixVersion ?? '').trim();
+  if (fixVersion) params.set('fixVersion', fixVersion);
   const res = await fetch(`${base}/jira/in-progress-bugs?${params.toString()}`);
   const data = (await res.json()) as JiraBugPayload & { error?: string };
   if (!res.ok) {

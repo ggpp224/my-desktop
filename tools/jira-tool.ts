@@ -1,6 +1,11 @@
 /* AI 生成 By Peng.Guo */
 import { Buffer } from 'buffer';
 import { config } from '../config/default.js';
+import {
+  parseFixVersionYymmdd,
+  resolveFixIterationNeighbors,
+  type FixIterationNeighbors,
+} from './jira-fix-iteration.js';
 import { buildWeeklyReportDuringClause, formatJiraDateTimeInZone, getMondayWeekBoundsInTimeZone } from './jira-weekly-window.js';
 
 const MY_BUG_JQL =
@@ -32,23 +37,72 @@ function buildAssigneeTaskJql(): string {
   return `${assigneeClause} AND issuetype in (任务, 子任务, 缺陷) AND status not in ${UNRESOLVED_STATUSES} ORDER BY fixVersion ASC`;
 }
 
-/**
- * 待办 bug：最近即将到来的修复版本窗口（filter=bus）、经办人为当前用户、类型为缺陷、状态为打开。
- * 注意：nextbus 是「再下一档」修复版本，不能用于待办；应取未来离今天最近的修复版本（bus）。
- */
-function buildTodoBugJql(): string {
+function assigneeClause(): string {
   const username = config.jira.username.trim();
-  const assigneeClause = username ? `assignee = ${username}` : 'assignee = currentUser()';
-  return `filter = bus AND ${assigneeClause} AND issuetype = 缺陷 AND status = Open ORDER BY fixVersion ASC`;
+  return username ? `assignee = ${username}` : 'assignee = currentUser()';
+}
+
+/**
+ * 待办 bug：指定修复版本迭代、经办人为当前用户、类型为缺陷、状态为打开。
+ * 默认迭代按「当前日期落入哪一档」（版本日 ≥ 今天的最早 YYMMDD）解析。
+ */
+function buildTodoBugJql(fixVersion: string): string {
+  return `fixVersion = ${fixVersion} AND ${assigneeClause()} AND issuetype = 缺陷 AND status = Open ORDER BY fixVersion ASC`;
 }
 
 /**
  * 处理中 bug：与待办 bug 相同条件，仅状态为处理中（In Progress）。
  */
-function buildInProgressBugJql(): string {
-  const username = config.jira.username.trim();
-  const assigneeClause = username ? `assignee = ${username}` : 'assignee = currentUser()';
-  return `filter = bus AND ${assigneeClause} AND issuetype = 缺陷 AND status = "In Progress" ORDER BY fixVersion ASC`;
+function buildInProgressBugJql(fixVersion: string): string {
+  return `fixVersion = ${fixVersion} AND ${assigneeClause()} AND issuetype = 缺陷 AND status = "In Progress" ORDER BY fixVersion ASC`;
+}
+
+/** 拉取用于定档的 YYMMDD 修复版本名（以 ZJYF 为权威列表，与 XCS 等同名对齐）。 */
+async function listYymmddFixVersions(baseUrl: string, authHeader: string): Promise<string[]> {
+  const projectKey = 'ZJYF';
+  const response = await fetch(`${baseUrl}/rest/api/2/project/${encodeURIComponent(projectKey)}/versions`, {
+    method: 'GET',
+    headers: { Accept: 'application/json', Authorization: authHeader },
+  });
+  if (!response.ok) {
+    const bodyText = await response.text();
+    throw new Error(`Jira 版本列表失败(${response.status}): ${bodyText || response.statusText}`);
+  }
+  const versions = (await response.json()) as Array<{ name?: string; archived?: boolean }>;
+  return versions
+    .filter((v) => !v.archived)
+    .map((v) => (v.name ?? '').trim())
+    .filter((name) => parseFixVersionYymmdd(name) != null);
+}
+
+export type FixIterationContext = FixIterationNeighbors & {
+  /** 本次查询实际使用的迭代号 */
+  selected: string;
+};
+
+async function resolveIterationContext(selectedFixVersion?: string): Promise<FixIterationContext> {
+  const baseUrl = config.jira.baseUrl.trim().replace(/\/$/, '');
+  if (!baseUrl) {
+    throw new Error('Jira 地址未配置：请设置 JIRA_BASE_URL。');
+  }
+  const authHeader = getAuthHeader();
+  const tz = config.jira.weeklyReportTimeZone.trim() || 'Asia/Shanghai';
+  const names = await listYymmddFixVersions(baseUrl, authHeader);
+  const neighbors = resolveFixIterationNeighbors(names, new Date(), tz);
+  if (!neighbors) {
+    throw new Error('未找到可用的 YYMMDD 修复版本，无法解析当前迭代。');
+  }
+  const requested = (selectedFixVersion ?? '').trim();
+  const allowed = new Set(
+    [neighbors.previous, neighbors.current, neighbors.next].filter((v): v is string => Boolean(v)),
+  );
+  if (requested && !allowed.has(requested) && !parseFixVersionYymmdd(requested)) {
+    throw new Error(`无效的修复版本迭代号: ${requested}`);
+  }
+  // 允许点选前一/当前/下一；也允许传入列表中合法 YYMMDD（兼容扩展）
+  const selected =
+    requested && (allowed.has(requested) || names.includes(requested)) ? requested : neighbors.current;
+  return { ...neighbors, selected };
 }
 
 const WEEKLY_TEAM_ACTORS = '(liuweiaq, guopengb, wangjuan3, zhangjinz, liyzb, wangmingg)';
@@ -109,6 +163,8 @@ export interface MyBugResult {
   total: number;
   maxResults: number;
   issues: MyBugItem[];
+  /** 待办/处理中 bug：前一 / 当前 / 下一迭代及本次选中档 */
+  iteration?: FixIterationContext;
 }
 
 function getAuthHeader(): string {
@@ -323,12 +379,16 @@ export async function searchAssigneeTasks(maxResults = 100): Promise<MyBugResult
   return searchByJql(buildAssigneeTaskJql(), maxResults);
 }
 
-export async function searchTodoBugs(maxResults = 100): Promise<MyBugResult> {
-  return searchByJql(buildTodoBugJql(), maxResults);
+export async function searchTodoBugs(maxResults = 100, fixVersion?: string): Promise<MyBugResult> {
+  const iteration = await resolveIterationContext(fixVersion);
+  const result = await searchByJql(buildTodoBugJql(iteration.selected), maxResults);
+  return { ...result, iteration };
 }
 
-export async function searchInProgressBugs(maxResults = 100): Promise<MyBugResult> {
-  return searchByJql(buildInProgressBugJql(), maxResults);
+export async function searchInProgressBugs(maxResults = 100, fixVersion?: string): Promise<MyBugResult> {
+  const iteration = await resolveIterationContext(fixVersion);
+  const result = await searchByJql(buildInProgressBugJql(iteration.selected), maxResults);
+  return { ...result, iteration };
 }
 
 export async function searchMyTasks(maxResults = 100): Promise<MyBugResult> {

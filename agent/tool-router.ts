@@ -231,11 +231,13 @@ export async function routeAndExecute(call: ToolCall, ctx?: RouteExecuteContext)
     }
     case 'search_todo_bugs': {
       const maxResults = Number(args?.maxResults ?? 100);
-      return searchTodoBugs(maxResults);
+      const fixVersion = typeof args?.fixVersion === 'string' ? args.fixVersion : undefined;
+      return searchTodoBugs(maxResults, fixVersion);
     }
     case 'search_in_progress_bugs': {
       const maxResults = Number(args?.maxResults ?? 100);
-      return searchInProgressBugs(maxResults);
+      const fixVersion = typeof args?.fixVersion === 'string' ? args.fixVersion : undefined;
+      return searchInProgressBugs(maxResults, fixVersion);
     }
     case 'search_my_tasks': {
       const maxResults = Number(args?.maxResults ?? 100);

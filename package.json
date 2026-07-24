@@ -17,6 +17,7 @@
     "dev:video-sidecars": "cd services/video-sidecar && (test -x .venv/bin/python || (python3 -m venv .venv && .venv/bin/pip install -q -r requirements.txt)) && chmod +x scripts/*.sh 2>/dev/null; PATH=\"/opt/homebrew/bin:$PATH\" FFMPEG_PATH=\"${FFMPEG_PATH:-/opt/homebrew/bin/ffmpeg}\" ./scripts/start-all-sidecars.sh",
     "video:install-real": "cd services/video-sidecar && chmod +x scripts/*.sh && ./scripts/install-real-deps.sh",
     "video:setup-models": "cd services/video-sidecar && chmod +x scripts/*.sh && ./scripts/setup-local-models.sh",
+    "video:resume-wan-ckpt": "cd services/video-sidecar && chmod +x scripts/*.sh && ./scripts/resume-wan-ckpt.sh",
     "start": "npm run build && NODE_ENV=production electron .",
     "version:bump": "npm version patch --no-git-tag-version",
     "pack": "npm run version:bump && npm run build && npx electron-builder --mac",

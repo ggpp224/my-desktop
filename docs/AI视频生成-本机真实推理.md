@@ -113,6 +113,8 @@ curl -s http://127.0.0.1:5101/health | python3 -m json.tool
 |------|------|
 | health 显示 `mock: true` | 确认 `VIDEO_MOCK_MODE=0` 并重启 Sidecar |
 | Wan 推理失败 | 查看 Sidecar 终端日志；可先降分辨率 480p |
+| `models_t5_umt5-xxl-enc-bf16.pth` 找不到 | Wan 权重下载中断；执行 `npm run video:resume-wan-ckpt` 断点续传（约 20GB+） |
+| `Unsupport size ... for task ti2v-5B` | TI2V-5B 仅支持 `1280*704`（横）/`704*1280`（竖），已自动映射 720p→1280*704 |
 | `No module named 'easydict'` | 官方 requirements 含 `flash_attn`（Mac 装不上）导致整批中断；执行 `pip install -r services/video-sidecar/requirements-wan-mac.txt` 或重跑 `npm run video:setup-models` |
 | Wan `Torch not compiled with CUDA`（导入阶段） | 已由 `wan_apple_silicon_patch` 在推理前自动改默认 device；重启 Sidecar 后再生成 |
 | CosyVoice 找不到模型 | 检查 `COSYVOICE_MODEL_DIR` 路径 |

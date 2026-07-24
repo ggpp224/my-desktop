@@ -16,9 +16,16 @@ def _wan_paths() -> tuple[Path, Path]:
     return repo, ckpt
 
 
-def _resolution_to_wan_size(resolution: str) -> str:
-    """Map UI resolution to Wan generate.py --size choices."""
-    # generate.py: 720*1280,1280*720,480*832,832*480,704*1280,1280*704,1024*704,704*1024
+def _resolution_to_wan_size(resolution: str, task: str) -> str:
+    """Map UI resolution to Wan generate.py --size for the given task."""
+    # ti2v-5B only supports 704*1280 (竖) / 1280*704 (横)
+    if task == "ti2v-5B":
+        mapping = {
+            "480p": "704*1280",
+            "720p": "1280*704",
+            "1080p": "1280*704",
+        }
+        return mapping.get(resolution, "1280*704")
     mapping = {
         "480p": "832*480",
         "720p": "1280*720",
@@ -51,13 +58,17 @@ def generate_video(
 
     apply_wan_apple_silicon_patches(repo)
 
-    size = _resolution_to_wan_size(resolution)
+    from .wan_ckpt_verify import assert_wan_ckpt_complete
+
+    assert_wan_ckpt_complete(ckpt)
+
+    task = os.environ.get("WAN_TASK", "ti2v-5B")
+    size = _resolution_to_wan_size(resolution, task)
     frame_num = _duration_to_frame_num(duration_sec, fps)
     out = Path(output_path)
     out.parent.mkdir(parents=True, exist_ok=True)
 
     # generate.py 无 --negative_prompt；用内置 config.sample_neg_prompt（可通过 WAN_NEGATIVE_PROMPT 覆盖）
-    task = os.environ.get("WAN_TASK", "ti2v-5B")
     cmd = [
         sys.executable,
         str(generate_py),
@@ -76,6 +87,7 @@ def generate_video(
         "--t5_cpu",
         "--offload_model",
         "True",
+        "--convert_model_dtype",
     ]
 
     env = {

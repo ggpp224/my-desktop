@@ -257,11 +257,12 @@ export const toolsSchema = [
     function: {
       name: 'search_todo_bugs',
       description:
-        '查询 Jira 中“待办bug”固定条件列表（Jira 8.8，非 token 鉴权）：最近即将到来的修复版本（filter=bus，非 nextbus）、经办人为当前用户、类型为缺陷、状态为打开。用户说「待办bug」「查询待办bug」时调用，可选 maxResults',
+        '查询 Jira 中“待办bug”固定条件列表（Jira 8.8，非 token 鉴权）：按当前日期落入的修复版本迭代（YYMMDD，版本日≥今天的最早一档）查询，经办人为当前用户、类型为缺陷、状态为打开；返回前一/当前/下一迭代供切换。用户说「待办bug」「查询待办bug」时调用，可选 maxResults、fixVersion',
       parameters: {
         type: 'object',
         properties: {
           maxResults: { type: 'number', description: '可选，返回数量上限，默认 100，最大 100' },
+          fixVersion: { type: 'string', description: '可选，指定迭代号（如 260820）；默认按当前日期落入档' },
         },
       },
     },
@@ -271,11 +272,12 @@ export const toolsSchema = [
     function: {
       name: 'search_in_progress_bugs',
       description:
-        '查询 Jira 中“处理中bug”固定条件列表（Jira 8.8，非 token 鉴权）：最近即将到来的修复版本（filter=bus，非 nextbus）、经办人为当前用户、类型为缺陷、状态为处理中（In Progress）。用户说「处理中bug」「查询处理中bug」时调用，可选 maxResults',
+        '查询 Jira 中“处理中bug”固定条件列表（Jira 8.8，非 token 鉴权）：按当前日期落入的修复版本迭代（YYMMDD）查询，经办人为当前用户、类型为缺陷、状态为处理中（In Progress）；返回前一/当前/下一迭代供切换。用户说「处理中bug」「查询处理中bug」时调用，可选 maxResults、fixVersion',
       parameters: {
         type: 'object',
         properties: {
           maxResults: { type: 'number', description: '可选，返回数量上限，默认 100，最大 100' },
+          fixVersion: { type: 'string', description: '可选，指定迭代号（如 260820）；默认按当前日期落入档' },
         },
       },
     },

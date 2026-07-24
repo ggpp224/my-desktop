@@ -660,11 +660,12 @@ function parseStatsSourceParam(raw: string): CommandStatSource | undefined {
   return undefined;
 }
 
-/** 待办 bug 列表（最近修复版本窗口 filter=bus、打开状态），供聊天区表格刷新 */
+/** 待办 bug 列表（按日期落入的修复版本迭代、打开状态），供聊天区表格刷新；可选 fixVersion 切换前一/当前/下一档 */
 app.get('/jira/todo-bugs', async (req, res) => {
   try {
     const maxResults = Number(req.query.maxResults ?? 100);
-    const result = await searchTodoBugs(maxResults);
+    const fixVersion = String(req.query.fixVersion ?? '').trim() || undefined;
+    const result = await searchTodoBugs(maxResults, fixVersion);
     res.json(result);
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
@@ -672,11 +673,12 @@ app.get('/jira/todo-bugs', async (req, res) => {
   }
 });
 
-/** 处理中 bug 列表（最近修复版本窗口 filter=bus、In Progress 状态），供聊天区表格刷新 */
+/** 处理中 bug 列表（按日期落入的修复版本迭代、In Progress），供聊天区表格刷新；可选 fixVersion 切换前一/当前/下一档 */
 app.get('/jira/in-progress-bugs', async (req, res) => {
   try {
     const maxResults = Number(req.query.maxResults ?? 100);
-    const result = await searchInProgressBugs(maxResults);
+    const fixVersion = String(req.query.fixVersion ?? '').trim() || undefined;
+    const result = await searchInProgressBugs(maxResults, fixVersion);
     res.json(result);
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);

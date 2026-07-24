@@ -30,15 +30,24 @@ fi
 echo "==> Wan2.2 依赖（Apple Silicon：跳过 CUDA flash_attn / 不降级 torch）"
 "$PY" -m pip install -r "$ROOT/requirements-wan-mac.txt"
 
-echo "==> 2/4 下载 Wan2.2-TI2V-5B（约数 GB，M3 Pro 推荐 5B）"
-if [[ ! -d "$MODELS/Wan2.2-TI2V-5B" ]]; then
-  "$PY" <<'PY'
-from huggingface_hub import snapshot_download
-snapshot_download("Wan-AI/Wan2.2-TI2V-5B", local_dir="models/Wan2.2-TI2V-5B")
+echo "==> 2/4 下载 Wan2.2-TI2V-5B（约 20GB+，M3 Pro 推荐 5B）"
+"$PY" <<'PY'
+from pathlib import Path
+from inference.wan_ckpt_verify import download_wan_ckpt, list_missing_wan_ckpt_files
+
+ckpt = Path("models/Wan2.2-TI2V-5B")
+missing = list_missing_wan_ckpt_files(ckpt)
+if missing:
+    print(f"缺少 {len(missing)} 个文件，开始/续传下载…")
+    for name in missing:
+        print("  -", name)
+    still = download_wan_ckpt(ckpt)
+    if still:
+        raise SystemExit(f"Wan 权重仍不完整: {still}\n请重跑: ./scripts/resume-wan-ckpt.sh")
+    print("Wan2.2-TI2V-5B 下载完成")
+else:
+    print("已存在且完整，跳过: models/Wan2.2-TI2V-5B")
 PY
-else
-  echo "已存在，跳过: $MODELS/Wan2.2-TI2V-5B"
-fi
 
 echo "==> 3/4 克隆 CosyVoice"
 if [[ ! -d "$MODELS/CosyVoice/.git" ]]; then
