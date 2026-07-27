@@ -21,6 +21,7 @@ import { deploy as jenkinsDeploy, getDeployStatus, getDeployStatusByBuildHistory
 import { open as openBrowser } from '../tools/browser-tool.js';
 import { getAllProjects, getProjectByCode } from '../config/projects.js';
 import { searchTodoBugs, searchInProgressBugs } from '../tools/jira-tool.js';
+import { submitIssueForTest } from '../tools/jira-submit-for-test.js';
 import { deployNovaPretest, deployByJobKey } from '../tools/deploy-jenkins-helper.js';
 import {
   mergeByCode,
@@ -675,6 +676,22 @@ app.get('/jira/in-progress-bugs', async (req, res) => {
     const maxResults = Number(req.query.maxResults ?? 100);
     const fixVersion = String(req.query.fixVersion ?? '').trim() || undefined;
     const result = await searchInProgressBugs(maxResults, fixVersion);
+    res.json(result);
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    res.status(500).json({ success: false, error: msg });
+  }
+});
+
+/** 一键提测：执行 Jira「提测」工作流转场并按默认策略填屏字段 */
+app.post('/jira/issues/:key/submit-for-test', async (req, res) => {
+  try {
+    const key = String(req.params.key ?? '').trim();
+    const result = await submitIssueForTest(key);
+    if (!result.success) {
+      res.status(400).json(result);
+      return;
+    }
     res.json(result);
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);

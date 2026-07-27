@@ -28,6 +28,15 @@ export type JiraBugPayload = {
   error?: string;
 };
 
+export type SubmitBugForTestResult = {
+  success?: boolean;
+  key?: string;
+  transitionId?: string;
+  transitionName?: string;
+  toStatus?: string;
+  error?: string;
+};
+
 export async function fetchTodoBugs(
   apiBase: string,
   options?: { maxResults?: number; fixVersion?: string },
@@ -56,6 +65,20 @@ export async function fetchInProgressBugs(
   const data = (await res.json()) as JiraBugPayload & { error?: string };
   if (!res.ok) {
     throw new Error(data.error || `请求失败 (${res.status})`);
+  }
+  return data;
+}
+
+export async function submitBugForTest(apiBase: string, issueKey: string): Promise<SubmitBugForTestResult> {
+  const base = apiBase.replace(/\/$/, '');
+  const key = issueKey.trim();
+  if (!key) throw new Error('issue key 不能为空');
+  const res = await fetch(`${base}/jira/issues/${encodeURIComponent(key)}/submit-for-test`, {
+    method: 'POST',
+  });
+  const data = (await res.json()) as SubmitBugForTestResult;
+  if (!res.ok || !data.success) {
+    throw new Error(data.error || `提测失败 (${res.status})`);
   }
   return data;
 }

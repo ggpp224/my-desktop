@@ -75,6 +75,16 @@ export const config = {
     developerFieldId: process.env.JIRA_DEVELOPER_FIELD_ID || '',
     /** 特性自定义字段 id（如 customfield_16202）；留空则启动时向 Jira 拉取 /rest/api/2/field 按名称「特性」解析 */
     featureFieldId: process.env.JIRA_FEATURE_FIELD_ID || '',
+    /** 列表「提测」一键默认值（走工作流 transition，非浏览器点按钮） */
+    submitForTest: {
+      transitionName: process.env.JIRA_SUBMIT_TEST_TRANSITION_NAME || '提测',
+      tester: process.env.JIRA_SUBMIT_TEST_TESTER || 'wangqw',
+      canGrayscale: process.env.JIRA_SUBMIT_TEST_CAN_GRAYSCALE || '能',
+      modificationTemplate: process.env.JIRA_SUBMIT_TEST_MODIFICATION_TEMPLATE || '修复：{摘要}',
+      testScopeTemplate: process.env.JIRA_SUBMIT_TEST_SCOPE_TEMPLATE || '验证：{摘要}',
+      /** 不在 Jira allowedValues 中则跳过（当前实例无「无」选项） */
+      defectCause: process.env.JIRA_SUBMIT_TEST_DEFECT_CAUSE || '',
+    },
   },
   cursor: {
     usageApiUrl:

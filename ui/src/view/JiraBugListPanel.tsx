@@ -1,7 +1,12 @@
 /* AI 生成 By Peng.Guo */
 import { useCallback, useEffect, useState } from 'react';
 import type { AppThemeTokens } from '../domain/theme/appTheme';
-import { fetchTodoBugs, fetchInProgressBugs, type JiraBugPayload } from '../infrastructure/jira/todoBugsApi';
+import {
+  fetchTodoBugs,
+  fetchInProgressBugs,
+  submitBugForTest,
+  type JiraBugPayload,
+} from '../infrastructure/jira/todoBugsApi';
 import { Button } from './Button';
 
 type JiraBugListKind = 'todo' | 'inProgress';
@@ -24,12 +29,16 @@ export function JiraBugListPanel({
   const [payload, setPayload] = useState(initial);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [submittingKey, setSubmittingKey] = useState<string | null>(null);
+  const [actionMessage, setActionMessage] = useState<string | null>(null);
 
   const issues = payload.issues ?? [];
   const iteration = payload.iteration;
   const selectedVersion = (iteration?.selected ?? '').trim();
   const showProcessedColumn = listKind === 'inProgress';
-  const columnCount = showProcessedColumn ? 9 : 8;
+  /** 仅处理中列表提供一键提测（待办 Open 通常无「提测」流转） */
+  const showSubmitColumn = listKind === 'inProgress' && Boolean(apiBase);
+  const columnCount = (showProcessedColumn ? 9 : 8) + (showSubmitColumn ? 1 : 0);
 
   const iterationButtons: Array<{ key: 'previous' | 'current' | 'next'; version: string; hint: string }> = [];
   if (iteration?.previous) iterationButtons.push({ key: 'previous', version: iteration.previous, hint: '前一迭代' });
@@ -39,6 +48,7 @@ export function JiraBugListPanel({
   useEffect(() => {
     setPayload(initial);
     setError(null);
+    setActionMessage(null);
   }, [initial]);
 
   const loadByFixVersion = useCallback(
@@ -51,12 +61,36 @@ export function JiraBugListPanel({
         const next = await fetcher(apiBase, { fixVersion });
         setPayload(next);
       } catch (err) {
-        setError(err instanceof Error ? err.message : String(err));
+        setError(`刷新失败：${err instanceof Error ? err.message : String(err)}`);
       } finally {
         setRefreshing(false);
       }
     },
     [apiBase, listKind, refreshing],
+  );
+
+  const onSubmitForTest = useCallback(
+    async (issueKey: string) => {
+      if (!apiBase || !issueKey || submittingKey) return;
+      setSubmittingKey(issueKey);
+      setError(null);
+      setActionMessage(null);
+      try {
+        const result = await submitBugForTest(apiBase, issueKey);
+        const toStatus = (result.toStatus ?? '').trim();
+        setActionMessage(
+          toStatus ? `${issueKey} 已提测 → ${toStatus}` : `${issueKey} 已提测`,
+        );
+        if (refreshable) {
+          await loadByFixVersion(selectedVersion || undefined);
+        }
+      } catch (err) {
+        setError(err instanceof Error ? err.message : String(err));
+      } finally {
+        setSubmittingKey(null);
+      }
+    },
+    [apiBase, loadByFixVersion, refreshable, selectedVersion, submittingKey],
   );
 
   return (
@@ -82,22 +116,21 @@ export function JiraBugListPanel({
               flexWrap: 'wrap',
             }}
           >
-            {iterationButtons.map((item) => {
-              const selected = item.version === selectedVersion;
+            {iterationButtons.map((btn) => {
+              const selected = btn.version === selectedVersion;
               return (
                 <Button
-                  key={item.key}
+                  key={btn.key}
                   themeTokens={themeTokens}
                   variant={selected ? 'solid' : 'outline'}
                   size="sm"
                   selected={selected}
-                  disabled={refreshing || !apiBase || !refreshable}
-                  onClick={() => void loadByFixVersion(item.version)}
-                  title={`${item.hint} ${item.version}`}
-                  ariaLabel={`${item.hint} ${item.version}`}
-                  style={{ flexShrink: 0, fontVariantNumeric: 'tabular-nums' }}
+                  disabled={refreshing || !apiBase}
+                  onClick={() => void loadByFixVersion(btn.version)}
+                  title={btn.hint}
+                  ariaLabel={`${btn.hint} ${btn.version}`}
                 >
-                  {item.version}
+                  {btn.version}
                 </Button>
               );
             })}
@@ -106,8 +139,6 @@ export function JiraBugListPanel({
         <div
           style={{
             padding: '8px 10px',
-            fontSize: 12,
-            color: themeTokens.textSecondary,
             borderBottom: `1px solid ${themeTokens.inputBorder}`,
             display: 'flex',
             alignItems: 'center',
@@ -115,17 +146,16 @@ export function JiraBugListPanel({
             gap: 8,
           }}
         >
-          <span>
+          <div style={{ fontSize: 12, color: themeTokens.textSecondary }}>
             共 {payload.total ?? issues.length} 条，当前展示 {issues.length} 条
             {selectedVersion ? ` · 迭代 ${selectedVersion}` : ''}
-          </span>
-          {refreshable ? (
+          </div>
+          {refreshable && apiBase ? (
             <Button
               themeTokens={themeTokens}
               variant="outline"
               size="sm"
-              disabled={refreshing || !apiBase}
-              loading={refreshing}
+              disabled={refreshing}
               onClick={() => void loadByFixVersion(selectedVersion || undefined)}
               title={refreshing ? '刷新中…' : '刷新列表'}
               ariaLabel={refreshing ? '刷新中' : listKind === 'inProgress' ? '刷新处理中 bug 列表' : '刷新待办 bug 列表'}
@@ -138,7 +168,12 @@ export function JiraBugListPanel({
         </div>
         {error ? (
           <div style={{ padding: '8px 10px', fontSize: 12, color: themeTokens.statusError, borderBottom: `1px solid ${themeTokens.inputBorder}` }}>
-            刷新失败：{error}
+            {error.startsWith('刷新失败') ? error : `操作失败：${error}`}
+          </div>
+        ) : null}
+        {actionMessage ? (
+          <div style={{ padding: '8px 10px', fontSize: 12, color: themeTokens.textSecondary, borderBottom: `1px solid ${themeTokens.inputBorder}` }}>
+            {actionMessage}
           </div>
         ) : null}
         <div style={{ overflowX: 'auto' }}>
@@ -146,7 +181,7 @@ export function JiraBugListPanel({
             <thead>
               <tr style={{ background: themeTokens.workspacePanelBackground }}>
                 <th style={{ width: 100, minWidth: 100, textAlign: 'left', padding: '8px 10px', borderBottom: `1px solid ${themeTokens.inputBorder}` }}>关键字</th>
-                <th style={{ width: showProcessedColumn ? '22%' : '26%', textAlign: 'left', padding: '8px 10px', borderBottom: `1px solid ${themeTokens.inputBorder}` }}>摘要</th>
+                <th style={{ width: showProcessedColumn ? '20%' : '24%', textAlign: 'left', padding: '8px 10px', borderBottom: `1px solid ${themeTokens.inputBorder}` }}>摘要</th>
                 <th style={{ width: '8%', textAlign: 'left', padding: '8px 10px', borderBottom: `1px solid ${themeTokens.inputBorder}` }}>状态</th>
                 {showProcessedColumn ? (
                   <th style={{ width: '7%', textAlign: 'left', padding: '8px 10px', borderBottom: `1px solid ${themeTokens.inputBorder}` }}>已处理</th>
@@ -154,45 +189,67 @@ export function JiraBugListPanel({
                 <th style={{ width: '8%', textAlign: 'left', padding: '8px 10px', borderBottom: `1px solid ${themeTokens.inputBorder}` }}>解决结果</th>
                 <th style={{ width: '10%', textAlign: 'left', padding: '8px 10px', borderBottom: `1px solid ${themeTokens.inputBorder}` }}>修复版本</th>
                 <th style={{ width: '10%', textAlign: 'left', padding: '8px 10px', borderBottom: `1px solid ${themeTokens.inputBorder}` }}>经办人</th>
-                <th style={{ width: showProcessedColumn ? '13%' : '14%', textAlign: 'left', padding: '8px 10px', borderBottom: `1px solid ${themeTokens.inputBorder}` }}>开发人员</th>
-                <th style={{ width: '12%', textAlign: 'left', padding: '8px 10px', borderBottom: `1px solid ${themeTokens.inputBorder}` }}>特性</th>
+                <th style={{ width: showProcessedColumn ? '12%' : '13%', textAlign: 'left', padding: '8px 10px', borderBottom: `1px solid ${themeTokens.inputBorder}` }}>开发人员</th>
+                <th style={{ width: '11%', textAlign: 'left', padding: '8px 10px', borderBottom: `1px solid ${themeTokens.inputBorder}` }}>特性</th>
+                {showSubmitColumn ? (
+                  <th style={{ width: 72, textAlign: 'left', padding: '8px 10px', borderBottom: `1px solid ${themeTokens.inputBorder}` }}>操作</th>
+                ) : null}
               </tr>
             </thead>
             <tbody>
-              {issues.map((issue, idx) => (
-                <tr
-                  key={`${issue.key ?? 'issue'}-${idx}`}
-                  style={{
-                    background: idx % 2 === 0 ? themeTokens.workspacePanelSubtleBackground : themeTokens.workspacePanelBackground,
-                  }}
-                >
-                  <td style={{ padding: '8px 10px', borderBottom: `1px solid ${themeTokens.inputBorder}`, whiteSpace: 'nowrap', minWidth: 100 }}>
-                    {issue.url ? (
-                      <a href={issue.url} target="_blank" rel="noreferrer" style={{ color: themeTokens.tabActiveBorder, textDecoration: 'none' }}>
-                        {issue.key || '--'}
-                      </a>
-                    ) : (
-                      issue.key || '--'
-                    )}
-                  </td>
-                  <td style={{ padding: '8px 10px', borderBottom: `1px solid ${themeTokens.inputBorder}`, wordBreak: 'break-word' }}>{issue.summary || '--'}</td>
-                  <td style={{ padding: '8px 10px', borderBottom: `1px solid ${themeTokens.inputBorder}`, wordBreak: 'break-word' }}>{issue.status || '--'}</td>
-                  {showProcessedColumn ? (
-                    <td style={{ padding: '8px 10px', borderBottom: `1px solid ${themeTokens.inputBorder}`, whiteSpace: 'nowrap' }}>
-                      {issue.processed ? (
-                        <span style={{ color: themeTokens.statusError }}>是</span>
+              {issues.map((issue, idx) => {
+                const issueKey = (issue.key ?? '').trim();
+                const isSubmitting = Boolean(issueKey && submittingKey === issueKey);
+                return (
+                  <tr
+                    key={`${issue.key ?? 'issue'}-${idx}`}
+                    style={{
+                      background: idx % 2 === 0 ? themeTokens.workspacePanelSubtleBackground : themeTokens.workspacePanelBackground,
+                    }}
+                  >
+                    <td style={{ padding: '8px 10px', borderBottom: `1px solid ${themeTokens.inputBorder}`, whiteSpace: 'nowrap', minWidth: 100 }}>
+                      {issue.url ? (
+                        <a href={issue.url} target="_blank" rel="noreferrer" style={{ color: themeTokens.tabActiveBorder, textDecoration: 'none' }}>
+                          {issue.key || '--'}
+                        </a>
                       ) : (
-                        '—'
+                        issue.key || '--'
                       )}
                     </td>
-                  ) : null}
-                  <td style={{ padding: '8px 10px', borderBottom: `1px solid ${themeTokens.inputBorder}`, wordBreak: 'break-word' }}>{issue.resolution || '--'}</td>
-                  <td style={{ padding: '8px 10px', borderBottom: `1px solid ${themeTokens.inputBorder}`, wordBreak: 'break-word' }}>{issue.fixVersion || '--'}</td>
-                  <td style={{ padding: '8px 10px', borderBottom: `1px solid ${themeTokens.inputBorder}`, wordBreak: 'break-word' }}>{issue.assignee || '--'}</td>
-                  <td style={{ padding: '8px 10px', borderBottom: `1px solid ${themeTokens.inputBorder}`, wordBreak: 'break-word' }}>{issue.developer ?? '—'}</td>
-                  <td style={{ padding: '8px 10px', borderBottom: `1px solid ${themeTokens.inputBorder}`, wordBreak: 'break-word' }}>{issue.feature ?? '—'}</td>
-                </tr>
-              ))}
+                    <td style={{ padding: '8px 10px', borderBottom: `1px solid ${themeTokens.inputBorder}`, wordBreak: 'break-word' }}>{issue.summary || '--'}</td>
+                    <td style={{ padding: '8px 10px', borderBottom: `1px solid ${themeTokens.inputBorder}`, wordBreak: 'break-word' }}>{issue.status || '--'}</td>
+                    {showProcessedColumn ? (
+                      <td style={{ padding: '8px 10px', borderBottom: `1px solid ${themeTokens.inputBorder}`, whiteSpace: 'nowrap' }}>
+                        {issue.processed ? (
+                          <span style={{ color: themeTokens.statusError }}>是</span>
+                        ) : (
+                          '—'
+                        )}
+                      </td>
+                    ) : null}
+                    <td style={{ padding: '8px 10px', borderBottom: `1px solid ${themeTokens.inputBorder}`, wordBreak: 'break-word' }}>{issue.resolution || '--'}</td>
+                    <td style={{ padding: '8px 10px', borderBottom: `1px solid ${themeTokens.inputBorder}`, wordBreak: 'break-word' }}>{issue.fixVersion || '--'}</td>
+                    <td style={{ padding: '8px 10px', borderBottom: `1px solid ${themeTokens.inputBorder}`, wordBreak: 'break-word' }}>{issue.assignee || '--'}</td>
+                    <td style={{ padding: '8px 10px', borderBottom: `1px solid ${themeTokens.inputBorder}`, wordBreak: 'break-word' }}>{issue.developer ?? '—'}</td>
+                    <td style={{ padding: '8px 10px', borderBottom: `1px solid ${themeTokens.inputBorder}`, wordBreak: 'break-word' }}>{issue.feature ?? '—'}</td>
+                    {showSubmitColumn ? (
+                      <td style={{ padding: '8px 10px', borderBottom: `1px solid ${themeTokens.inputBorder}`, whiteSpace: 'nowrap' }}>
+                        <Button
+                          themeTokens={themeTokens}
+                          variant="outline"
+                          size="sm"
+                          disabled={!issueKey || Boolean(submittingKey)}
+                          onClick={() => void onSubmitForTest(issueKey)}
+                          ariaLabel={`提测 ${issueKey}`}
+                          title={isSubmitting ? '提测中…' : '一键提测'}
+                        >
+                          {isSubmitting ? '…' : '提测'}
+                        </Button>
+                      </td>
+                    ) : null}
+                  </tr>
+                );
+              })}
               {issues.length === 0 && (
                 <tr>
                   <td colSpan={columnCount} style={{ padding: '10px', color: themeTokens.textSecondary }}>

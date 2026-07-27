@@ -42,6 +42,13 @@ alwaysApply: false
 | `JENKINS_BASE_URL` | Jenkins 根地址 | `https://jenkins.rd.chanjet.com/` |
 | `JENKINS_USERNAME` | Jenkins Basic 认证用户名 | - |
 | `JENKINS_TOKEN` | Jenkins API Token（Basic 密码） | - |
+| `JIRA_BASE_URL` / `JIRA_USERNAME` / `JIRA_PASSWORD` | Jira 8.8 Basic 认证 | - |
+| `JIRA_SUBMIT_TEST_TRANSITION_NAME` | 列表一键提测工作流名称 | `提测` |
+| `JIRA_SUBMIT_TEST_TESTER` | 一键提测默认测试人员 login | `wangqw` |
+| `JIRA_SUBMIT_TEST_CAN_GRAYSCALE` | 一键提测「能否灰度」选项文案 | `能` |
+| `JIRA_SUBMIT_TEST_MODIFICATION_TEMPLATE` | 修改点模板（`{摘要}` 占位） | `修复：{摘要}` |
+| `JIRA_SUBMIT_TEST_SCOPE_TEMPLATE` | 测试范围建议模板 | `验证：{摘要}` |
+| `JIRA_SUBMIT_TEST_DEFECT_CAUSE` | 可选缺陷原因选项；不匹配则跳过 | 留空 |
 | `GEMINI_API_KEY` / `GOOGLE_API_KEY` | 外部 Gemini 鉴权（与 A2UI 一致）；未在 UI 传 Key 时由 `agent/gemini-client.ts` 经 `@google/genai` 读取 | `export GEMINI_API_KEY=...` |
 | `GEMINI_DEFAULT_MODEL` | 外部 Gemini 默认模型 ID（UI 未指定 model 时与后端 fallback 一致） | `gemini-3.1-flash-lite` |
 | `HTTPS_PROXY` / `HTTP_PROXY` / `ALL_PROXY` | 可选：访问 Google 时代理。`http(s)://` 走 undici `ProxyAgent`；**`socks5://` / `socks5h://`** 走 `fetch-socks`（undici 不支持 socks URL） | 例：`http://127.0.0.1:7890` 或 `socks5h://127.0.0.1:1081` |
