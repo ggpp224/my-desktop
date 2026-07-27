@@ -12,7 +12,6 @@ import { CommandStatsPanel } from './CommandStatsPanel';
 import { CommandCapabilityPanel } from './CommandCapabilityPanel';
 import { KnowledgeDocPanel } from './KnowledgeDocPanel';
 import { MdToPdfPanel } from './MdToPdfPanel';
-import { VideoGeneratorPanel } from './VideoGeneratorPanel';
 import { TechDigestPanel } from './TechDigestPanel';
 import { LlmSettingsModal } from './view/LlmSettingsModal';
 import { HeaderTabNav } from './view/HeaderTabNav';
@@ -317,14 +316,6 @@ export default function App() {
     setActiveHeaderTab('md-to-pdf');
   };
 
-  const openVideoGeneratorTab = () => {
-    setHeaderTabs((prev) => {
-      if (prev.some((tab) => tab.key === 'video-generator')) return prev;
-      return [...prev, { key: 'video-generator', label: 'AI 视频生成' }];
-    });
-    setActiveHeaderTab('video-generator');
-  };
-
   const openCommandCapabilityTab = () => {
     setHeaderTabs((prev) => {
       if (prev.some((tab) => tab.key === 'command-capability')) return prev;
@@ -590,7 +581,7 @@ export default function App() {
                 onOpenCommandCapability={openCommandCapabilityTab}
                 themeTokens={themeTokens}
               />
-              <ToolPanel themeTokens={themeTokens} onOpenVideoGenerator={openVideoGeneratorTab} />
+              <ToolPanel themeTokens={themeTokens} />
             </>
           )}
         </aside>
@@ -644,11 +635,6 @@ export default function App() {
           {activeHeaderTab === 'md-to-pdf' && (
             <div style={{ flex: 1, minHeight: 0, width: '100%', height: '100%', display: 'flex', overflow: 'hidden' }}>
               <MdToPdfPanel addLog={addLog} themeTokens={themeTokens} />
-            </div>
-          )}
-          {activeHeaderTab === 'video-generator' && (
-            <div style={{ flex: 1, minHeight: 0, width: '100%', height: '100%', display: 'flex', overflow: 'hidden' }}>
-              <VideoGeneratorPanel apiBase={apiBase} addLog={addLog} themeTokens={themeTokens} />
             </div>
           )}
           {activeHeaderTab === 'command-capability' && (

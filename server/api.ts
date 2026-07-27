@@ -63,8 +63,6 @@ import {
 import { loadAllDigests, loadDigest } from './trends/trends-repository.js';
 import { runTechDigestRefreshForPeriod } from './trends/trends-service.js';
 import type { TechDigestScope } from './trends/trends-types.js';
-import { registerVideoRoutes } from './video-routes.js';
-
 /** 出站 DNS 优先 IPv4，避免部分网络 IPv6 不通导致 Google 等连接在 IPv6 上卡死至超时 */
 if (typeof dns.setDefaultResultOrder === 'function') {
   dns.setDefaultResultOrder('ipv4first');
@@ -316,8 +314,6 @@ app.get('/health/ollama', async (_req, res) => {
   const ollamaReachable = await healthCheck();
   res.status(200).json({ ok: true, ollamaReachable });
 });
-
-registerVideoRoutes(app);
 
 /** 返回当前使用的本地模型名（可运行时切换），供前端展示 */
 app.get('/agent/model', (_req, res) => {

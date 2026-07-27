@@ -28,6 +28,8 @@ export function JiraBugListPanel({
   const issues = payload.issues ?? [];
   const iteration = payload.iteration;
   const selectedVersion = (iteration?.selected ?? '').trim();
+  const showProcessedColumn = listKind === 'inProgress';
+  const columnCount = showProcessedColumn ? 9 : 8;
 
   const iterationButtons: Array<{ key: 'previous' | 'current' | 'next'; version: string; hint: string }> = [];
   if (iteration?.previous) iterationButtons.push({ key: 'previous', version: iteration.previous, hint: '前一迭代' });
@@ -143,14 +145,17 @@ export function JiraBugListPanel({
           <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12, color: themeTokens.textPrimary, tableLayout: 'fixed' }}>
             <thead>
               <tr style={{ background: themeTokens.workspacePanelBackground }}>
-                <th style={{ width: '11%', textAlign: 'left', padding: '8px 10px', borderBottom: `1px solid ${themeTokens.inputBorder}` }}>关键字</th>
-                <th style={{ width: '26%', textAlign: 'left', padding: '8px 10px', borderBottom: `1px solid ${themeTokens.inputBorder}` }}>摘要</th>
+                <th style={{ width: 100, minWidth: 100, textAlign: 'left', padding: '8px 10px', borderBottom: `1px solid ${themeTokens.inputBorder}` }}>关键字</th>
+                <th style={{ width: showProcessedColumn ? '22%' : '26%', textAlign: 'left', padding: '8px 10px', borderBottom: `1px solid ${themeTokens.inputBorder}` }}>摘要</th>
                 <th style={{ width: '8%', textAlign: 'left', padding: '8px 10px', borderBottom: `1px solid ${themeTokens.inputBorder}` }}>状态</th>
+                {showProcessedColumn ? (
+                  <th style={{ width: '7%', textAlign: 'left', padding: '8px 10px', borderBottom: `1px solid ${themeTokens.inputBorder}` }}>已处理</th>
+                ) : null}
                 <th style={{ width: '8%', textAlign: 'left', padding: '8px 10px', borderBottom: `1px solid ${themeTokens.inputBorder}` }}>解决结果</th>
                 <th style={{ width: '10%', textAlign: 'left', padding: '8px 10px', borderBottom: `1px solid ${themeTokens.inputBorder}` }}>修复版本</th>
                 <th style={{ width: '10%', textAlign: 'left', padding: '8px 10px', borderBottom: `1px solid ${themeTokens.inputBorder}` }}>经办人</th>
-                <th style={{ width: '14%', textAlign: 'left', padding: '8px 10px', borderBottom: `1px solid ${themeTokens.inputBorder}` }}>开发人员</th>
-                <th style={{ width: '13%', textAlign: 'left', padding: '8px 10px', borderBottom: `1px solid ${themeTokens.inputBorder}` }}>特性</th>
+                <th style={{ width: showProcessedColumn ? '13%' : '14%', textAlign: 'left', padding: '8px 10px', borderBottom: `1px solid ${themeTokens.inputBorder}` }}>开发人员</th>
+                <th style={{ width: '12%', textAlign: 'left', padding: '8px 10px', borderBottom: `1px solid ${themeTokens.inputBorder}` }}>特性</th>
               </tr>
             </thead>
             <tbody>
@@ -161,7 +166,7 @@ export function JiraBugListPanel({
                     background: idx % 2 === 0 ? themeTokens.workspacePanelSubtleBackground : themeTokens.workspacePanelBackground,
                   }}
                 >
-                  <td style={{ padding: '8px 10px', borderBottom: `1px solid ${themeTokens.inputBorder}`, whiteSpace: 'nowrap' }}>
+                  <td style={{ padding: '8px 10px', borderBottom: `1px solid ${themeTokens.inputBorder}`, whiteSpace: 'nowrap', minWidth: 100 }}>
                     {issue.url ? (
                       <a href={issue.url} target="_blank" rel="noreferrer" style={{ color: themeTokens.tabActiveBorder, textDecoration: 'none' }}>
                         {issue.key || '--'}
@@ -172,6 +177,15 @@ export function JiraBugListPanel({
                   </td>
                   <td style={{ padding: '8px 10px', borderBottom: `1px solid ${themeTokens.inputBorder}`, wordBreak: 'break-word' }}>{issue.summary || '--'}</td>
                   <td style={{ padding: '8px 10px', borderBottom: `1px solid ${themeTokens.inputBorder}`, wordBreak: 'break-word' }}>{issue.status || '--'}</td>
+                  {showProcessedColumn ? (
+                    <td style={{ padding: '8px 10px', borderBottom: `1px solid ${themeTokens.inputBorder}`, whiteSpace: 'nowrap' }}>
+                      {issue.processed ? (
+                        <span style={{ color: themeTokens.statusError }}>是</span>
+                      ) : (
+                        '—'
+                      )}
+                    </td>
+                  ) : null}
                   <td style={{ padding: '8px 10px', borderBottom: `1px solid ${themeTokens.inputBorder}`, wordBreak: 'break-word' }}>{issue.resolution || '--'}</td>
                   <td style={{ padding: '8px 10px', borderBottom: `1px solid ${themeTokens.inputBorder}`, wordBreak: 'break-word' }}>{issue.fixVersion || '--'}</td>
                   <td style={{ padding: '8px 10px', borderBottom: `1px solid ${themeTokens.inputBorder}`, wordBreak: 'break-word' }}>{issue.assignee || '--'}</td>
@@ -181,7 +195,7 @@ export function JiraBugListPanel({
               ))}
               {issues.length === 0 && (
                 <tr>
-                  <td colSpan={8} style={{ padding: '10px', color: themeTokens.textSecondary }}>
+                  <td colSpan={columnCount} style={{ padding: '10px', color: themeTokens.textSecondary }}>
                     暂无数据
                   </td>
                 </tr>

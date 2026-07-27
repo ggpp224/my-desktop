@@ -9,6 +9,8 @@ export type JiraBugItem = {
   developer?: string;
   feature?: string;
   url?: string;
+  /** 处理中 bug：当前用户是否已评论「已处理」 */
+  processed?: boolean;
 };
 
 export type JiraFixIteration = {

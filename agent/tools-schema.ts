@@ -272,7 +272,7 @@ export const toolsSchema = [
     function: {
       name: 'search_in_progress_bugs',
       description:
-        '查询 Jira 中“处理中bug”固定条件列表（Jira 8.8，非 token 鉴权）：按当前日期落入的修复版本迭代（YYMMDD）查询，经办人为当前用户、类型为缺陷、状态为处理中（In Progress）；返回前一/当前/下一迭代供切换。用户说「处理中bug」「查询处理中bug」时调用，可选 maxResults、fixVersion',
+        '查询 Jira 中“处理中bug”固定条件列表（Jira 8.8，非 token 鉴权）：按当前日期落入的修复版本迭代（YYMMDD）查询，经办人为当前用户、类型为缺陷、状态为处理中（In Progress）；每条附带 processed（当前用户是否已评论含「已处理」）；返回前一/当前/下一迭代供切换。用户说「处理中bug」「查询处理中bug」时调用，可选 maxResults、fixVersion',
       parameters: {
         type: 'object',
         properties: {

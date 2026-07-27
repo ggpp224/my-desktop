@@ -55,6 +55,8 @@ type JiraBugItem = {
   /** Jira 自定义字段「特性」 */
   feature?: string;
   url?: string;
+  /** 处理中 bug：当前用户是否已评论「已处理」 */
+  processed?: boolean;
 };
 type JiraBugPayload = {
   total?: number;

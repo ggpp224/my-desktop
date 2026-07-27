@@ -1,6 +1,4 @@
 /* AI 生成 By Peng.Guo */
-import { homedir } from 'os';
-import path from 'path';
 
 /**
  * Ollama「思考」能力：仅支持该能力的模型可传 think；默认不传，避免 qwen2.5 等报 400 does not support thinking。
@@ -36,8 +34,6 @@ function resolveApiPort(): number {
 }
 
 const apiPort = resolveApiPort();
-
-const defaultVideoOutputDir = path.join(homedir(), 'Downloads', 'ai-video-jobs');
 
 export const config = {
   ollama: {
@@ -172,25 +168,5 @@ export const config = {
   gemini: {
     /** 外部 Gemini 默认模型；UI 未指定 model 时与后端 fallback 一致 */
     defaultModel: (process.env.GEMINI_DEFAULT_MODEL ?? '').trim() || 'gemini-3.1-flash-lite',
-  },
-  video: {
-    outputDir: (process.env.VIDEO_OUTPUT_DIR ?? defaultVideoOutputDir).trim() || defaultVideoOutputDir,
-    scriptModel: (process.env.VIDEO_SCRIPT_MODEL ?? 'qwen3:8b').trim() || 'qwen3:8b',
-    scriptTimeoutMs: Math.max(30_000, Number(process.env.VIDEO_SCRIPT_TIMEOUT_MS) || 120_000),
-    pipelineTimeoutMs: Math.max(60_000, Number(process.env.VIDEO_PIPELINE_TIMEOUT_MS) || 1_800_000),
-    ffmpegPath: (process.env.FFMPEG_PATH ?? 'ffmpeg').trim() || 'ffmpeg',
-    /** 1=使用 Mock Sidecar（无 GPU 时端到端验证） */
-    mockMode: ['1', 'true', 'yes', 'on'].includes(String(process.env.VIDEO_MOCK_MODE ?? '').toLowerCase()),
-    sidecars: {
-      wan: (process.env.VIDEO_WAN_BASE ?? 'http://127.0.0.1:5101').trim(),
-      cosyvoice: (process.env.VIDEO_COSYVOICE_BASE ?? 'http://127.0.0.1:5102').trim(),
-      audiocraft: (process.env.VIDEO_AUDIOCRAFT_BASE ?? 'http://127.0.0.1:5103').trim(),
-      foley: (process.env.VIDEO_FOLEY_BASE ?? 'http://127.0.0.1:5104').trim(),
-    },
-    gpu: {
-      wan: Number.isFinite(Number(process.env.VIDEO_GPU_WAN)) ? Number(process.env.VIDEO_GPU_WAN) : 0,
-      audio: Number.isFinite(Number(process.env.VIDEO_GPU_AUDIO)) ? Number(process.env.VIDEO_GPU_AUDIO) : 0,
-    },
-    scriptTemperature: parseOllamaTemperatureFromEnv('VIDEO_SCRIPT_TEMPERATURE', 0.3),
   },
 };

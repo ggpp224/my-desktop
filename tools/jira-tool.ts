@@ -6,6 +6,7 @@ import {
   resolveFixIterationNeighbors,
   type FixIterationNeighbors,
 } from './jira-fix-iteration.js';
+import { SelfProcessedCommentDetector, type JiraComment } from './jira-self-processed-comment.js';
 import { buildWeeklyReportDuringClause, formatJiraDateTimeInZone, getMondayWeekBoundsInTimeZone } from './jira-weekly-window.js';
 
 const MY_BUG_JQL =
@@ -155,6 +156,11 @@ export interface MyBugItem {
   feature: string;
   updated: string;
   url: string;
+  /**
+   * 处理中 bug：当前用户是否已在该 issue 评论中写入「已处理」。
+   * 仅 searchInProgressBugs 会填充。
+   */
+  processed?: boolean;
 }
 
 export interface MyBugResult {
@@ -385,10 +391,54 @@ export async function searchTodoBugs(maxResults = 100, fixVersion?: string): Pro
   return { ...result, iteration };
 }
 
+interface JiraCommentListResponse {
+  comments?: JiraComment[];
+}
+
+async function fetchIssueComments(
+  baseUrl: string,
+  authHeader: string,
+  issueKey: string,
+): Promise<JiraComment[]> {
+  const url = `${baseUrl}/rest/api/2/issue/${encodeURIComponent(issueKey)}/comment`;
+  const response = await fetch(url, {
+    method: 'GET',
+    headers: { Accept: 'application/json', Authorization: authHeader },
+  });
+  if (!response.ok) {
+    const bodyText = await response.text();
+    throw new Error(`Jira 评论拉取失败(${response.status}): ${bodyText || response.statusText}`);
+  }
+  const data = (await response.json()) as JiraCommentListResponse;
+  return data.comments ?? [];
+}
+
+/** 为处理中 bug 填充「已处理」：当前用户评论正文含「已处理」。单条失败时记为未处理，不阻断整表。 */
+async function enrichInProgressWithSelfProcessed(issues: MyBugItem[]): Promise<MyBugItem[]> {
+  const baseUrl = config.jira.baseUrl.trim().replace(/\/$/, '');
+  const authHeader = getAuthHeader();
+  const detector = new SelfProcessedCommentDetector(config.jira.username);
+  return Promise.all(
+    issues.map(async (issue) => {
+      const key = issue.key.trim();
+      if (!key) return { ...issue, processed: false };
+      try {
+        const comments = await fetchIssueComments(baseUrl, authHeader, key);
+        return { ...issue, processed: detector.isProcessed(comments) };
+      } catch {
+        return { ...issue, processed: false };
+      }
+    }),
+  );
+}
+
 export async function searchInProgressBugs(maxResults = 100, fixVersion?: string): Promise<MyBugResult> {
   const iteration = await resolveIterationContext(fixVersion);
   const result = await searchByJql(buildInProgressBugJql(iteration.selected), maxResults);
-  return { ...result, iteration };
+  const issues = await enrichInProgressWithSelfProcessed(result.issues);
+  // 「已处理」为是的排前面，其余保持相对顺序
+  issues.sort((a, b) => Number(Boolean(b.processed)) - Number(Boolean(a.processed)));
+  return { ...result, issues, iteration };
 }
 
 export async function searchMyTasks(maxResults = 100): Promise<MyBugResult> {
