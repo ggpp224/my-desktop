@@ -53,7 +53,6 @@ function buildDefaultsConfig(): SubmitForTestDefaultsConfig {
   const submit = config.jira.submitForTest;
   return {
     canGrayscale: submit.canGrayscale,
-    tester: submit.tester,
     modificationTemplate: submit.modificationTemplate,
     testScopeTemplate: submit.testScopeTemplate,
     defectCause: submit.defectCause,
@@ -68,6 +67,22 @@ function formatOptionValue(raw: unknown): string {
     return (o.value ?? o.name ?? '').trim();
   }
   return '';
+}
+
+function isFieldFilled(raw: unknown): boolean {
+  if (raw == null || raw === '') return false;
+  if (typeof raw === 'string') return raw.trim().length > 0;
+  if (Array.isArray(raw)) return raw.length > 0;
+  if (typeof raw === 'object') {
+    const user = raw as { name?: string; key?: string; displayName?: string; accountId?: string };
+    return Boolean(
+      (user.name ?? '').trim() ||
+        (user.key ?? '').trim() ||
+        (user.displayName ?? '').trim() ||
+        (user.accountId ?? '').trim(),
+    );
+  }
+  return true;
 }
 
 async function fetchIssueFields(
@@ -172,14 +187,26 @@ export async function submitIssueForTest(issueKeyRaw: string): Promise<SubmitFor
 
     const screenFields = transition.fields ?? {};
     const defectTypeFieldId = findScreenFieldId(screenFields, '缺陷类型');
+    const testerFieldId = findScreenFieldId(screenFields, '测试人员');
     const issueFields = await fetchIssueFields(baseUrl, authHeader, key, [
       'summary',
       ...(defectTypeFieldId ? [defectTypeFieldId] : []),
+      ...(testerFieldId ? [testerFieldId] : []),
     ]);
     const summary = String(issueFields.summary ?? '').trim();
     const defectType = defectTypeFieldId
       ? formatOptionValue(issueFields[defectTypeFieldId]) || undefined
       : undefined;
+    const testerEmpty = Boolean(testerFieldId) && !isFieldFilled(testerFieldId ? issueFields[testerFieldId] : undefined);
+    if (testerEmpty) {
+      return {
+        success: false,
+        key,
+        transitionName: transition.name,
+        toStatus: transition.to?.name,
+        error: '测试人员为空，已放弃一键提测，请在 Jira 中手动提测并指定测试人员。',
+      };
+    }
 
     const defaults = new SubmitForTestDefaults(buildDefaultsConfig());
     const intent = defaults.buildIntent(summary, { defectType });

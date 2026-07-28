@@ -6,8 +6,6 @@ export type SubmitForTestFieldIntent = Readonly<Record<string, string | undefine
 export type SubmitForTestDefaultsConfig = {
   /** 能否灰度选项文案，默认「能」 */
   canGrayscale: string;
-  /** 测试人员 login 名 */
-  tester: string;
   /** 修改点模板，支持 `{摘要}` */
   modificationTemplate: string;
   /** 测试范围建议模板，支持 `{摘要}` */
@@ -34,7 +32,6 @@ export class SubmitForTestDefaults {
       修改点: this.applyTemplate(this.config.modificationTemplate, title),
       测试范围建议: this.applyTemplate(this.config.testScopeTemplate, title),
       能否灰度: this.config.canGrayscale.trim() || undefined,
-      测试人员: this.config.tester.trim() || undefined,
       缺陷类型: (existing.defectType ?? '').trim() || undefined,
       缺陷原因: this.config.defectCause.trim() || undefined,
     };

@@ -78,7 +78,6 @@ export const config = {
     /** 列表「提测」一键默认值（走工作流 transition，非浏览器点按钮） */
     submitForTest: {
       transitionName: process.env.JIRA_SUBMIT_TEST_TRANSITION_NAME || '提测',
-      tester: process.env.JIRA_SUBMIT_TEST_TESTER || 'wangqw',
       canGrayscale: process.env.JIRA_SUBMIT_TEST_CAN_GRAYSCALE || '能',
       modificationTemplate: process.env.JIRA_SUBMIT_TEST_MODIFICATION_TEMPLATE || '修复：{摘要}',
       testScopeTemplate: process.env.JIRA_SUBMIT_TEST_SCOPE_TEMPLATE || '验证：{摘要}',
