@@ -5,6 +5,7 @@ import path from 'node:path';
 import { config } from '../config/default.js';
 import { registerProtectedProcess, releaseApiPort, unregisterProtectedProcess } from '../server/port-utils.js';
 import { buildSubprocessEnv, resolveSubprocessNode } from './subprocess-node.js';
+import { isChildProcessAlive, stopChildProcess } from './stop-child-process.js';
 import { sanitizeShellEnv } from '../server/sanitize-shell-env.js';
 
 let brokerChild: ChildProcess | null = null;
@@ -101,21 +102,11 @@ export async function stopTerminalBroker(
   brokerChild = null;
   if (child) {
     unregisterProtectedProcess(child.pid ?? undefined);
-    if (!child.killed) {
-    try {
-      child.kill('SIGTERM');
-    } catch {
-      /* ignore */
-    }
-    await sleep(400);
-    if (!options?.soft && !child.killed) {
-      try {
-        child.kill('SIGKILL');
-      } catch {
-        /* ignore */
-      }
-    }
-    }
+    await stopChildProcess(child, {
+      label: 'terminal-broker',
+      soft: options?.soft === true,
+      termWaitMs: 400,
+    });
   }
   if (!options?.soft) {
     await releaseApiPort(port);
@@ -127,5 +118,5 @@ export function getTerminalBrokerUrl(port: number = config.server.terminalBroker
 }
 
 export function isTerminalBrokerRunning(): boolean {
-  return brokerChild != null && !brokerChild.killed;
+  return brokerChild != null && isChildProcessAlive(brokerChild);
 }

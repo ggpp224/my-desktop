@@ -63,6 +63,12 @@ export function getHelpCommands(): HelpCommandItem[] {
     },
     {
       section: '工作流',
+      command: '升级集测react18的mdf-report版本',
+      description:
+        '自动切 sprint、将 @chanjet/mdf-biz-report-web 更新为对应 sprint 已发布版本、提交并 push',
+    },
+    {
+      section: '工作流',
       command: '启动 cpxy / 启动 react18 / 启动 cc-web / 启动 biz-solution / 启动 uikit / 启动 shared',
       description: '执行 start-work 工作流中的对应步骤（多为 cd 项目目录后 yarn dev，系统终端）',
     },
@@ -73,9 +79,9 @@ export function getHelpCommands(): HelpCommandItem[] {
     },
     {
       section: '工作流',
-      command: '启动 base / 启动 base18 / 启动 nova / 启动 mdf-ui / 启动 mdf-biz',
+      command: '启动 base / 启动 base18 / 启动 nova / 启动 mdf-ui / 启动 mdf-biz / 启动 mdf-report',
       description:
-        '工作流未收录的项目：在 config/projects 对应目录执行开发命令（默认 yarn dev；mdf-ui、mdf-biz 为 yarn w）',
+        '工作流未收录的项目：在 config/projects 对应目录执行开发命令（默认 yarn dev；mdf-ui、mdf-biz 为 yarn w；mdf-report 为 pnpm run dev）',
     },
     {
       section: '终端',
@@ -99,15 +105,15 @@ export function getHelpCommands(): HelpCommandItem[] {
     },
     {
       section: '部署',
-      command: '部署 nova / 部署 nova 集测 / 部署 cc-web / 部署 react18 / 部署 base / 部署 base18 / 部署 mdf-ui / 部署 mdf-biz',
+      command: '部署 nova / 部署 nova 集测 / 部署 cc-web / 部署 react18 / 部署 base / 部署 base18 / 部署 mdf-ui / 部署 mdf-biz / 部署 mdf-report',
       description:
-        '触发 Jenkins 任务；nova、mdf-ui、mdf-biz 默认 test；部署 nova 集测使用 react18 最大 sprint 分支；可扩展到其它已配置项目代号',
+        '触发 Jenkins 任务；nova、mdf-ui、mdf-biz、mdf-report 默认 test；部署 nova 集测使用 react18 最大 sprint 分支；可扩展到其它已配置项目代号',
     },
     {
       section: '合并',
-      command: '合并 nova / 合并 nova 集测 / 合并 biz-solution / 合并 biz-solution 集测 / 合并 scm / 合并 mdf-ui / 合并 mdf-biz',
+      command: '合并 nova / 合并 nova 集测 / 合并 biz-solution / 合并 biz-solution 集测 / 合并 scm / 合并 mdf-ui / 合并 mdf-biz / 合并 mdf-report',
       description:
-        '将当前分支合并到测试或集测分支；mdf-ui/mdf-biz 合并到 test；nova/biz-solution 集测合并到 react18 最大 sprint 分支（算法同升级集测 react18 nova 版本）',
+        '将当前分支合并到测试或集测分支；mdf-ui/mdf-biz/mdf-report 合并到 test（mdf-report 会执行 pnpm run release）；nova/biz-solution 集测合并到 react18 最大 sprint 分支',
     },
     {
       section: 'Jira',
@@ -172,6 +178,7 @@ export function getHelpCodebook(): HelpCodebook {
       'base18',
       'mdf-ui',
       'mdf-biz',
+      'mdf-report',
       'ai-import',
       'uikit-compat',
       'cc-node',
@@ -190,6 +197,9 @@ export function getHelpCodebook(): HelpCodebook {
       'cc-web-hkj',
     ],
     ideAliases: ['ws / webstorm -> WebStorm', 'cursor -> Cursor', 'code / vscode -> VS Code'],
-    projectDevCmdOverrides: [{ codes: ['mdf-ui', 'mdf-biz'], cmd: 'yarn w' }],
+    projectDevCmdOverrides: [
+      { codes: ['mdf-ui', 'mdf-biz'], cmd: 'yarn w' },
+      { codes: ['mdf-report'], cmd: 'pnpm run dev' },
+    ],
   };
 }

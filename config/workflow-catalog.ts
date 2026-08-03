@@ -42,6 +42,12 @@ export const WORKFLOW_CATALOG: readonly WorkflowCatalogItem[] = [
     showInPanel: true,
   },
   {
+    name: 'upgrade-react18-mdf-report',
+    label: '升级集测 react18 的 mdf-report 版本',
+    desc: '自动切 sprint、更新 @chanjet/mdf-biz-report-web 并提交推送',
+    showInPanel: true,
+  },
+  {
     name: 'standalone',
     label: '启动 scm（standalone）',
     desc: '单独启动 scm 微应用（yarn dev）',

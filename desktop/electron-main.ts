@@ -220,13 +220,24 @@ app.whenReady().then(async () => {
   });
 });
 
+/** 关终端 / Cmd+Q 时清理有上限，避免 preventDefault 后卡死导致 Terminal 假死 */
+const QUIT_CLEANUP_TIMEOUT_MS = 2500;
+
 app.on('before-quit', (event) => {
   if (isStoppingApi) return;
   event.preventDefault();
   isStoppingApi = true;
+  const forceExit = setTimeout(() => {
+    console.error(`[electron] quit cleanup timed out after ${QUIT_CLEANUP_TIMEOUT_MS}ms, force exit`);
+    app.exit(0);
+  }, QUIT_CLEANUP_TIMEOUT_MS);
   void stopManagedApiServer(apiPort, { stopBroker: true })
     .then(() => releaseApiPort(apiPort))
+    .catch((err) => {
+      console.error('[electron] quit cleanup failed:', err);
+    })
     .finally(() => {
+      clearTimeout(forceExit);
       app.exit(0);
     });
 });

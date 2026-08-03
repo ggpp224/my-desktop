@@ -240,7 +240,8 @@ npm run sdk:pr-review -- --base main --model default
 - 启动工作环境：`开始工作`
 - 打开内嵌终端并定位项目：`终端打开 react18`
 - 执行单步任务：`启动 scm`、`启动 react18`、`启动 mdf-ui`
-- 启动工作流外项目：`启动 base`、`启动 mdf-biz`（mdf 系列为 `yarn w`）
+- 启动工作流外项目：`启动 base`、`启动 mdf-biz`（yarn w）、`启动 mdf-report`（pnpm run dev）
+- 升级依赖：`升级集测react18的nova版本`、`升级集测react18的mdf-report版本`
 - 部署：`部署 nova 分支是 sprint-260326`
 - 合并：`合并 biz-solution` / `合并 biz-solution 集测`
 - 知识库：`增量重建知识库索引`、`重建知识库索引`

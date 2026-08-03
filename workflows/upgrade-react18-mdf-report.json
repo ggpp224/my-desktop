@@ -1,0 +1,49 @@
+{
+  "steps": [
+    {
+      "tool": "shell",
+      "cwdCode": "react18",
+      "cmd": "set -eu; STATE=.ai-dev-mdf-report-upgrade; mkdir -p \"$STATE\"; ORIG_BRANCH=$(git rev-parse --abbrev-ref HEAD); printf '%s' \"$ORIG_BRANCH\" > \"$STATE/orig-branch\"; echo \"[1/9] 已进入 react18 目录: $(pwd)\"; echo \"[1/9] 执行前分支: $ORIG_BRANCH\"; case \"$ORIG_BRANCH\" in test|test-*|origin/test*) echo \"[1/9] 提示: 当前在测试/预发分支，本流程只会修改远程最大 sprint 分支，不会改 $ORIG_BRANCH\";; esac; git fetch"
+    },
+    {
+      "tool": "shell",
+      "cwdCode": "react18",
+      "cmd": "set -eu; STATE=.ai-dev-mdf-report-upgrade; SPRINT_NUM=$(git branch -r | sed -nE 's#^[[:space:]]*origin/sprint-([0-9]+)$#\\1#p' | sort -n | awk 'END{print}'); if [ -z \"$SPRINT_NUM\" ]; then echo \"未找到远程 sprint 分支\" >&2; exit 1; fi; SPRINT_BRANCH=\"sprint-$SPRINT_NUM\"; printf '%s' \"$SPRINT_NUM\" > \"$STATE/sprint-num\"; printf '%s' \"$SPRINT_BRANCH\" > \"$STATE/sprint-branch\"; echo \"[2/9] 目标 sprint 分支: $SPRINT_BRANCH（远程 origin/sprint-N 最大编号）\"; git fetch origin \"$SPRINT_BRANCH\"; if git show-ref --verify --quiet \"refs/heads/$SPRINT_BRANCH\"; then git checkout \"$SPRINT_BRANCH\"; else git checkout -b \"$SPRINT_BRANCH\" \"origin/$SPRINT_BRANCH\"; fi; git reset --hard \"origin/$SPRINT_BRANCH\"; echo \"[2/9] 已切换到 $SPRINT_BRANCH 并同步 origin/$SPRINT_BRANCH @ $(git rev-parse --short HEAD)\""
+    },
+    {
+      "tool": "shell",
+      "cwdCode": "react18",
+      "cmd": "set -eu; STATE=.ai-dev-mdf-report-upgrade; SPRINT_BRANCH=$(cat \"$STATE/sprint-branch\"); echo \"[3/9] 拉取 $SPRINT_BRANCH 最新代码\"; set +e; PULL_OUT=$(git pull --ff-only origin \"$SPRINT_BRANCH\" 2>&1); PULL_CODE=$?; set -e; echo \"$PULL_OUT\"; if [ $PULL_CODE -ne 0 ]; then echo \"[3/9] git pull 失败 exit=$PULL_CODE\" >&2; exit 1; fi; echo \"[3/9] 拉取完成\""
+    },
+    {
+      "tool": "shell",
+      "cwdCode": "react18",
+      "cmd": "set -eu; STATE=.ai-dev-mdf-report-upgrade; SPRINT_NUM=$(cat \"$STATE/sprint-num\"); VERSION=$(npm view @chanjet/mdf-biz-report-web versions --json 2>/dev/null | SPRINT_NUM=\"$SPRINT_NUM\" node -e 'let raw=\"\"; process.stdin.on(\"data\", (chunk) => raw += chunk); process.stdin.on(\"end\", () => { try { const parsed = JSON.parse(raw); const versions = Array.isArray(parsed) ? parsed : [parsed]; const sprint = process.env.SPRINT_NUM; const matched = versions.filter((v) => new RegExp(\"^\\\\d+\\\\.\" + sprint + \"\\\\.\\\\d+$\").test(v)).sort((a, b) => Number(a.split(\".\")[2]) - Number(b.split(\".\")[2])); if (!matched.length) { console.error(\"未找到 x.\" + sprint + \".y 格式的 @chanjet/mdf-biz-report-web 版本（需先在 mdf-report 的 sprint 分支发布）\"); process.exit(1); } process.stdout.write(matched[matched.length - 1]); } catch (e) { console.error(e.message); process.exit(1); } });'); printf '%s' \"$VERSION\" > \"$STATE/version\"; echo \"[4/9] 命中的 mdf-report 版本: $VERSION\""
+    },
+    {
+      "tool": "shell",
+      "cwdCode": "react18",
+      "cmd": "set -eu; STATE=.ai-dev-mdf-report-upgrade; SPRINT_BRANCH=$(cat \"$STATE/sprint-branch\"); VERSION=$(cat \"$STATE/version\"); CURRENT=$(git rev-parse --abbrev-ref HEAD); if [ \"$CURRENT\" != \"$SPRINT_BRANCH\" ]; then echo \"[5/9] 错误: 当前分支为 $CURRENT，预期 $SPRINT_BRANCH\" >&2; exit 1; fi; echo \"[5/9] 修改分支: $CURRENT\"; VERSION=\"$VERSION\" node -e 'const fs = require(\"fs\"); const pkgPath = \"package.json\"; const pkg = JSON.parse(fs.readFileSync(pkgPath, \"utf8\")); const sections = [\"dependencies\", \"devDependencies\", \"peerDependencies\", \"optionalDependencies\", \"resolutions\"]; const targets = [\"@chanjet/mdf-biz-report-web\"]; const updated = []; const missing = []; for (const name of targets) { let found = false; for (const section of sections) { if (pkg[section] && Object.prototype.hasOwnProperty.call(pkg[section], name)) { pkg[section][name] = process.env.VERSION; found = true; updated.push(section + \":\" + name); } } if (!found) missing.push(name); } if (missing.length) { console.error(\"package.json 缺少依赖: \" + missing.join(\", \")); process.exit(1); } fs.writeFileSync(pkgPath, JSON.stringify(pkg, null, 2) + \"\\n\"); console.log(\"已更新依赖: \" + updated.join(\", \"));'; echo \"[5/9] package.json 已更新为 $VERSION\""
+    },
+    {
+      "tool": "shell",
+      "cwdCode": "react18",
+      "cmd": "set -eu; STATE=.ai-dev-mdf-report-upgrade; SPRINT_BRANCH=$(cat \"$STATE/sprint-branch\"); VERSION=$(cat \"$STATE/version\"); CURRENT=$(git rev-parse --abbrev-ref HEAD); if [ \"$CURRENT\" != \"$SPRINT_BRANCH\" ]; then echo \"[6/9] 错误: 当前分支为 $CURRENT，预期 $SPRINT_BRANCH，已中止避免写错分支\" >&2; exit 1; fi; echo \"[6/9] 提交分支: $CURRENT\"; echo \"[6/9] 当前变更:\"; git status --short package.json; git add package.json; if git diff --cached --quiet; then echo \"package.json 无需更新，未生成提交\" >&2; exit 1; fi; git commit -m \"ZJYF-121254:修改mdf-report版本号为$VERSION\"; echo \"[6/9] 提交完成: ZJYF-121254:修改mdf-report版本号为$VERSION\""
+    },
+    {
+      "tool": "shell",
+      "cwdCode": "react18",
+      "cmd": "set -eu; STATE=.ai-dev-mdf-report-upgrade; SPRINT_BRANCH=$(cat \"$STATE/sprint-branch\"); CURRENT=$(git rev-parse --abbrev-ref HEAD); if [ \"$CURRENT\" != \"$SPRINT_BRANCH\" ]; then echo \"[7/9] 错误: 当前分支为 $CURRENT，预期 $SPRINT_BRANCH，已中止避免推错分支\" >&2; exit 1; fi; echo \"[7/9] 推送 $CURRENT -> origin/$SPRINT_BRANCH\"; git push -u origin \"HEAD:refs/heads/$SPRINT_BRANCH\""
+    },
+    {
+      "tool": "shell",
+      "cwdCode": "react18",
+      "cmd": "set -eu; STATE=.ai-dev-mdf-report-upgrade; ORIG_BRANCH=$(cat \"$STATE/orig-branch\"); echo \"[8/9] 切回原分支: $ORIG_BRANCH\"; git checkout \"$ORIG_BRANCH\""
+    },
+    {
+      "tool": "shell",
+      "cwdCode": "react18",
+      "cmd": "set -eu; STATE=.ai-dev-mdf-report-upgrade; VERSION=$(cat \"$STATE/version\"); SPRINT_BRANCH=$(cat \"$STATE/sprint-branch\"); ORIG_BRANCH=$(cat \"$STATE/orig-branch\"); echo \"[9/9] 全部步骤执行成功\"; echo \"[9/9] mdf-report 版本: $VERSION\"; echo \"[9/9] sprint 分支: $SPRINT_BRANCH\"; echo \"[9/9] 已切回原分支: $ORIG_BRANCH\"; rm -rf \"$STATE\""
+    }
+  ]
+}

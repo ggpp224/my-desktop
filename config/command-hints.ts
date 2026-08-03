@@ -18,8 +18,10 @@ const WORKFLOW_EXEC_HINTS = [
   '执行工作流 standalone',
   '执行工作流 upgrade-react18-nova',
   '执行工作流 upgrade-cc-web-nova',
+  '执行工作流 upgrade-react18-mdf-report',
   '升级集测react18的nova版本',
   '升级集测cc-web的nova版本',
+  '升级集测react18的mdf-report版本',
 ] as const;
 
 /** 固定口令（与 command-catalog 同源） */

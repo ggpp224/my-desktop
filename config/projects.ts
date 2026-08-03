@@ -116,6 +116,13 @@ const PROJECT_ENTRIES: ProjectEntry[] = [
     merge: { targetBranch: process.env.MERGE_TARGET_BRANCH_NOVA!, runRelease: false },
   },
   {
+    codes: ['mdf-report'],
+    path: process.env.PROJECT_PATH_MDF_REPORT!,
+    devCmd: process.env.PROJECT_DEV_CMD_MDF_REPORT || 'pnpm run dev',
+    jenkins: { jobName: process.env.JENKINS_JOB_MDF_REPORT!, defaultBranch: process.env.JENKINS_DEFAULT_BRANCH_NOVA! },
+    merge: { targetBranch: process.env.MERGE_TARGET_BRANCH_NOVA!, runRelease: true },
+  },
+  {
     codes: ['ai-import'],
     path: process.env.PROJECT_PATH_AI_IMPORT!,
   },

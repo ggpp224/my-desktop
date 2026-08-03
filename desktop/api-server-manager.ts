@@ -11,6 +11,7 @@ import {
   stopTerminalBroker,
 } from './terminal-broker-manager.js';
 import { buildSubprocessEnv, resolveSubprocessNode } from './subprocess-node.js';
+import { stopChildProcess } from './stop-child-process.js';
 import { sanitizeShellEnv } from '../server/sanitize-shell-env.js';
 
 let apiChild: ChildProcess | null = null;
@@ -192,23 +193,11 @@ export async function stopManagedApiServer(
   apiChild = null;
   if (child) {
     const pid = child.pid;
-    if (!child.killed) {
-      console.log(`[api-server] stopManagedApiServer: SIGTERM pid=${pid ?? '?'}`);
-      try {
-        child.kill('SIGTERM');
-      } catch {
-        /* ignore */
-      }
-      await sleep(600);
-      if (!options?.skipSigKill && !child.killed) {
-        console.log(`[api-server] stopManagedApiServer: SIGKILL pid=${pid ?? '?'}`);
-        try {
-          child.kill('SIGKILL');
-        } catch {
-          /* ignore */
-        }
-      }
-    }
+    await stopChildProcess(child, {
+      label: 'api-server',
+      soft: options?.skipSigKill === true,
+      termWaitMs: 600,
+    });
     unregisterProtectedProcess(pid ?? undefined);
   }
   if (options?.stopBroker !== false) {

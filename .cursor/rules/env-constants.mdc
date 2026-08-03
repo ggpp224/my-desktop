@@ -91,6 +91,7 @@ alwaysApply: false
 | `JENKINS_JOB_NOVA` | nova / nova-next |
 | `JENKINS_JOB_MDF_UI` | mdf-ui |
 | `JENKINS_JOB_MDF_BIZ` | mdf-biz |
+| `JENKINS_JOB_MDF_REPORT` | mdf-report |
 
 ## 五、项目路径（config/projects.ts）
 
@@ -106,8 +107,9 @@ alwaysApply: false
 |------|------|
 | `PROJECT_DEV_CMD_MDF_UI` | mdf-ui 的「启动 mdf-ui」命令，默认 `yarn w` |
 | `PROJECT_DEV_CMD_MDF_BIZ` | mdf-biz 的「启动 mdf-biz」命令，默认 `yarn w` |
+| `PROJECT_DEV_CMD_MDF_REPORT` | mdf-report 的「启动 mdf-report」命令，默认 `pnpm run dev` |
 
-未配置时，工作流外项目默认 `yarn dev`；mdf 系列在 `config/projects.ts` 中已默认 `yarn w`。
+未配置时，工作流外项目默认 `yarn dev`；mdf-ui / mdf-biz 在 `config/projects.ts` 中已默认 `yarn w`；mdf-report 默认 `pnpm run dev`。
 
 ## 使用约定
 

@@ -37,6 +37,11 @@ const CHAT_ALIAS_ENTRIES: Array<{ patterns: RegExp[]; canonicalKey: string; disp
     displayLabel: '升级集测 cc-web 的 nova 版本',
   },
   {
+    patterns: [/^升级集测\s*react18\s*的\s*mdf-report\s*版本$/i],
+    canonicalKey: 'workflow:upgrade-react18-mdf-report',
+    displayLabel: '升级集测 react18 的 mdf-report 版本',
+  },
+  {
     patterns: [/^统计常用指令$/],
     canonicalKey: 'stats:open',
     displayLabel: '统计常用指令',

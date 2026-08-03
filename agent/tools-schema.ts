@@ -173,7 +173,7 @@ export const toolsSchema = [
     type: 'function' as const,
     function: {
       name: 'open_jenkins_job',
-      description: '打开某项目对应的 Jenkins 任务页面。用户说「打开jenkins nova」「打开 Jenkins 的 cc-web/cc-node/mdf-ui」时使用；job=预定义 key（nova、cc-web、cc-node、react18、base、base18、biz-solution、biz-guide、scm、mdf-ui、mdf-biz）',
+      description: '打开某项目对应的 Jenkins 任务页面。用户说「打开jenkins nova」「打开 Jenkins 的 cc-web/cc-node/mdf-ui/mdf-report」时使用；job=预定义 key（nova、cc-web、cc-node、react18、base、base18、biz-solution、biz-guide、scm、mdf-ui、mdf-biz、mdf-report）',
       parameters: {
         type: 'object',
         required: ['job'],
@@ -432,11 +432,11 @@ export const toolsSchema = [
     type: 'function' as const,
     function: {
       name: 'run_workflow',
-      description: '执行工作流。「开始工作」→ name=start-work；「开始工作，使用外部终端」→ name=start-work-external-terminal；「升级集测react18的nova版本」→ name=upgrade-react18-nova；「升级集测cc-web的nova版本」→ name=upgrade-cc-web-nova',
+      description: '执行工作流。「开始工作」→ name=start-work；「开始工作，使用外部终端」→ name=start-work-external-terminal；「升级集测react18的nova版本」→ name=upgrade-react18-nova；「升级集测cc-web的nova版本」→ name=upgrade-cc-web-nova；「升级集测react18的mdf-report版本」→ name=upgrade-react18-mdf-report',
       parameters: {
         type: 'object',
         required: ['name'],
-        properties: { name: { type: 'string', description: 'start-work、start-work-external-terminal、standalone、upgrade-react18-nova 或 upgrade-cc-web-nova' } },
+        properties: { name: { type: 'string', description: 'start-work、start-work-external-terminal、standalone、upgrade-react18-nova、upgrade-cc-web-nova 或 upgrade-react18-mdf-report' } },
       },
     },
   },
@@ -444,13 +444,13 @@ export const toolsSchema = [
     type: 'function' as const,
     function: {
       name: 'run_workflow_step',
-      description: '启动开发项目。工作流内项目（cpxy/react18/cc-web/biz-solution/uikit/shared/scm）或工作流外项目（base/base18/nova/mdf-ui/mdf-biz 等）均传 taskKey=项目代号；工作流外项目自动 cd 到项目目录执行开发命令（mdf-ui/mdf-biz 为 yarn w，其余默认 yarn dev）',
+      description: '启动开发项目。工作流内项目（cpxy/react18/cc-web/biz-solution/uikit/shared/scm）或工作流外项目（base/base18/nova/mdf-ui/mdf-biz/mdf-report 等）均传 taskKey=项目代号；工作流外项目自动 cd 到项目目录执行开发命令（mdf-ui/mdf-biz 为 yarn w，mdf-report 为 pnpm run dev，其余默认 yarn dev）',
       parameters: {
         type: 'object',
         required: ['workflow', 'taskKey'],
         properties: {
           workflow: { type: 'string', description: 'start-work 或 standalone' },
-          taskKey: { type: 'string', description: '项目代号：工作流内如 cpxy/react18/scm；工作流外如 base/base18/nova/mdf-ui/mdf-biz' },
+          taskKey: { type: 'string', description: '项目代号：工作流内如 cpxy/react18/scm；工作流外如 base/base18/nova/mdf-ui/mdf-biz/mdf-report' },
         },
       },
     },
@@ -460,14 +460,14 @@ export const toolsSchema = [
     function: {
       name: 'merge_repo',
       description:
-        '合并仓库。合并 nova → repo=nova；合并 nova 集测 → repo=nova-pretest；合并 biz-solution → repo=biz-solution；合并 biz-solution 集测 → repo=biz-solution-pretest（目标为 react18 最大 sprint 分支）；合并 scm/mdf-ui/mdf-biz → repo=对应代号',
+        '合并仓库。合并 nova → repo=nova；合并 nova 集测 → repo=nova-pretest；合并 biz-solution → repo=biz-solution；合并 biz-solution 集测 → repo=biz-solution-pretest（目标为 react18 最大 sprint 分支）；合并 scm/mdf-ui/mdf-biz/mdf-report → repo=对应代号',
       parameters: {
         type: 'object',
         required: ['repo'],
         properties: {
           repo: {
             type: 'string',
-            description: 'nova、nova-pretest、biz-solution、biz-solution-pretest、scm、mdf-ui、mdf-biz 等已配置 merge 的代号',
+            description: 'nova、nova-pretest、biz-solution、biz-solution-pretest、scm、mdf-ui、mdf-biz、mdf-report 等已配置 merge 的代号',
           },
         },
       },
