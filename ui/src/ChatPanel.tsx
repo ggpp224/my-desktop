@@ -1454,7 +1454,7 @@ export function ChatPanel({ apiBase, addLog, onStartWorkEmbedded, onOpenKnowledg
       addLog('已打开 MD 生成 PDF 页签');
       setMessages((prev) => [
         ...prev,
-        { role: 'assistant', content: '已打开 MD 生成 PDF 页签：选择或上传 .md 文件，点击「生成」即可在同目录输出 GitLab 风格 PDF。' },
+        { role: 'assistant', content: '已打开 MD 生成 PDF 页签：选择或上传 .md 文件，点击「生成」即可在本机下载目录输出 GitLab 风格 PDF。' },
       ]);
       return;
     }

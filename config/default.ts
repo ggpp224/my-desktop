@@ -107,6 +107,10 @@ export const config = {
   shell: {
     allowedCwd: process.env.SHELL_CWD || process.cwd(),
   },
+  mdPdf: {
+    /** MD → PDF 输出目录；留空则用本机下载目录 */
+    outputDir: (process.env.MD_PDF_OUTPUT_DIR ?? '').trim(),
+  },
   macostunmode: {
     /** macostunmode 控制器目录；留空则使用仓库根目录下的 macostunmode */
     dir: (process.env.MACOSTUNMODE_DIR ?? '').trim(),

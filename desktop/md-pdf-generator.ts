@@ -1,8 +1,8 @@
 /* AI 生成 By Peng.Guo */
-import { copyFile, mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { copyFile, mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
-import { BrowserWindow } from 'electron';
+import { app, BrowserWindow } from 'electron';
 import { buildHtmlDocumentFromMdFile, getMermaidMinJsPath } from '../tools/md-to-pdf.js';
 
 const PDF_RENDER_DELAY_MS = 500;
@@ -133,11 +133,15 @@ export type MdToPdfResult = {
   error?: string;
 };
 
-/** 读取 MD 文件，在同目录生成 GitLab 风格 PDF */
-export async function generateMdPdfBesideSource(mdFilePath: string): Promise<MdToPdfResult> {
+/** 读取 MD 文件，输出到本机下载目录（可用 MD_PDF_OUTPUT_DIR 覆盖） */
+export async function generateMdPdfFromSource(mdFilePath: string): Promise<MdToPdfResult> {
   try {
-    const { html, pdfPath, hasMermaid } = await buildHtmlDocumentFromMdFile(mdFilePath);
+    const { html, pdfPath, hasMermaid } = await buildHtmlDocumentFromMdFile(
+      mdFilePath,
+      app.getPath('downloads')
+    );
     const pdfBuffer = await printHtmlToPdf(html, { renderMermaid: hasMermaid });
+    await mkdir(path.dirname(pdfPath), { recursive: true });
     await writeFile(pdfPath, pdfBuffer);
     return { success: true, mdPath: mdFilePath, pdfPath };
   } catch (err) {

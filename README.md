@@ -25,7 +25,7 @@
 - **流式体验增强**：`/agent/chat/stream` 增加 `llm_delta`、`tool_progress`、`token_usage` 事件，聊天体验更平滑。
 - **知识库闭环**：新增 `POST /knowledge-base/import` 导入本地 Markdown，支持从引用直接打开原文 `GET /knowledge-base/document`。
 - **内嵌终端增强**：`/workflow/:workflowName/embedded` 启动会话，支持会话恢复、新增页签、输入/输出轮询、尺寸同步与关闭回收。
-- **Markdown 转 PDF**：新增 `md生成pdf` 指令与独立页签，可选择本地 `.md` 并在同目录生成同名 `.pdf`，支持 GitLab 风格排版、代码高亮与 Mermaid 图渲染。
+- **Markdown 转 PDF**：新增 `md生成pdf` 指令与独立页签，可选择本地 `.md` 并在本机下载目录生成同名 `.pdf`，支持 GitLab 风格排版、代码高亮与 Mermaid 图渲染。
 - **固定口令路由收敛**：对「开始工作」「统计常用指令」「md生成pdf」「打开集测环境/测试环境/json配置中心」等固定口令，首轮仅暴露候选工具，降低同类工具误选。
 
 ## 环境要求

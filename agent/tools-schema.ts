@@ -28,7 +28,7 @@ export const toolsSchema = [
     function: {
       name: 'open_md_to_pdf',
       description:
-        '打开 MD 生成 PDF 页签。用户说「md生成pdf」「MD生成PDF」时调用；页签内可上传/选择 .md 并在同目录生成 GitLab 风格 PDF，无参数',
+        '打开 MD 生成 PDF 页签。用户说「md生成pdf」「MD生成PDF」时调用；页签内可上传/选择 .md 并在本机下载目录生成 GitLab 风格 PDF，无参数',
       parameters: {
         type: 'object',
         properties: {},

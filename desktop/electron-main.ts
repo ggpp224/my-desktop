@@ -1,7 +1,7 @@
 /* AI 生成 By Peng.Guo */
 import 'dotenv/config';
 import { app, BrowserWindow, dialog, ipcMain, Menu, shell } from 'electron';
-import { generateMdPdfBesideSource } from './md-pdf-generator.js';
+import { generateMdPdfFromSource } from './md-pdf-generator.js';
 import { existsSync } from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
@@ -51,11 +51,11 @@ ipcMain.handle('pick-md-file', async () => {
   return { canceled: false as const, filePath: result.filePaths[0] };
 });
 
-/** MD → PDF：在同目录生成 GitLab 风格 PDF */
+/** MD → PDF：输出到本机下载目录的 GitLab 风格 PDF */
 ipcMain.handle('generate-md-pdf', async (_event, mdFilePath: unknown) => {
   const path = typeof mdFilePath === 'string' ? mdFilePath.trim() : '';
   if (!path) return { success: false, error: '缺少文件路径' };
-  return generateMdPdfBesideSource(path);
+  return generateMdPdfFromSource(path);
 });
 
 function getProjectRoot(): string {

@@ -91,7 +91,7 @@ export function MdToPdfPanel({ addLog, themeTokens }: MdToPdfPanelProps) {
     <section style={{ flex: 1, display: 'flex', flexDirection: 'column', minHeight: 0, padding: 16 }}>
       <h2 style={{ margin: '0 0 8px', fontSize: 16, fontWeight: 600, color: themeTokens.textPrimary }}>MD 生成 PDF</h2>
       <p style={{ margin: '0 0 16px', fontSize: 13, color: themeTokens.textSecondary, lineHeight: 1.6 }}>
-        选择本地 <code>.md</code> 文件，点击「生成」后会在<strong>该文件同目录</strong>下输出同名
+        选择本地 <code>.md</code> 文件，点击「生成」后会在<strong>本机下载目录</strong>输出同名
         <code>.pdf</code>，排版为 GitLab 风格（含表格、代码高亮、<code>```mermaid</code> 流程图 / subgraph）。
       </p>
       <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap', marginBottom: 12 }}>

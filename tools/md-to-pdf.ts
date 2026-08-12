@@ -2,6 +2,7 @@
 import { readFileSync } from 'node:fs';
 import { readFile } from 'node:fs/promises';
 import { createRequire } from 'node:module';
+import { homedir } from 'node:os';
 import path from 'node:path';
 import { marked } from 'marked';
 import hljs from 'highlight.js';
@@ -146,9 +147,28 @@ export function markdownContainsMermaid(markdown: string): boolean {
   return false;
 }
 
-export function resolvePdfOutputPath(mdFilePath: string): string {
+/** 展开 `~` / `~/...`，其余路径原样返回 */
+export function expandUserPath(filePath: string): string {
+  const trimmed = filePath.trim();
+  if (trimmed === '~') return homedir();
+  if (trimmed.startsWith('~/') || trimmed.startsWith('~\\')) {
+    return path.join(homedir(), trimmed.slice(2));
+  }
+  return trimmed;
+}
+
+/** 本机下载目录；`MD_PDF_OUTPUT_DIR` 可覆盖，`fallbackDir` 供 Electron `app.getPath('downloads')` */
+export function resolvePdfOutputDir(fallbackDir?: string): string {
+  const fromEnv = (process.env.MD_PDF_OUTPUT_DIR ?? '').trim();
+  if (fromEnv) return path.resolve(expandUserPath(fromEnv));
+  const fallback = (fallbackDir ?? '').trim();
+  if (fallback) return path.resolve(expandUserPath(fallback));
+  return path.join(homedir(), 'Downloads');
+}
+
+export function resolvePdfOutputPath(mdFilePath: string, fallbackDir?: string): string {
   const parsed = path.parse(mdFilePath);
-  return path.join(parsed.dir, `${parsed.name}.pdf`);
+  return path.join(resolvePdfOutputDir(fallbackDir), `${parsed.name}.pdf`);
 }
 
 export async function readMarkdownFromFile(filePath: string): Promise<string> {
@@ -181,11 +201,12 @@ export function buildGitlabStyleHtmlDocument(markdown: string, title?: string): 
 }
 
 export async function buildHtmlDocumentFromMdFile(
-  mdFilePath: string
+  mdFilePath: string,
+  fallbackDir?: string
 ): Promise<{ html: string; pdfPath: string; hasMermaid: boolean }> {
   const md = await readMarkdownFromFile(mdFilePath);
   const title = path.basename(mdFilePath, path.extname(mdFilePath));
   const html = buildGitlabStyleHtmlDocument(md, title);
-  const pdfPath = resolvePdfOutputPath(mdFilePath);
+  const pdfPath = resolvePdfOutputPath(mdFilePath, fallbackDir);
   return { html, pdfPath, hasMermaid: markdownContainsMermaid(md) };
 }
