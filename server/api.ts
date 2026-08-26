@@ -51,6 +51,7 @@ import {
   queryTimeline,
 } from './stats/command-stats-repository.js';
 import { getApiBootId, rotateApiBootId } from './api-boot.js';
+import { enqueueRemoteCommand, subscribeRemoteCommands } from './remote-command-hub.js';
 import {
   recordChatCommand,
   recordDeploy,
@@ -308,6 +309,36 @@ app.get('/health', (_req, res) => {
     bootId: getApiBootId(),
     service: 'ai-dev-control-center',
     port: config.server.port,
+  });
+});
+
+/** Cursor CLI 投递口令：有中控窗口则立即广播，否则排队等 SSE 连接 */
+app.post('/agent/remote-command', (req, res) => {
+  const message = String(req.body?.message ?? '').trim();
+  if (!message) {
+    res.status(400).json({ ok: false, error: '缺少 message' });
+    return;
+  }
+  const { payload, subscriberCount, queued } = enqueueRemoteCommand(message);
+  res.json({
+    ok: true,
+    id: payload.id,
+    subscriberCount,
+    queued,
+  });
+});
+
+app.get('/agent/remote-command/events', (req, res) => {
+  res.setHeader('Content-Type', 'text/event-stream; charset=utf-8');
+  res.setHeader('Cache-Control', 'no-cache, no-transform');
+  res.setHeader('Connection', 'keep-alive');
+  res.flushHeaders?.();
+  res.write(': connected\n\n');
+  const unsubscribe = subscribeRemoteCommands((payload) => {
+    res.write(`data: ${JSON.stringify(payload)}\n\n`);
+  });
+  req.on('close', () => {
+    unsubscribe();
   });
 });
 

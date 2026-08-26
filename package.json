@@ -7,7 +7,10 @@
   "scripts": {
     "verify-ollama": "node scripts/verify-ollama-tools.js",
     "verify:catalog": "tsx scripts/verify-command-catalog.ts",
-    "test": "tsx --test agent/intent/**/*.test.ts tools/**/*.test.ts",
+    "test": "tsx --test agent/intent/**/*.test.ts tools/**/*.test.ts cli/**/*.test.ts server/**/*.test.ts",
+    "adc": "tsx cli/adc.ts",
+    "adc:install-commands": "tsx cli/install-cursor-commands.ts",
+    "open-system-terminal": "tsx cli/open-system-terminal.ts",
     "build": "npm run verify:catalog && tsc && cp desktop/preload.js dist/desktop/ && npm run build:ui",
     "build:ui": "cd ui && npm run build",
     "dev": "tsc && concurrently -k --kill-signal SIGTERM \"npm run dev:ui\" \"npm run dev:electron\"",

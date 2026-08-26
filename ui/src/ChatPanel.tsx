@@ -1668,6 +1668,47 @@ export function ChatPanel({ apiBase, addLog, onStartWorkEmbedded, onOpenKnowledg
     }
   };
 
+  const sendRef = useRef(send);
+  sendRef.current = send;
+
+  useEffect(() => {
+    if (!apiBase) return;
+    let cancelled = false;
+    const waiting: string[] = [];
+    let busy = false;
+
+    const run = async (text: string) => {
+      if (busy) {
+        waiting.push(text);
+        return;
+      }
+      busy = true;
+      try {
+        await sendRef.current(text);
+      } finally {
+        busy = false;
+        const next = waiting.shift();
+        if (!cancelled && next) void run(next);
+      }
+    };
+
+    const streamUrl = `${apiBase.replace(/\/$/, '')}/agent/remote-command/events`;
+    const source = new EventSource(streamUrl);
+    source.onmessage = (event) => {
+      try {
+        const data = JSON.parse(event.data) as { message?: string };
+        const msg = (data.message ?? '').trim();
+        if (msg) void run(msg);
+      } catch {
+        /* 忽略心跳或非 JSON */
+      }
+    };
+    return () => {
+      cancelled = true;
+      source.close();
+    };
+  }, [apiBase]);
+
   const refreshOllamaModels = () => {
     if (!apiBase) return;
     fetchAgentOllamaInstalledModels(apiBase).then(setInstalledModels).catch(() => {});
