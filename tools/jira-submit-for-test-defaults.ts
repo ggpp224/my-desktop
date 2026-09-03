@@ -1,7 +1,9 @@
 /* AI 生成 By Peng.Guo */
 
-/** 提测屏按字段中文名填写的意图值（字符串；option/user 由 Mapper 按 schema 转换） */
-export type SubmitForTestFieldIntent = Readonly<Record<string, string | undefined>>;
+import type { TransitionFieldIntent } from './jira-transition-screen-field-mapper.js';
+
+/** @deprecated 使用 TransitionFieldIntent；保留别名以兼容既有引用 */
+export type SubmitForTestFieldIntent = TransitionFieldIntent;
 
 export type SubmitForTestDefaultsConfig = {
   /** 能否灰度选项文案，默认「能」 */

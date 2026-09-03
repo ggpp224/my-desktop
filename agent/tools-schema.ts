@@ -351,6 +351,18 @@ export const toolsSchema = [
   {
     type: 'function' as const,
     function: {
+      name: 'get_npm_package_versions',
+      description:
+        '查询关注的 @chanjet npm 包 Current Tags（含版本与发布时间）。用户说「获取npm包版本」时调用，无参数',
+      parameters: {
+        type: 'object',
+        properties: {},
+      },
+    },
+  },
+  {
+    type: 'function' as const,
+    function: {
       name: 'sync_cursor_cookie',
       description:
         '从本机 Chrome 登录态自动同步 cursor.com Cookie 到运行时内存。用户说「同步cursor登录态」时调用，无参数',

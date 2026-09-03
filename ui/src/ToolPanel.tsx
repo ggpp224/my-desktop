@@ -66,6 +66,7 @@ const TOOL_GROUPS: ToolGroup[] = [
       { name: 'get_cursor_usage', desc: '查询 Cursor 聚合用量（如：cursor用量）' },
       { name: 'get_cursor_today_usage', desc: '查询 Cursor 今日用量（如：cursor今日用量）' },
       { name: 'sync_cursor_cookie', desc: '同步 Cursor 登录态（如：同步cursor登录态）' },
+      { name: 'get_npm_package_versions', desc: '查询关注包 Current Tags（如：获取npm包版本）' },
       { name: 'run_shell', desc: '执行 shell 命令（如：执行 pnpm -v）' },
     ],
   },

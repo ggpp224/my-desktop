@@ -43,6 +43,7 @@ alwaysApply: false
 | `JENKINS_BASE_URL` | Jenkins 根地址 | `https://jenkins.rd.chanjet.com/` |
 | `JENKINS_USERNAME` | Jenkins Basic 认证用户名 | - |
 | `JENKINS_TOKEN` | Jenkins API Token（Basic 密码） | - |
+| `NPM_REGISTRY_URL` | 「获取npm包版本」查询的 npm registry | `https://npmmirror.rd.chanjet.com` |
 | `JIRA_BASE_URL` / `JIRA_USERNAME` / `JIRA_PASSWORD` | Jira 8.8 Basic 认证 | - |
 | `JIRA_SUBMIT_TEST_TRANSITION_NAME` | 列表一键提测工作流名称 | `提测` |
 | `JIRA_SUBMIT_TEST_CAN_GRAYSCALE` | 一键提测「能否灰度」选项文案 | `能` |

@@ -137,6 +137,12 @@ export function getHelpCommands(): HelpCommandItem[] {
       description: '自动读取本机 Chrome 的 cursor.com Cookie 并注入服务内存',
     },
     {
+      section: 'npm',
+      command: '获取npm包版本',
+      description:
+        '从公司 npm 源查询关注包的 Current Tags，以多列表格展示版本与发布时间；包清单见 config/npm-watched-packages.ts',
+    },
+    {
       section: 'IDE 打开',
       command: 'ws打开base / cursor打开scm / 用 WebStorm 打开 nova',
       description: '按应用别名打开项目：ws=WebStorm，cursor=Cursor，code/vscode=VS Code',

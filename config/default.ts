@@ -97,6 +97,10 @@ export const config = {
     /** Cursor Dashboard API Cookie（可选） */
     cookie: process.env.CURSOR_COOKIE || '',
   },
+  npm: {
+    /** 私有/公司 npm registry（Verdaccio 等），用于「获取npm包版本」 */
+    registryUrl: (process.env.NPM_REGISTRY_URL ?? '').trim() || 'https://npmmirror.rd.chanjet.com',
+  },
   wiki: {
     baseUrl: process.env.WIKI_BASE_URL || 'https://wiki2.rd.chanjet.com',
     weeklySpaceName: process.env.WIKI_WEEKLY_SPACE_NAME || '低代码单据前端空间',

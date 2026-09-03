@@ -1,6 +1,7 @@
 /* AI 生成 By Peng.Guo */
 
-import type { SubmitForTestFieldIntent } from './jira-submit-for-test-defaults.js';
+/** 转场屏按字段中文名填写的意图值（字符串；具体 schema 由 Strategy 转换） */
+export type TransitionFieldIntent = Readonly<Record<string, string | undefined>>;
 
 export type JiraTransitionAllowedValue = {
   id?: string;
@@ -54,6 +55,22 @@ export class OptionFieldValueStrategy implements TransitionFieldValueStrategy {
   }
 }
 
+/** 解决结果：schema.type = resolution */
+export class ResolutionFieldValueStrategy implements TransitionFieldValueStrategy {
+  canHandle(meta: JiraTransitionFieldMeta): boolean {
+    return (meta.schema?.type ?? '') === 'resolution' || (meta.schema?.system ?? '') === 'resolution';
+  }
+
+  map(meta: JiraTransitionFieldMeta, intent: string): unknown | undefined {
+    const hit = findAllowedValue(meta.allowedValues, intent);
+    if (hit?.id) return { id: hit.id };
+    if (hit?.name) return { name: hit.name };
+    // 无 allowedValues 时按名称提交（部分实例关闭屏如此）
+    const name = intent.trim();
+    return name ? { name } : undefined;
+  }
+}
+
 export class UserFieldValueStrategy implements TransitionFieldValueStrategy {
   canHandle(meta: JiraTransitionFieldMeta): boolean {
     return (meta.schema?.type ?? '') === 'user';
@@ -75,6 +92,28 @@ export class LabelsFieldValueStrategy implements TransitionFieldValueStrategy {
       .map((s) => s.trim())
       .filter(Boolean);
     return parts.length > 0 ? parts : undefined;
+  }
+}
+
+/** 修复版本等：array + items=version，意图为逗号分隔版本名 */
+export class VersionArrayFieldValueStrategy implements TransitionFieldValueStrategy {
+  canHandle(meta: JiraTransitionFieldMeta): boolean {
+    return (meta.schema?.type ?? '') === 'array' && (meta.schema?.items ?? '') === 'version';
+  }
+
+  map(meta: JiraTransitionFieldMeta, intent: string): unknown | undefined {
+    const names = intent
+      .split(/[,，]/)
+      .map((s) => s.trim())
+      .filter(Boolean);
+    if (names.length === 0) return undefined;
+    const mapped = names.map((name) => {
+      const hit = findAllowedValue(meta.allowedValues, name);
+      if (hit?.id) return { id: hit.id };
+      if (hit?.name) return { name: hit.name };
+      return { name };
+    });
+    return mapped;
   }
 }
 
@@ -102,18 +141,22 @@ export class TransitionScreenFieldMapper {
     return new TransitionScreenFieldMapper([
       new StringFieldValueStrategy(),
       new OptionFieldValueStrategy(),
+      new ResolutionFieldValueStrategy(),
       new UserFieldValueStrategy(),
       new LabelsFieldValueStrategy(),
+      new VersionArrayFieldValueStrategy(),
     ]);
   }
 
   buildFields(
     screenFields: JiraTransitionFields,
-    intent: SubmitForTestFieldIntent,
+    intent: TransitionFieldIntent,
+    options?: { actionLabel?: string },
   ): Record<string, unknown> {
     const byName = indexFieldsByName(screenFields);
     const fields: Record<string, unknown> = {};
     const missingRequired: string[] = [];
+    const actionLabel = (options?.actionLabel ?? '操作').trim() || '操作';
 
     for (const [fieldName, intentValue] of Object.entries(intent)) {
       const value = (intentValue ?? '').trim();
@@ -136,7 +179,7 @@ export class TransitionScreenFieldMapper {
     }
 
     if (missingRequired.length > 0) {
-      throw new Error(`提测必填字段无法自动填充：${[...new Set(missingRequired)].join('、')}`);
+      throw new Error(`${actionLabel}必填字段无法自动填充：${[...new Set(missingRequired)].join('、')}`);
     }
 
     return fields;

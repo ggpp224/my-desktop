@@ -1,16 +1,13 @@
 /* AI 生成 By Peng.Guo */
 import { Buffer } from 'buffer';
 import { config } from '../config/default.js';
-import {
-  SubmitForTestDefaults,
-  type SubmitForTestDefaultsConfig,
-} from './jira-submit-for-test-defaults.js';
+import { CloseIssueDefaults, type CloseIssueDefaultsConfig } from './jira-close-issue-defaults.js';
 import {
   TransitionScreenFieldMapper,
   type JiraTransitionFields,
 } from './jira-transition-screen-field-mapper.js';
 
-export type SubmitForTestResult = {
+export type CloseIssueResult = {
   success: boolean;
   key: string;
   transitionId?: string;
@@ -28,6 +25,8 @@ type JiraTransition = {
 
 type JiraIssueFields = {
   summary?: string;
+  assignee?: { name?: string; key?: string; displayName?: string };
+  fixVersions?: Array<{ name?: string; id?: string }>;
   [fieldId: string]: unknown;
 };
 
@@ -49,13 +48,9 @@ function resolveBaseUrl(): string {
   return baseUrl;
 }
 
-function buildDefaultsConfig(): SubmitForTestDefaultsConfig {
-  const submit = config.jira.submitForTest;
+function buildDefaultsConfig(): CloseIssueDefaultsConfig {
   return {
-    canGrayscale: submit.canGrayscale,
-    modificationTemplate: submit.modificationTemplate,
-    testScopeTemplate: submit.testScopeTemplate,
-    defectCause: submit.defectCause,
+    resolution: config.jira.closeIssue.resolution,
   };
 }
 
@@ -67,42 +62,6 @@ function formatOptionValue(raw: unknown): string {
     return (o.value ?? o.name ?? '').trim();
   }
   return '';
-}
-
-function isFieldFilled(raw: unknown): boolean {
-  if (raw == null || raw === '') return false;
-  if (typeof raw === 'string') return raw.trim().length > 0;
-  if (Array.isArray(raw)) return raw.length > 0;
-  if (typeof raw === 'object') {
-    const user = raw as { name?: string; key?: string; displayName?: string; accountId?: string };
-    return Boolean(
-      (user.name ?? '').trim() ||
-        (user.key ?? '').trim() ||
-        (user.displayName ?? '').trim() ||
-        (user.accountId ?? '').trim(),
-    );
-  }
-  return true;
-}
-
-async function fetchIssueFields(
-  baseUrl: string,
-  authHeader: string,
-  issueKey: string,
-  fieldIds: string[],
-): Promise<JiraIssueFields> {
-  const unique = [...new Set(fieldIds.map((id) => id.trim()).filter(Boolean))];
-  if (unique.length === 0) return {};
-  const params = new URLSearchParams({ fields: unique.join(',') });
-  const res = await fetch(`${baseUrl}/rest/api/2/issue/${encodeURIComponent(issueKey)}?${params}`, {
-    headers: { Accept: 'application/json', Authorization: authHeader },
-  });
-  if (!res.ok) {
-    const bodyText = await res.text();
-    throw new Error(`读取 issue 失败(${res.status}): ${bodyText || res.statusText}`);
-  }
-  const data = (await res.json()) as { fields?: JiraIssueFields };
-  return data.fields ?? {};
 }
 
 function findScreenFieldId(screenFields: JiraTransitionFields, fieldName: string): string | undefined {
@@ -135,6 +94,26 @@ function findTransitionByName(transitions: JiraTransition[], name: string): Jira
   return transitions.find((t) => (t.name ?? '').trim().toLowerCase() === target);
 }
 
+async function fetchIssueFields(
+  baseUrl: string,
+  authHeader: string,
+  issueKey: string,
+  fieldIds: string[],
+): Promise<JiraIssueFields> {
+  const unique = [...new Set(fieldIds.map((id) => id.trim()).filter(Boolean))];
+  if (unique.length === 0) return {};
+  const params = new URLSearchParams({ fields: unique.join(',') });
+  const res = await fetch(`${baseUrl}/rest/api/2/issue/${encodeURIComponent(issueKey)}?${params}`, {
+    headers: { Accept: 'application/json', Authorization: authHeader },
+  });
+  if (!res.ok) {
+    const bodyText = await res.text();
+    throw new Error(`读取 issue 失败(${res.status}): ${bodyText || res.statusText}`);
+  }
+  const data = (await res.json()) as { fields?: JiraIssueFields };
+  return data.fields ?? {};
+}
+
 async function doTransition(
   baseUrl: string,
   authHeader: string,
@@ -156,14 +135,14 @@ async function doTransition(
   });
   if (!res.ok) {
     const bodyText = await res.text();
-    throw new Error(`执行提测失败(${res.status}): ${bodyText || res.statusText}`);
+    throw new Error(`执行关闭失败(${res.status}): ${bodyText || res.statusText}`);
   }
 }
 
 /**
- * Application：对指定 issue 执行「提测」工作流转场，并按默认策略填充屏字段。
+ * Application：对指定 issue 执行「关闭问题」工作流转场，并按默认策略填充屏字段。
  */
-export async function submitIssueForTest(issueKeyRaw: string): Promise<SubmitForTestResult> {
+export async function closeIssue(issueKeyRaw: string): Promise<CloseIssueResult> {
   const key = issueKeyRaw.trim().toUpperCase();
   if (!key) {
     return { success: false, key: '', error: 'issue key 不能为空' };
@@ -172,7 +151,7 @@ export async function submitIssueForTest(issueKeyRaw: string): Promise<SubmitFor
   try {
     const baseUrl = resolveBaseUrl();
     const authHeader = getAuthHeader();
-    const transitionName = config.jira.submitForTest.transitionName.trim() || '提测';
+    const transitionName = config.jira.closeIssue.transitionName.trim() || '关闭问题';
 
     const transitions = await listTransitions(baseUrl, authHeader, key);
     const transition = findTransitionByName(transitions, transitionName);
@@ -187,31 +166,29 @@ export async function submitIssueForTest(issueKeyRaw: string): Promise<SubmitFor
 
     const screenFields = transition.fields ?? {};
     const defectTypeFieldId = findScreenFieldId(screenFields, '缺陷类型');
-    const testerFieldId = findScreenFieldId(screenFields, '测试人员');
     const issueFields = await fetchIssueFields(baseUrl, authHeader, key, [
-      'summary',
+      'assignee',
+      'fixVersions',
       ...(defectTypeFieldId ? [defectTypeFieldId] : []),
-      ...(testerFieldId ? [testerFieldId] : []),
     ]);
-    const summary = String(issueFields.summary ?? '').trim();
+
+    const assigneeName = (issueFields.assignee?.name ?? issueFields.assignee?.key ?? '').trim();
+    const fixVersionNames = (issueFields.fixVersions ?? [])
+      .map((v) => (v.name ?? '').trim())
+      .filter(Boolean)
+      .join(',');
     const defectType = defectTypeFieldId
       ? formatOptionValue(issueFields[defectTypeFieldId]) || undefined
       : undefined;
-    const testerEmpty = Boolean(testerFieldId) && !isFieldFilled(testerFieldId ? issueFields[testerFieldId] : undefined);
-    if (testerEmpty) {
-      return {
-        success: false,
-        key,
-        transitionName: transition.name,
-        toStatus: transition.to?.name,
-        error: '测试人员为空，已放弃一键提测，请在 Jira 中手动提测并指定测试人员。',
-      };
-    }
 
-    const defaults = new SubmitForTestDefaults(buildDefaultsConfig());
-    const intent = defaults.buildIntent(summary, { defectType });
+    const defaults = new CloseIssueDefaults(buildDefaultsConfig());
+    const intent = defaults.buildIntent({
+      defectType,
+      assignee: assigneeName || undefined,
+      fixVersions: fixVersionNames || undefined,
+    });
     const mapper = TransitionScreenFieldMapper.createDefault();
-    const fields = mapper.buildFields(screenFields, intent, { actionLabel: '提测' });
+    const fields = mapper.buildFields(screenFields, intent, { actionLabel: '关闭' });
 
     await doTransition(baseUrl, authHeader, key, transition.id, fields);
 

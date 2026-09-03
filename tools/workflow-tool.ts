@@ -67,6 +67,19 @@ function getDesktopRoot(): string {
   return getWorkflowsDir().replace(/[/\\]workflows$/, '');
 }
 
+export type ShellExecResult = { stdout: string; stderr: string; code: number | null };
+
+/** shell 步骤非 0 必须中止，避免未提交却继续 push 并报成功 */
+export function abortMessageForFailedShell(
+  stepIndex: number,
+  out: Pick<ShellExecResult, 'code' | 'stderr'>
+): string | undefined {
+  if (out.code === 0) return undefined;
+  const detail = (out.stderr ?? '').trim().replace(/\s+/g, ' ');
+  const suffix = detail ? `：${detail.slice(0, 400)}` : '';
+  return `步骤 ${stepIndex} 失败，exit=${out.code ?? 'null'}${suffix}`;
+}
+
 /** 若步骤带 cwdCode，则按代号解析路径并拼成 cd path && cmd；注入 AI_DEV_DESKTOP_ROOT 供子脚本定位工具 */
 function resolveShellCmd(step: Step & { tool: 'shell'; cmd: string; cwdCode?: string }): string {
   const desktopRoot = getDesktopRoot();
@@ -137,6 +150,8 @@ export async function runWorkflowStep(
       } else {
         const out = await shellRun(cmd);
         results.push({ step: index, tool: 'shell', ...out });
+        const abort = abortMessageForFailedShell(index, out);
+        if (abort) return { success: false, results, error: abort };
       }
     } else if (step.tool === 'browser' && 'url' in step) {
       await browserOpen(step.url);
@@ -203,6 +218,8 @@ export async function runWorkflow(name: string): Promise<{ success: boolean; res
         } else {
           const out = await shellRun(cmd);
           results.push({ step: i, tool: 'shell', ...out });
+          const abort = abortMessageForFailedShell(i, out);
+          if (abort) return { success: false, results, error: abort };
         }
       } else if (step.tool === 'browser' && 'url' in step) {
         await browserOpen(step.url);

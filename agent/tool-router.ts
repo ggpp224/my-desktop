@@ -37,6 +37,7 @@ import {
 } from '../tools/jira-tool.js';
 import { getCursorTodayUsage, getCursorUsage } from '../tools/cursor-usage-tool.js';
 import { syncCursorCookieFromChrome } from '../tools/cursor-cookie-sync-tool.js';
+import { getNpmPackageVersions } from '../tools/npm-package-version-tool.js';
 import { fetchWeeklyReportPageInfo, openWeeklyReportPage } from '../tools/wiki-tool.js';
 import { writeWeeklyReport } from '../tools/weekly-report-tool.js';
 import { generateWeeklyTeamSummary } from '../tools/weekly-team-summary-tool.js';
@@ -261,6 +262,8 @@ export async function routeAndExecute(call: ToolCall, ctx?: RouteExecuteContext)
     case 'get_cursor_today_usage': {
       return withCursorAutoSync(getCursorTodayUsage);
     }
+    case 'get_npm_package_versions':
+      return getNpmPackageVersions();
     case 'sync_cursor_cookie':
       return syncCursorCookieFromChrome();
     case 'open_weekly_report':

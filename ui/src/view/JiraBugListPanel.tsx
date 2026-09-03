@@ -4,12 +4,14 @@ import type { AppThemeTokens } from '../domain/theme/appTheme';
 import {
   fetchTodoBugs,
   fetchInProgressBugs,
+  fetchAssigneeTasks,
   submitBugForTest,
+  closeJiraIssue,
   type JiraBugPayload,
 } from '../infrastructure/jira/todoBugsApi';
 import { Button } from './Button';
 
-type JiraBugListKind = 'todo' | 'inProgress';
+type JiraBugListKind = 'todo' | 'inProgress' | 'assigneeTasks';
 
 type JiraBugListPanelProps = {
   initial: JiraBugPayload;
@@ -38,7 +40,10 @@ export function JiraBugListPanel({
   const showProcessedColumn = listKind === 'inProgress';
   /** 仅处理中列表提供一键提测（待办 Open 通常无「提测」流转） */
   const showSubmitColumn = listKind === 'inProgress' && Boolean(apiBase);
-  const columnCount = (showProcessedColumn ? 9 : 8) + (showSubmitColumn ? 1 : 0);
+  /** 经办人任务列表提供一键关闭（对应 Jira「关闭问题」） */
+  const showCloseColumn = listKind === 'assigneeTasks' && Boolean(apiBase);
+  const showActionColumn = showSubmitColumn || showCloseColumn;
+  const columnCount = (showProcessedColumn ? 9 : 8) + (showActionColumn ? 1 : 0);
 
   const iterationButtons: Array<{ key: 'previous' | 'current' | 'next'; version: string; hint: string }> = [];
   if (iteration?.previous) iterationButtons.push({ key: 'previous', version: iteration.previous, hint: '前一迭代' });
@@ -51,12 +56,17 @@ export function JiraBugListPanel({
     setActionMessage(null);
   }, [initial]);
 
-  const loadByFixVersion = useCallback(
+  const refreshList = useCallback(
     async (fixVersion?: string) => {
       if (!apiBase || refreshing) return;
       setRefreshing(true);
       setError(null);
       try {
+        if (listKind === 'assigneeTasks') {
+          const next = await fetchAssigneeTasks(apiBase);
+          setPayload(next);
+          return;
+        }
         const fetcher = listKind === 'inProgress' ? fetchInProgressBugs : fetchTodoBugs;
         const next = await fetcher(apiBase, { fixVersion });
         setPayload(next);
@@ -82,7 +92,7 @@ export function JiraBugListPanel({
           toStatus ? `${issueKey} 已提测 → ${toStatus}` : `${issueKey} 已提测`,
         );
         if (refreshable) {
-          await loadByFixVersion(selectedVersion || undefined);
+          await refreshList(selectedVersion || undefined);
         }
       } catch (err) {
         setError(err instanceof Error ? err.message : String(err));
@@ -90,8 +100,45 @@ export function JiraBugListPanel({
         setSubmittingKey(null);
       }
     },
-    [apiBase, loadByFixVersion, refreshable, selectedVersion, submittingKey],
+    [apiBase, refreshList, refreshable, selectedVersion, submittingKey],
   );
+
+  const onCloseIssue = useCallback(
+    async (issueKey: string) => {
+      if (!apiBase || !issueKey || submittingKey) return;
+      setSubmittingKey(issueKey);
+      setError(null);
+      setActionMessage(null);
+      try {
+        const result = await closeJiraIssue(apiBase, issueKey);
+        const toStatus = (result.toStatus ?? '').trim();
+        setActionMessage(
+          toStatus ? `${issueKey} 已关闭 → ${toStatus}` : `${issueKey} 已关闭`,
+        );
+        if (refreshable) {
+          await refreshList();
+        } else {
+          setPayload((prev) => ({
+            ...prev,
+            issues: (prev.issues ?? []).filter((item) => (item.key ?? '').trim() !== issueKey),
+            total: Math.max(0, (prev.total ?? 0) - 1),
+          }));
+        }
+      } catch (err) {
+        setError(err instanceof Error ? err.message : String(err));
+      } finally {
+        setSubmittingKey(null);
+      }
+    },
+    [apiBase, refreshList, refreshable, submittingKey],
+  );
+
+  const refreshAriaLabel =
+    listKind === 'inProgress'
+      ? '刷新处理中 bug 列表'
+      : listKind === 'assigneeTasks'
+        ? '刷新经办人任务列表'
+        : '刷新待办 bug 列表';
 
   return (
     <>
@@ -126,7 +173,7 @@ export function JiraBugListPanel({
                   size="sm"
                   selected={selected}
                   disabled={refreshing || !apiBase}
-                  onClick={() => void loadByFixVersion(btn.version)}
+                  onClick={() => void refreshList(btn.version)}
                   title={btn.hint}
                   ariaLabel={`${btn.hint} ${btn.version}`}
                 >
@@ -156,9 +203,9 @@ export function JiraBugListPanel({
               variant="outline"
               size="sm"
               disabled={refreshing}
-              onClick={() => void loadByFixVersion(selectedVersion || undefined)}
+              onClick={() => void refreshList(selectedVersion || undefined)}
               title={refreshing ? '刷新中…' : '刷新列表'}
-              ariaLabel={refreshing ? '刷新中' : listKind === 'inProgress' ? '刷新处理中 bug 列表' : '刷新待办 bug 列表'}
+              ariaLabel={refreshing ? '刷新中' : refreshAriaLabel}
               style={{ flexShrink: 0, gap: 4 }}
             >
               <span style={{ animation: refreshing ? 'jira-bug-list-spin 0.9s linear infinite' : undefined, display: refreshing ? 'none' : 'inline' }}>↻</span>
@@ -191,7 +238,7 @@ export function JiraBugListPanel({
                 <th style={{ width: '10%', textAlign: 'left', padding: '8px 10px', borderBottom: `1px solid ${themeTokens.inputBorder}` }}>经办人</th>
                 <th style={{ width: showProcessedColumn ? '12%' : '13%', textAlign: 'left', padding: '8px 10px', borderBottom: `1px solid ${themeTokens.inputBorder}` }}>开发人员</th>
                 <th style={{ width: '11%', textAlign: 'left', padding: '8px 10px', borderBottom: `1px solid ${themeTokens.inputBorder}` }}>特性</th>
-                {showSubmitColumn ? (
+                {showActionColumn ? (
                   <th style={{ width: 72, textAlign: 'left', padding: '8px 10px', borderBottom: `1px solid ${themeTokens.inputBorder}` }}>操作</th>
                 ) : null}
               </tr>
@@ -244,6 +291,21 @@ export function JiraBugListPanel({
                           title={isSubmitting ? '提测中…' : '一键提测'}
                         >
                           {isSubmitting ? '…' : '提测'}
+                        </Button>
+                      </td>
+                    ) : null}
+                    {showCloseColumn ? (
+                      <td style={{ padding: '8px 10px', borderBottom: `1px solid ${themeTokens.inputBorder}`, whiteSpace: 'nowrap' }}>
+                        <Button
+                          themeTokens={themeTokens}
+                          variant="outline"
+                          size="sm"
+                          disabled={!issueKey || Boolean(submittingKey)}
+                          onClick={() => void onCloseIssue(issueKey)}
+                          ariaLabel={`关闭 ${issueKey}`}
+                          title={isSubmitting ? '关闭中…' : '关闭问题（解决结果：修复）'}
+                        >
+                          {isSubmitting ? '…' : '关闭'}
                         </Button>
                       </td>
                     ) : null}

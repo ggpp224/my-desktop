@@ -37,6 +37,15 @@ export type SubmitBugForTestResult = {
   error?: string;
 };
 
+export type CloseIssueResult = {
+  success?: boolean;
+  key?: string;
+  transitionId?: string;
+  transitionName?: string;
+  toStatus?: string;
+  error?: string;
+};
+
 export async function fetchTodoBugs(
   apiBase: string,
   options?: { maxResults?: number; fixVersion?: string },
@@ -69,6 +78,20 @@ export async function fetchInProgressBugs(
   return data;
 }
 
+export async function fetchAssigneeTasks(
+  apiBase: string,
+  options?: { maxResults?: number },
+): Promise<JiraBugPayload> {
+  const base = apiBase.replace(/\/$/, '');
+  const params = new URLSearchParams({ maxResults: String(options?.maxResults ?? 100) });
+  const res = await fetch(`${base}/jira/assignee-tasks?${params.toString()}`);
+  const data = (await res.json()) as JiraBugPayload & { error?: string };
+  if (!res.ok) {
+    throw new Error(data.error || `请求失败 (${res.status})`);
+  }
+  return data;
+}
+
 export async function submitBugForTest(apiBase: string, issueKey: string): Promise<SubmitBugForTestResult> {
   const base = apiBase.replace(/\/$/, '');
   const key = issueKey.trim();
@@ -79,6 +102,20 @@ export async function submitBugForTest(apiBase: string, issueKey: string): Promi
   const data = (await res.json()) as SubmitBugForTestResult;
   if (!res.ok || !data.success) {
     throw new Error(data.error || `提测失败 (${res.status})`);
+  }
+  return data;
+}
+
+export async function closeJiraIssue(apiBase: string, issueKey: string): Promise<CloseIssueResult> {
+  const base = apiBase.replace(/\/$/, '');
+  const key = issueKey.trim();
+  if (!key) throw new Error('issue key 不能为空');
+  const res = await fetch(`${base}/jira/issues/${encodeURIComponent(key)}/close`, {
+    method: 'POST',
+  });
+  const data = (await res.json()) as CloseIssueResult;
+  if (!res.ok || !data.success) {
+    throw new Error(data.error || `关闭失败 (${res.status})`);
   }
   return data;
 }
