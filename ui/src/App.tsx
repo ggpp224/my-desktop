@@ -12,6 +12,8 @@ import { CommandStatsPanel } from './CommandStatsPanel';
 import { CommandCapabilityPanel } from './CommandCapabilityPanel';
 import { KnowledgeDocPanel } from './KnowledgeDocPanel';
 import { MdToPdfPanel } from './MdToPdfPanel';
+import { IntegrationTestPanel } from './IntegrationTestPanel';
+import { DomainEntryPanel } from './view/DomainEntryPanel';
 import { TechDigestPanel } from './TechDigestPanel';
 import { LlmSettingsModal } from './view/LlmSettingsModal';
 import { HeaderTabNav } from './view/HeaderTabNav';
@@ -30,6 +32,7 @@ const MY_WORK_SESSION_STORAGE_KEY = 'ai-dev-control-center:my-work-session-id';
 type HeaderTab = { key: string; label: string; docPath?: string };
 const HEADER_TABS: HeaderTab[] = [
   { key: 'workspace', label: 'AI Dev Control Center' },
+  { key: 'domain-entry', label: 'MF 联调' },
   { key: 'tech-digest', label: '技术趋势' },
 ];
 const HELP_COMMANDS = getHelpCommands();
@@ -316,6 +319,18 @@ export default function App() {
     setActiveHeaderTab('md-to-pdf');
   };
 
+  const openIntegrationTestTab = () => {
+    setHeaderTabs((prev) => {
+      if (prev.some((tab) => tab.key === 'integration-test')) return prev;
+      return [...prev, { key: 'integration-test', label: '运行集成用例' }];
+    });
+    setActiveHeaderTab('integration-test');
+  };
+
+  const openDomainEntryTab = () => {
+    setActiveHeaderTab('domain-entry');
+  };
+
   const openCommandCapabilityTab = () => {
     setHeaderTabs((prev) => {
       if (prev.some((tab) => tab.key === 'command-capability')) return prev;
@@ -337,7 +352,7 @@ export default function App() {
   };
 
   const closeHeaderTab = async (tabKey: string) => {
-    if (tabKey === 'workspace' || tabKey === 'tech-digest') return;
+    if (tabKey === 'workspace' || tabKey === 'tech-digest' || tabKey === 'domain-entry') return;
     if (tabKey === 'my-work' && myWorkSessionId) {
       try {
         await fetch(`${apiBase}/workflow/sessions/${encodeURIComponent(myWorkSessionId)}`, { method: 'DELETE' });
@@ -616,6 +631,8 @@ export default function App() {
               onOpenKnowledgeBase={openKnowledgeBaseTab}
               onOpenCommandStats={openCommandStatsTab}
               onOpenMdToPdf={openMdToPdfTab}
+              onOpenIntegrationTest={openIntegrationTestTab}
+              onOpenDomainEntry={openDomainEntryTab}
               onOpenKnowledgeDoc={openKnowledgeDocTab}
               llmRuntimeMode={llmMode}
               agentChatLlmBody={agentChatLlmBody}
@@ -637,6 +654,11 @@ export default function App() {
               <MdToPdfPanel addLog={addLog} themeTokens={themeTokens} />
             </div>
           )}
+          {activeHeaderTab === 'integration-test' && (
+            <div style={{ flex: 1, minHeight: 0, width: '100%', height: '100%', display: 'flex', overflow: 'hidden' }}>
+              <IntegrationTestPanel apiBase={apiBase} addLog={addLog} themeTokens={themeTokens} />
+            </div>
+          )}
           {activeHeaderTab === 'command-capability' && (
             <div style={{ flex: 1, minHeight: 0, width: '100%', height: '100%', display: 'flex', overflow: 'hidden' }}>
               <CommandCapabilityPanel apiBase={apiBase} themeTokens={themeTokens} />
@@ -652,6 +674,20 @@ export default function App() {
               />
             </div>
           )}
+          {/* AI 生成 By Peng.Guo：MF 联调常驻挂载，切换页签保留草稿状态 */}
+          <div
+            style={{
+              display: activeHeaderTab === 'domain-entry' ? 'flex' : 'none',
+              flex: 1,
+              minHeight: 0,
+              minWidth: 0,
+              width: '100%',
+              height: '100%',
+              overflow: 'hidden',
+            }}
+          >
+            <DomainEntryPanel apiBase={apiBase} addLog={addLog} themeTokens={themeTokens} />
+          </div>
           {/* AI 生成 By Peng.Guo：技术趋势常驻挂载，切换页签不销毁内容、不中断刷新 SSE */}
           <div
             style={{

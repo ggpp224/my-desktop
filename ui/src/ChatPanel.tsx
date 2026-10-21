@@ -101,6 +101,19 @@ type FetchWeeklyReportInfoPayload = {
   versionNumber?: number;
   versionWhen?: string;
 };
+type CreateWeeklyReportPagePayload = {
+  success?: boolean;
+  skipped?: boolean;
+  error?: string;
+  message?: string;
+  sourceWeekRange?: string;
+  nextWeekRange?: string;
+  quarter?: string;
+  quarterCreated?: boolean;
+  pageId?: string;
+  pageTitle?: string;
+  targetUrl?: string;
+};
 type KnowledgeCitation = {
   path?: string;
   score?: number;
@@ -138,6 +151,27 @@ type ListKnowledgeDocsPayload = {
   success?: boolean;
   docs?: KnowledgeDocItem[];
   totalCount?: number;
+  error?: string;
+};
+
+type NpmDistTagItem = {
+  tag?: string;
+  version?: string;
+  publishedAt?: string | null;
+  publishedAgo?: string | null;
+  preferred?: boolean;
+};
+type NpmPackageVersionItem = {
+  name?: string;
+  preferredTag?: string;
+  tags?: NpmDistTagItem[];
+  error?: string;
+};
+type NpmPackageVersionsPayload = {
+  success?: boolean;
+  fetchedAt?: string;
+  registry?: string;
+  packages?: NpmPackageVersionItem[];
   error?: string;
 };
 
@@ -216,6 +250,8 @@ interface ChatPanelProps {
   onOpenKnowledgeBase: () => void;
   onOpenCommandStats: () => void;
   onOpenMdToPdf: () => void;
+  onOpenIntegrationTest: () => void;
+  onOpenDomainEntry: () => void;
   onOpenKnowledgeDoc: (sourcePath: string) => void;
   /** 本地 Ollama / 外部 Gemini */
   llmRuntimeMode: LlmRuntimeMode;
@@ -427,6 +463,17 @@ function extractFetchWeeklyReportInfoResult(toolResults?: unknown[]): FetchWeekl
   return row.result as FetchWeeklyReportInfoPayload;
 }
 
+function extractCreateWeeklyReportPageResult(toolResults?: unknown[]): CreateWeeklyReportPagePayload | null {
+  if (!Array.isArray(toolResults)) return null;
+  const row = toolResults.find(
+    (item) =>
+      (item as ToolResultItem | undefined)?.tool === 'create_weekly_report_page' &&
+      (item as ToolResultItem | undefined)?.result
+  ) as ToolResultItem | undefined;
+  if (!row || typeof row.result !== 'object' || row.result == null) return null;
+  return row.result as CreateWeeklyReportPagePayload;
+}
+
 function extractKnowledgeBaseResult(toolResults?: unknown[]): KnowledgeBasePayload | null {
   if (!Array.isArray(toolResults)) return null;
   const row = toolResults.find(
@@ -472,6 +519,17 @@ function extractListKnowledgeDocsResult(toolResults?: unknown[]): ListKnowledgeD
   ) as ToolResultItem | undefined;
   if (!row || typeof row.result !== 'object' || row.result == null) return null;
   return row.result as ListKnowledgeDocsPayload;
+}
+
+function extractNpmPackageVersionsResult(toolResults?: unknown[]): NpmPackageVersionsPayload | null {
+  if (!Array.isArray(toolResults)) return null;
+  const row = toolResults.find(
+    (item) =>
+      (item as ToolResultItem | undefined)?.tool === 'get_npm_package_versions' &&
+      (item as ToolResultItem | undefined)?.result
+  ) as ToolResultItem | undefined;
+  if (!row || typeof row.result !== 'object' || row.result == null) return null;
+  return row.result as NpmPackageVersionsPayload;
 }
 
 /* AI 生成 By Peng.Guo：Confluence 新版/表格粘贴优先写 text/html，纯文本槽位放 Wiki 作降级；HTML 顶部带与纯文本一致的首行说明 */
@@ -562,6 +620,152 @@ function renderToolResults(
                 </div>
               </div>
             ))}
+          </div>
+        ) : null}
+      </div>
+    );
+  }
+
+  // AI 生成 By Peng.Guo：npm Current Tags 多列表格
+  const npmVersionsResult = extractNpmPackageVersionsResult(toolResults);
+  if (npmVersionsResult) {
+    const packages = Array.isArray(npmVersionsResult.packages) ? npmVersionsResult.packages : [];
+    const tagColumnOrder: string[] = [];
+    const tagSeen = new Set<string>();
+    for (const pkg of packages) {
+      for (const t of pkg.tags ?? []) {
+        const tag = (t.tag ?? '').trim();
+        if (!tag || tagSeen.has(tag)) continue;
+        tagSeen.add(tag);
+        tagColumnOrder.push(tag);
+      }
+    }
+    tagColumnOrder.sort((a, b) => {
+      if (a === 'beta' && b !== 'beta') return -1;
+      if (b === 'beta' && a !== 'beta') return 1;
+      if (a === 'latest' && b !== 'latest') return -1;
+      if (b === 'latest' && a !== 'latest') return 1;
+      return a.localeCompare(b);
+    });
+    const cellPad = '6px 8px';
+    const border = `1px solid ${themeTokens.inputBorder}`;
+    const shortName = (name?: string) => {
+      const n = (name ?? '').trim();
+      if (n.startsWith('@chanjet/')) return n.slice('@chanjet/'.length);
+      return n || '—';
+    };
+    const thStyle = {
+      textAlign: 'left' as const,
+      padding: cellPad,
+      borderBottom: border,
+      whiteSpace: 'nowrap' as const,
+      position: 'sticky' as const,
+      top: 0,
+      background: themeTokens.workspacePanelBackground,
+      zIndex: 1,
+      fontWeight: 600 as const,
+    };
+    return (
+      <div style={{ marginTop: 8, background: themeTokens.workspacePanelSubtleBackground, borderRadius: 6, border: border, padding: 10 }}>
+        <div style={{ fontSize: 12, color: npmVersionsResult.success ? themeTokens.statusSuccess : themeTokens.statusError, marginBottom: 6 }}>
+          {npmVersionsResult.success ? 'npm 包 Current Tags' : '获取 npm 包版本失败'}
+          {packages.length > 0 ? (
+            <span style={{ color: themeTokens.textSecondary, marginLeft: 8 }}>共 {packages.length} 个包</span>
+          ) : null}
+          {npmVersionsResult.registry ? (
+            <span style={{ color: themeTokens.textSecondary, marginLeft: 8 }}>{npmVersionsResult.registry}</span>
+          ) : null}
+        </div>
+        {npmVersionsResult.error ? (
+          <div style={{ fontSize: 12, color: themeTokens.statusError, marginBottom: 6 }}>{npmVersionsResult.error}</div>
+        ) : null}
+        {packages.length > 0 ? (
+          <div style={{ overflowX: 'auto', maxHeight: 420, overflowY: 'auto' }}>
+            <table
+              style={{
+                width: '100%',
+                borderCollapse: 'collapse',
+                fontSize: 12,
+                color: themeTokens.textPrimary,
+              }}
+            >
+              <thead>
+                <tr style={{ background: themeTokens.workspacePanelBackground }}>
+                  <th style={thStyle}>包名</th>
+                  {tagColumnOrder.flatMap((tag) => [
+                    <th key={`h-${tag}-ver`} style={thStyle}>
+                      {tag} 版本
+                    </th>,
+                    <th key={`h-${tag}-ago`} style={thStyle}>
+                      {tag} 发布
+                    </th>,
+                  ])}
+                </tr>
+              </thead>
+              <tbody>
+                {packages.map((pkg, idx) => {
+                  const byTag = new Map((pkg.tags ?? []).map((t) => [t.tag ?? '', t]));
+                  return (
+                    <tr
+                      key={pkg.name || idx}
+                      style={{
+                        background: idx % 2 === 0 ? themeTokens.workspacePanelSubtleBackground : themeTokens.workspacePanelBackground,
+                      }}
+                    >
+                      <td
+                        style={{ padding: cellPad, borderBottom: border, whiteSpace: 'nowrap', fontWeight: 600, color: themeTokens.tabActiveBorder }}
+                        title={pkg.name}
+                      >
+                        {shortName(pkg.name)}
+                      </td>
+                      {pkg.error
+                        ? [
+                            <td
+                              key="err"
+                              colSpan={Math.max(1, tagColumnOrder.length * 2)}
+                              style={{ padding: cellPad, borderBottom: border, color: themeTokens.statusError }}
+                            >
+                              {pkg.error}
+                            </td>,
+                          ]
+                        : tagColumnOrder.flatMap((tag) => {
+                            const entry = byTag.get(tag);
+                            const abs = entry?.publishedAt
+                              ? new Date(entry.publishedAt).toLocaleString('zh-CN')
+                              : undefined;
+                            return [
+                              <td
+                                key={`${pkg.name}-${tag}-ver`}
+                                style={{
+                                  padding: cellPad,
+                                  borderBottom: border,
+                                  whiteSpace: 'nowrap',
+                                  fontWeight: entry?.preferred ? 600 : 400,
+                                  fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace',
+                                  fontSize: 11,
+                                }}
+                              >
+                                {entry?.version || '—'}
+                              </td>,
+                              <td
+                                key={`${pkg.name}-${tag}-ago`}
+                                title={abs}
+                                style={{
+                                  padding: cellPad,
+                                  borderBottom: border,
+                                  whiteSpace: 'nowrap',
+                                  color: themeTokens.textSecondary,
+                                }}
+                              >
+                                {entry?.publishedAgo || (entry ? '—' : '')}
+                              </td>,
+                            ];
+                          })}
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
           </div>
         ) : null}
       </div>
@@ -866,6 +1070,43 @@ function renderToolResults(
       </div>
     );
   }
+  const wikiCreateWeekly = extractCreateWeeklyReportPageResult(toolResults);
+  if (wikiCreateWeekly && (wikiCreateWeekly.success !== undefined || wikiCreateWeekly.error || wikiCreateWeekly.skipped !== undefined)) {
+    const ok = wikiCreateWeekly.success === true;
+    const skipped = wikiCreateWeekly.skipped === true;
+    const title = !ok ? '创建周报页面失败' : skipped ? '本周周报页已存在' : '已创建本周周报页';
+    const titleColor = !ok ? themeTokens.statusError : skipped ? themeTokens.textSecondary : themeTokens.statusSuccess;
+    return (
+      <div style={{ marginTop: 8, background: themeTokens.workspacePanelSubtleBackground, borderRadius: 6, border: `1px solid ${themeTokens.inputBorder}`, padding: 10 }}>
+        <div style={{ fontSize: 13, fontWeight: 600, color: titleColor, marginBottom: 8 }}>{title}</div>
+        {wikiCreateWeekly.message ? (
+          <div style={{ fontSize: 12, color: themeTokens.textPrimary, marginBottom: 8, whiteSpace: 'pre-wrap' }}>{wikiCreateWeekly.message}</div>
+        ) : null}
+        {wikiCreateWeekly.error ? (
+          <div style={{ fontSize: 12, color: themeTokens.statusError, marginBottom: 8, whiteSpace: 'pre-wrap' }}>{wikiCreateWeekly.error}</div>
+        ) : null}
+        <div style={{ fontSize: 12, color: themeTokens.textSecondary, lineHeight: 1.6 }}>
+          {wikiCreateWeekly.quarter ? (
+            <div>
+              季度：{wikiCreateWeekly.quarter}
+              {wikiCreateWeekly.quarterCreated ? '（本次新建）' : ''}
+            </div>
+          ) : null}
+          {wikiCreateWeekly.sourceWeekRange ? <div>源周：{wikiCreateWeekly.sourceWeekRange}</div> : null}
+          {wikiCreateWeekly.nextWeekRange ? <div>本周：{wikiCreateWeekly.nextWeekRange}</div> : null}
+          {wikiCreateWeekly.pageId ? <div>pageId：{wikiCreateWeekly.pageId}</div> : null}
+          {wikiCreateWeekly.targetUrl ? (
+            <div style={{ marginTop: 6 }}>
+              页面：{' '}
+              <a href={wikiCreateWeekly.targetUrl} target="_blank" rel="noreferrer" style={{ color: themeTokens.tabActiveBorder }}>
+                打开
+              </a>
+            </div>
+          ) : null}
+        </div>
+      </div>
+    );
+  }
   const todoBugs = extractTodoBugsResult(toolResults);
   if (todoBugs) {
     return <JiraBugListPanel initial={todoBugs} themeTokens={themeTokens} apiBase={apiBase} refreshable />;
@@ -948,7 +1189,7 @@ function shouldShowToolProgressInFeedback(e: AgentToolProgressEvent): boolean {
   );
 }
 
-export function ChatPanel({ apiBase, addLog, onStartWorkEmbedded, onOpenKnowledgeBase, onOpenCommandStats, onOpenMdToPdf, onOpenKnowledgeDoc, llmRuntimeMode, agentChatLlmBody, themeTokens }: ChatPanelProps) {
+export function ChatPanel({ apiBase, addLog, onStartWorkEmbedded, onOpenKnowledgeBase, onOpenCommandStats, onOpenMdToPdf, onOpenIntegrationTest, onOpenDomainEntry, onOpenKnowledgeDoc, llmRuntimeMode, agentChatLlmBody, themeTokens }: ChatPanelProps) {
   const [input, setInput] = useState('');
   const [inputHistory, setInputHistory] = useState<string[]>([]);
   const [loading, setLoading] = useState(false);
@@ -1398,6 +1639,24 @@ export function ChatPanel({ apiBase, addLog, onStartWorkEmbedded, onOpenKnowledg
       onOpenMdToPdf();
       addLog('已打开 MD 生成 PDF 页签');
     }
+    const openIntegrationTestToolResult = data.toolResults?.find(
+      (t): t is { tool: string; result?: { openIntegrationTestRunner?: boolean } } =>
+        (t as { tool?: string }).tool === 'open_integration_test_runner' &&
+        (t as { result?: { openIntegrationTestRunner?: boolean } }).result?.openIntegrationTestRunner === true
+    );
+    if (openIntegrationTestToolResult) {
+      onOpenIntegrationTest();
+      addLog('已打开运行集成用例页签');
+    }
+    const openDomainEntryToolResult = data.toolResults?.find(
+      (t): t is { tool: string; result?: { openDomainEntryPanel?: boolean } } =>
+        (t as { tool?: string }).tool === 'open_domain_entry_panel' &&
+        (t as { result?: { openDomainEntryPanel?: boolean } }).result?.openDomainEntryPanel === true
+    );
+    if (openDomainEntryToolResult) {
+      onOpenDomainEntry();
+      addLog('已打开 MF 联调页签');
+    }
     const mergeSteps = (mergeResult?.result?.steps as string[] | undefined);
     appendToolResultsToLogs(data.toolResults, addLog);
     if (Array.isArray(mergeSteps) && mergeSteps.length > 0) mergeSteps.forEach((step) => addLog(step));
@@ -1455,6 +1714,30 @@ export function ChatPanel({ apiBase, addLog, onStartWorkEmbedded, onOpenKnowledg
       setMessages((prev) => [
         ...prev,
         { role: 'assistant', content: '已打开 MD 生成 PDF 页签：选择或上传 .md 文件，点击「生成」即可在本机下载目录输出 GitLab 风格 PDF。' },
+      ]);
+      return;
+    }
+    if (msg === '运行集成用例') {
+      setLoading(false);
+      onOpenIntegrationTest();
+      addLog('已打开运行集成用例页签');
+      setMessages((prev) => [
+        ...prev,
+        { role: 'assistant', content: '已打开运行集成用例页签：选择执行环境、远程或本地、勾选用例后点击「运行」，将在系统终端执行 Playwright。' },
+      ]);
+      return;
+    }
+    if (msg === '打开MF联调' || msg === 'MF联调') {
+      setLoading(false);
+      onOpenDomainEntry();
+      addLog('已打开 MF 联调页签');
+      setMessages((prev) => [
+        ...prev,
+        {
+          role: 'assistant',
+          content:
+            '已打开 MF 联调页签：选择环境后点「应用」，硬刷新业务页使 Domain Entry 生效（需安装 bridges/ccweb-desktop-bridge.user.js）。',
+        },
       ]);
       return;
     }

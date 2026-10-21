@@ -84,6 +84,12 @@ export const config = {
       /** 不在 Jira allowedValues 中则跳过（当前实例无「无」选项） */
       defectCause: process.env.JIRA_SUBMIT_TEST_DEFECT_CAUSE || '',
     },
+    /** 列表「关闭」一键默认值（走工作流 transition，非浏览器点按钮） */
+    closeIssue: {
+      transitionName: process.env.JIRA_CLOSE_ISSUE_TRANSITION_NAME || '关闭问题',
+      /** 解决结果选项文案（与 Jira「关闭问题」屏一致） */
+      resolution: process.env.JIRA_CLOSE_ISSUE_RESOLUTION || '修复',
+    },
   },
   cursor: {
     usageApiUrl:
@@ -114,6 +120,10 @@ export const config = {
   mdPdf: {
     /** MD → PDF 输出目录；留空则用本机下载目录 */
     outputDir: (process.env.MD_PDF_OUTPUT_DIR ?? '').trim(),
+  },
+  integrationTest: {
+    /** 「运行集成用例」：platform-front-integration-test 仓库绝对路径 */
+    projectPath: (process.env.INTEGRATION_TEST_PROJECT_PATH ?? '').trim(),
   },
   macostunmode: {
     /** macostunmode 控制器目录；留空则使用仓库根目录下的 macostunmode */

@@ -15,6 +15,23 @@ export function getHelpCommands(): HelpCommandItem[] {
     },
     {
       section: '快速开始',
+      command: '运行集成用例',
+      description:
+        '打开运行集成用例页签：选择执行环境（.env.*）、远程或本地（LOCAL_REMOTES=1）、勾选 platform-front-integration-test 用例，在系统终端运行 Playwright',
+    },
+    {
+      section: '快速开始',
+      command: 'MF 联调（顶部页签）',
+      description:
+        '按业务环境（test/inte…）各自保存 MF 入口；修改即覆盖，桥接按页面 env 写入 localStorage',
+    },
+    {
+      section: '快速开始',
+      command: '切到本地联调',
+      description: '为 inte 业务环境启用带端口域→local 覆盖',
+    },
+    {
+      section: '快速开始',
       command: '技术趋势（顶部页签）',
       description:
         '点击顶部「技术趋势」：聚合 GitHub/HN/Reddit 抓取 + LLM 解读；今日与中长周期（本月+半年度）独立刷新，SSE 进度',
@@ -79,9 +96,9 @@ export function getHelpCommands(): HelpCommandItem[] {
     },
     {
       section: '工作流',
-      command: '启动 base / 启动 base18 / 启动 nova / 启动 mdf-ui / 启动 mdf-biz / 启动 mdf-report',
+      command: '启动 base / 启动 base18 / 启动 nova / 启动 metapage / 启动 mdf / 启动 mdf-ui / 启动 mdf-ui-web / 启动 mdf-biz / 启动 mdf-report',
       description:
-        '工作流未收录的项目：在 config/projects 对应目录执行开发命令（默认 yarn dev；mdf-ui、mdf-biz 为 yarn w；mdf-report 为 pnpm run dev）',
+        '工作流未收录的项目：在 config/projects 对应目录执行开发命令（默认 yarn dev；mdf、mdf-ui、mdf-ui-web、mdf-biz 为 yarn w；mdf-report 为 pnpm run dev）',
     },
     {
       section: '终端',
@@ -97,6 +114,11 @@ export function getHelpCommands(): HelpCommandItem[] {
       section: '浏览器 / Wiki',
       command: '周报 / 打开周报 / 打开wiki周报',
       description: '用 WIKI_TOKEN 自动定位「最新季度 + 最新周报页」；失败时回退搜索页',
+    },
+    {
+      section: '浏览器 / Wiki',
+      command: '创建周报页面',
+      description: '按日历本周建页；季度不存在则先建；已存在则跳过；源周为上周/同年近周；清空「本周工作」「下周计划」；不复制评论',
     },
     {
       section: '浏览器 / Wiki',
@@ -182,7 +204,10 @@ export function getHelpCodebook(): HelpCodebook {
       'nova-next',
       'base',
       'base18',
+      'metapage',
+      'mdf',
       'mdf-ui',
+      'mdf-ui-web',
       'mdf-biz',
       'mdf-report',
       'ai-import',
@@ -204,7 +229,7 @@ export function getHelpCodebook(): HelpCodebook {
     ],
     ideAliases: ['ws / webstorm -> WebStorm', 'cursor -> Cursor', 'code / vscode -> VS Code'],
     projectDevCmdOverrides: [
-      { codes: ['mdf-ui', 'mdf-biz'], cmd: 'yarn w' },
+      { codes: ['mdf', 'mdf-ui', 'mdf-ui-web', 'mdf-biz'], cmd: 'yarn w' },
       { codes: ['mdf-report'], cmd: 'pnpm run dev' },
     ],
   };

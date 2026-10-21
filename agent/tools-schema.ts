@@ -38,6 +38,52 @@ export const toolsSchema = [
   {
     type: 'function' as const,
     function: {
+      name: 'open_integration_test_runner',
+      description:
+        '打开「运行集成用例」页签。用户说「运行集成用例」时调用；页签内选择执行环境、远程/本地、platform-front-integration-test 用例后在系统终端运行 Playwright，无参数',
+      parameters: {
+        type: 'object',
+        properties: {},
+      },
+    },
+  },
+  {
+    type: 'function' as const,
+    function: {
+      name: 'open_domain_entry_panel',
+      description:
+        '打开「MF 联调」页签（Domain Entry）。用户说「打开MF联调」「MF联调」时调用；页签内切换 local/inte 等环境并应用 remoteEntry 覆盖，无参数',
+      parameters: {
+        type: 'object',
+        properties: {},
+      },
+    },
+  },
+  {
+    type: 'function' as const,
+    function: {
+      name: 'apply_domain_entry_env',
+      description:
+        '为指定业务环境启用「带端口 MF → local」覆盖并保存。用户说「切到本地联调」「inte联调切本地」时 env=inte；「test联调切本地」时 env=test。桥接按页面 cc_server_env 匹配后写入 localStorage',
+      parameters: {
+        type: 'object',
+        properties: {
+          env: {
+            type: 'string',
+            description: '业务环境 contextEnv：inte / test / local / pre-test 等',
+          },
+          contextEnv: {
+            type: 'string',
+            description: '同 env，业务环境名',
+          },
+        },
+        required: ['env'],
+      },
+    },
+  },
+  {
+    type: 'function' as const,
+    function: {
       name: 'start_macostunmode',
       description:
         '在系统终端启动 macostunmode（sing-box TUN 管理脚本）。用户说「tun」时调用；等价于 cd macostunmode 后 sudo ./macostunmode.sh，无参数',
@@ -399,6 +445,18 @@ export const toolsSchema = [
   {
     type: 'function' as const,
     function: {
+      name: 'create_weekly_report_page',
+      description:
+        '创建日历「本周」wiki 周报页：相对今天计算本周 yymmdd-yymmdd；已存在则跳过；源周取严格早于本周的同年近周；当前/本周季度不存在时先建 YYYY-QN，再复制并清空「本周工作」「下周计划」（不复制评论）。用户说「创建周报页面」「新建周报页面」时调用，无参数',
+      parameters: {
+        type: 'object',
+        properties: {},
+      },
+    },
+  },
+  {
+    type: 'function' as const,
+    function: {
       name: 'write_weekly_report',
       description:
         '编写本周周报：先并行查询 Jira「本周已完成任务」与「本周经我手的 bug」（经办曾为我、现经办/开发不含我），合并去重后取标题列表，再调用大模型按 Markdown 生成；产出 reportHtml 与 reportWiki；用户说「写周报」时调用',
@@ -456,7 +514,7 @@ export const toolsSchema = [
     type: 'function' as const,
     function: {
       name: 'run_workflow_step',
-      description: '启动开发项目。工作流内项目（cpxy/react18/cc-web/biz-solution/uikit/shared/scm）或工作流外项目（base/base18/nova/mdf-ui/mdf-biz/mdf-report 等）均传 taskKey=项目代号；工作流外项目自动 cd 到项目目录执行开发命令（mdf-ui/mdf-biz 为 yarn w，mdf-report 为 pnpm run dev，其余默认 yarn dev）',
+      description: '启动开发项目。工作流内项目（cpxy/react18/cc-web/biz-solution/uikit/shared/scm）或工作流外项目（base/base18/nova/metapage/mdf/mdf-ui/mdf-ui-web/mdf-biz/mdf-report 等）均传 taskKey=项目代号；工作流外项目自动 cd 到项目目录执行开发命令（mdf/mdf-ui/mdf-ui-web/mdf-biz 为 yarn w，mdf-report 为 pnpm run dev，其余默认 yarn dev）',
       parameters: {
         type: 'object',
         required: ['workflow', 'taskKey'],

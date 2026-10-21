@@ -38,7 +38,7 @@ import {
 import { getCursorTodayUsage, getCursorUsage } from '../tools/cursor-usage-tool.js';
 import { syncCursorCookieFromChrome } from '../tools/cursor-cookie-sync-tool.js';
 import { getNpmPackageVersions } from '../tools/npm-package-version-tool.js';
-import { fetchWeeklyReportPageInfo, openWeeklyReportPage } from '../tools/wiki-tool.js';
+import { createNextWeeklyReportPage, fetchWeeklyReportPageInfo, openWeeklyReportPage } from '../tools/wiki-tool.js';
 import { writeWeeklyReport } from '../tools/weekly-report-tool.js';
 import { generateWeeklyTeamSummary } from '../tools/weekly-team-summary-tool.js';
 import { startMacostunmode } from '../tools/macostunmode-tool.js';
@@ -71,6 +71,26 @@ export async function routeAndExecute(call: ToolCall, ctx?: RouteExecuteContext)
       return { openCommandStats: true };
     case 'open_md_to_pdf':
       return { openMdToPdf: true };
+    case 'open_integration_test_runner':
+      return { openIntegrationTestRunner: true };
+    case 'open_domain_entry_panel':
+      return { openDomainEntryPanel: true };
+    case 'apply_domain_entry_env': {
+      const contextEnv = String(args?.contextEnv ?? args?.env ?? '').trim();
+      if (!contextEnv) throw new Error('apply_domain_entry_env 缺少 contextEnv/env（业务环境，如 inte）');
+      const { applyShellLocalForContext, previewContextOverrides } = await import(
+        '../server/domain-entry-service.js'
+      );
+      const result = await applyShellLocalForContext(contextEnv);
+      const overrides = previewContextOverrides(result.profile);
+      return {
+        applied: true,
+        contextEnv: result.profile.contextEnv,
+        enable: result.profile.enable,
+        overrideCount: overrides.length,
+        reloadHint: `请打开业务环境「${contextEnv}」页面并硬刷新，使桥接按 context 写入 localStorage`,
+      };
+    }
     case 'start_macostunmode':
       return startMacostunmode();
     case 'clear_private_knowledge_base':
@@ -270,6 +290,8 @@ export async function routeAndExecute(call: ToolCall, ctx?: RouteExecuteContext)
       return openWeeklyReportPage();
     case 'fetch_weekly_report_info':
       return fetchWeeklyReportPageInfo();
+    case 'create_weekly_report_page':
+      return createNextWeeklyReportPage();
     case 'write_weekly_report': {
       const maxResults = Number(args?.maxResults ?? 100);
       return writeWeeklyReport(maxResults, {

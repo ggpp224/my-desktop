@@ -14,6 +14,7 @@ node_modules
 /runtime/command-stats.sqlite-wal
 /runtime/command-stats.sqlite-shm
 /runtime/tech-digest/
+/runtime/domain-entry/
 /runtime/embedded-workflow-sessions.json
 storage/
 /ui/.npm-cache/

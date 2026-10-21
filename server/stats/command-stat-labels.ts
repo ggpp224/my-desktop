@@ -57,6 +57,11 @@ const CHAT_ALIAS_ENTRIES: Array<{ patterns: RegExp[]; canonicalKey: string; disp
     displayLabel: 'md生成pdf',
   },
   {
+    patterns: [/^运行集成用例$/],
+    canonicalKey: 'integration-test:open',
+    displayLabel: '运行集成用例',
+  },
+  {
     patterns: [/^打开\s*jenkins$/i, /^打开jenkins$/i],
     canonicalKey: 'browser:jenkins',
     displayLabel: '打开 Jenkins',
@@ -70,6 +75,11 @@ const CHAT_ALIAS_ENTRIES: Array<{ patterns: RegExp[]; canonicalKey: string; disp
     patterns: [/^写周报$/],
     canonicalKey: 'wiki:write-weekly-report',
     displayLabel: '写周报',
+  },
+  {
+    patterns: [/^创建周报页面$/, /^新建周报页面$/],
+    canonicalKey: 'wiki:create-weekly-report-page',
+    displayLabel: '创建周报页面',
   },
   {
     patterns: [/^部署\s*nova\s*集测$/i, /^部署nova集测$/i],

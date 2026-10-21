@@ -9,7 +9,7 @@ const TOOL_GROUPS: ToolGroup[] = [
     title: '工作流 / 项目操作',
     tools: [
       { name: 'run_workflow', desc: '执行工作流（如：开始工作、开始工作，使用外部终端、执行 start-work）' },
-      { name: 'run_workflow_step', desc: '启动项目：工作流内（cpxy/react18/scm 等）或工作流外（base/mdf-ui/mdf-biz 等，mdf 为 yarn w）' },
+      { name: 'run_workflow_step', desc: '启动项目：工作流内（cpxy/react18/scm 等）或工作流外（base/metapage/mdf-ui/mdf-biz 等，mdf 为 yarn w）' },
       { name: 'open_terminal', desc: '在「我的工作」打开终端页签（如：终端打开 react18）' },
       { name: 'deploy_jenkins', desc: '触发 Jenkins 部署（如：部署 nova、部署 nova 集测、部署 base）' },
       {
@@ -43,6 +43,7 @@ const TOOL_GROUPS: ToolGroup[] = [
       { name: 'search_weekly_handoff_bugs', desc: '查询本周经我手但已转交的 bug（如：本周经我手的bug）' },
       { name: 'open_weekly_report', desc: '定位并打开 wiki 周报（如：周报）' },
       { name: 'fetch_weekly_report_info', desc: '抓取 wiki 当前周报页正文（如：抓取周报信息）' },
+      { name: 'create_weekly_report_page', desc: '创建本周周报页（如：创建周报页面）；已存在则跳过' },
       { name: 'write_weekly_report', desc: '基于 Jira 数据生成周报（如：写周报）' },
       { name: 'generate_weekly_team_summary', desc: '从 wiki 周报页 HTML 生成组内总结（如：本周组内总结）' },
     ],
@@ -53,6 +54,9 @@ const TOOL_GROUPS: ToolGroup[] = [
       { name: 'open_knowledge_base_manager', desc: '打开私人知识库管理页（如：添加私人知识库）' },
       { name: 'open_command_stats', desc: '打开指令统计页签（如：统计常用指令）' },
       { name: 'open_md_to_pdf', desc: '打开 MD 生成 PDF 页签（如：md生成pdf）' },
+      { name: 'open_integration_test_runner', desc: '打开运行集成用例页签（如：运行集成用例）' },
+      { name: 'open_domain_entry_panel', desc: '打开 MF 联调页签（如：打开MF联调）' },
+      { name: 'apply_domain_entry_env', desc: '业务环境壳域切本地（如：切到本地联调、test联调切本地）' },
       { name: 'list_knowledge_docs', desc: '列出知识库文档（如：知识库有哪些文档）' },
       { name: 'query_knowledge_base', desc: '查询知识库内容（如：文档里如何配置）' },
       { name: 'incremental_rebuild_knowledge_base_index', desc: '增量重建索引（如：增量重建知识库索引）' },

@@ -19,7 +19,36 @@ import {
 import { getJenkinsPreset } from '../config/jenkins-presets.js';
 import { deploy as jenkinsDeploy, getDeployStatus, getDeployStatusByBuildHistory } from '../tools/jenkins-tool.js';
 import { open as openBrowser } from '../tools/browser-tool.js';
+import {
+  getIntegrationTestCatalog,
+  getIntegrationTestLastResults,
+  parseIntegrationTestSelection,
+  previewIntegrationTestCommand,
+  runIntegrationTests,
+} from '../tools/integration-test-tool.js';
 import { getAllProjects, getProjectByCode } from '../config/projects.js';
+import {
+  applyShellLocalForContext,
+  exportPageConfig,
+  getBridgeStatus,
+  getDomainEntryBootstrap,
+  getDomainEntryStore,
+  getPageEcho,
+  listDomainEntryBindings,
+  listDomainEntryEnvs,
+  previewContextOverrides,
+  resetContextProfile,
+  resolveContextEcho,
+  resolveLiveSync,
+  saveBridgeHeartbeat,
+  saveContextProfile,
+  savePageEcho,
+  waitForLiveSync,
+  requestRemoteEntryRefresh,
+  DEFAULT_WAIT_SYNC_MS,
+} from './domain-entry-service.js';
+import type { IDomainEntryPageConfig } from '../tools/domain-entry/declare.js';
+import type { IContextDomainEntryProfile, IDomainMfSource, MfEnvId } from '../tools/domain-entry/declare.js';
 import { searchTodoBugs, searchInProgressBugs, searchAssigneeTasks } from '../tools/jira-tool.js';
 import { submitIssueForTest } from '../tools/jira-submit-for-test.js';
 import { closeIssue } from '../tools/jira-close-issue.js';
@@ -588,6 +617,391 @@ app.post('/open-url', async (req, res) => {
   try {
     await openBrowser(url);
     res.json({ success: true });
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    res.status(500).json({ success: false, error: msg });
+  }
+});
+
+/** 运行集成用例：环境列表 + 用例分组（扫描 INTEGRATION_TEST_PROJECT_PATH） */
+app.get('/integration-test/catalog', (_req, res) => {
+  res.json(getIntegrationTestCatalog());
+});
+
+/** 运行集成用例：读取各套件最近一份 HTML 报告中的执行结果 */
+app.get('/integration-test/last-results', (_req, res) => {
+  res.json(getIntegrationTestLastResults());
+});
+
+/** 运行集成用例：按面板选择预览将执行的命令，不执行 */
+app.post('/integration-test/preview', (req, res) => {
+  res.json(previewIntegrationTestCommand(parseIntegrationTestSelection(req.body)));
+});
+
+/** 运行集成用例：在系统终端执行所选用例 */
+app.post('/integration-test/run', async (req, res) => {
+  try {
+    const result = await runIntegrationTests(parseIntegrationTestSelection(req.body));
+    res.status(result.success ? 200 : 400).json(result);
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    res.status(500).json({ success: false, error: msg });
+  }
+});
+
+/** Domain Entry：多业务环境 store 摘要 */
+app.get('/domain-entry/store', async (_req, res) => {
+  try {
+    const store = await getDomainEntryStore();
+    res.json({
+      success: true,
+      store,
+      envs: listDomainEntryEnvs(),
+      enabledContexts: Object.values(store.profiles)
+        .filter((p) => p.enable || Object.values(p.sources || {}).some((s) => s?.kind && s.kind !== 'follow'))
+        .map((p) => p.contextEnv),
+    });
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    res.status(500).json({ success: false, error: msg });
+  }
+});
+
+/** Domain Entry：读取某一业务环境 profile（有页面 echo 时优先回显页面真实 MF） */
+app.get('/domain-entry/profile', async (req, res) => {
+  try {
+    const contextEnv = String(req.query?.context ?? req.query?.env ?? 'inte').trim() as MfEnvId;
+    const resolved = await resolveContextEcho(contextEnv);
+    res.json({
+      success: true,
+      profile: resolved.profile,
+      overrides: resolved.overrides,
+      fromPage: resolved.fromPage,
+      pageUpdatedAt: resolved.pageUpdatedAt,
+      envs: listDomainEntryEnvs(),
+    });
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    res.status(500).json({ success: false, error: msg });
+  }
+});
+
+/** 业务页桥接回传当前 localStorage（供桌面 MF 回显） */
+app.post('/domain-entry/page-echo', async (req, res) => {
+  try {
+    const body = (req.body ?? {}) as {
+      contextEnv?: string;
+      context?: string;
+      config?: IDomainEntryPageConfig;
+      pageHost?: string;
+    };
+    const contextEnv = String(body.contextEnv || body.context || '').trim();
+    if (!contextEnv) {
+      res.status(400).json({ success: false, error: '缺少 contextEnv' });
+      return;
+    }
+    if (!body.config || typeof body.config !== 'object') {
+      res.status(400).json({ success: false, error: '缺少 config' });
+      return;
+    }
+    const echo = await savePageEcho({
+      contextEnv,
+      config: body.config,
+      pageHost: body.pageHost,
+    });
+    res.json({ success: true, echo });
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    res.status(400).json({ success: false, error: msg });
+  }
+});
+
+app.get('/domain-entry/page-echo', async (req, res) => {
+  try {
+    const contextEnv = String(req.query?.context ?? req.query?.env ?? '').trim();
+    if (!contextEnv) {
+      res.status(400).json({ success: false, error: '缺少 context' });
+      return;
+    }
+    const echo = await getPageEcho(contextEnv);
+    res.json({ success: true, echo });
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    res.status(500).json({ success: false, error: msg });
+  }
+});
+
+/** Domain Entry：保存某一业务环境 profile（含 enable / 每域来源） */
+app.put('/domain-entry/profile', async (req, res) => {
+  try {
+    const body = (req.body ?? {}) as Partial<IContextDomainEntryProfile> & {
+      contextEnv?: MfEnvId;
+      env?: MfEnvId;
+    };
+    const contextEnv = String(body.contextEnv || body.env || '').trim() as MfEnvId;
+    if (!contextEnv) {
+      res.status(400).json({ success: false, error: '缺少 contextEnv' });
+      return;
+    }
+    const profile = await saveContextProfile({
+      contextEnv,
+      enable: Boolean(body.enable),
+      sources: (body.sources || {}) as Record<string, IDomainMfSource>,
+      logEnable: Boolean(body.logEnable),
+      bridgeEnable: body.bridgeEnable !== false,
+      installCCWebHelper: Boolean(body.installCCWebHelper),
+      isCjetProxy: Boolean(body.isCjetProxy),
+      proxyIp: body.proxyIp,
+      proxyPort: body.proxyPort,
+    });
+    res.json({
+      success: true,
+      profile,
+      overrides: previewContextOverrides(profile),
+      reloadHint: profile.enable
+        ? `已保存「${contextEnv}」覆盖。打开该业务环境页面后桥接会写入 localStorage`
+        : `已保存「${contextEnv}」（无覆盖，跟本境 CDN）`,
+    });
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    res.status(400).json({ success: false, error: msg });
+  }
+});
+
+/** Domain Entry：快捷 — 某业务环境下有端口的域切到 local 并启用 */
+app.post('/domain-entry/apply-shell-local', async (req, res) => {
+  try {
+    const contextEnv = String((req.body as { contextEnv?: string; env?: string })?.contextEnv
+      || (req.body as { env?: string })?.env
+      || '').trim() as MfEnvId;
+    if (!contextEnv) {
+      res.status(400).json({ success: false, error: '缺少 contextEnv' });
+      return;
+    }
+    const result = await applyShellLocalForContext(contextEnv);
+    res.json({
+      success: true,
+      profile: result.profile,
+      bootstrap: result.bootstrap,
+      overrides: previewContextOverrides(result.profile),
+      reloadHint: `已为业务环境「${contextEnv}」启用壳内/带端口域 → local。请打开该环境页面并硬刷新`,
+    });
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    res.status(400).json({ success: false, error: msg });
+  }
+});
+
+/** Domain Entry：重置某一业务环境覆盖 */
+app.post('/domain-entry/reset', async (req, res) => {
+  try {
+    const contextEnv = String(
+      (req.body as { contextEnv?: string; env?: string })?.contextEnv
+        || (req.body as { env?: string })?.env
+        || req.query?.context
+        || 'inte'
+    ).trim() as MfEnvId;
+    const result = await resetContextProfile(contextEnv);
+    res.json({
+      success: true,
+      profile: result.profile,
+      bootstrap: result.bootstrap,
+      reloadHint: `已清空「${contextEnv}」覆盖。请硬刷新该业务环境页面`,
+    });
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    res.status(500).json({ success: false, error: msg });
+  }
+});
+
+/** Domain Entry：bindings 表 */
+app.get('/domain-entry/bindings', (_req, res) => {
+  res.json({ success: true, bindings: listDomainEntryBindings(), envs: listDomainEntryEnvs() });
+});
+
+/**
+ * Domain Entry：桥接 bootstrap
+ * Query context=业务环境（如 inte）；未启用或不匹配则 enable:false
+ */
+app.get('/domain-entry/bootstrap', async (req, res) => {
+  try {
+    const context = String(req.query?.context ?? req.query?.env ?? '').trim();
+    const bootstrap = await getDomainEntryBootstrap(context);
+    res.json(bootstrap);
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    res.status(500).json({ enable: false, current: 'local', domainEntry: {}, error: msg });
+  }
+});
+
+/** 双向实时同步：一次性拉取；桌面也可用来拉 pageEcho */
+app.get('/domain-entry/sync', async (req, res) => {
+  try {
+    const context = String(req.query?.context ?? req.query?.env ?? '').trim();
+    if (!context) {
+      res.status(400).json({ success: false, error: '缺少 context' });
+      return;
+    }
+    const sync = await resolveLiveSync(context);
+    res.json({ success: true, ...sync });
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    res.status(500).json({ success: false, error: msg });
+  }
+});
+
+/** 桌面「刷新 RemoteEntry」：唤醒桥接 → 业务页 reload（打散 remoteEntry 缓存） */
+app.post('/domain-entry/refresh-remote-entry', async (req, res) => {
+  try {
+    const body = (req.body ?? {}) as { contextEnv?: string; context?: string };
+    const contextEnv = String(body.contextEnv || body.context || req.query?.context || '').trim();
+    if (!contextEnv) {
+      res.status(400).json({ success: false, error: '缺少 contextEnv' });
+      return;
+    }
+    const result = requestRemoteEntryRefresh(contextEnv);
+    res.json({ success: true, ...result });
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    res.status(400).json({ success: false, error: msg });
+  }
+});
+
+/**
+ * 长轮询：since 之后有桌面变更立即返回，否则挂起至 timeoutMs（默认 25s）。
+ * 桥接用此替代固定间隔轮询。
+ */
+app.get('/domain-entry/wait-sync', async (req, res) => {
+  try {
+    const context = String(req.query?.context ?? req.query?.env ?? '').trim();
+    if (!context) {
+      res.status(400).json({ success: false, error: '缺少 context' });
+      return;
+    }
+    const since = String(req.query?.since ?? '').trim();
+    const rawTimeout = Number(req.query?.timeoutMs);
+    const timeoutMs = Number.isFinite(rawTimeout) && rawTimeout > 0 ? rawTimeout : DEFAULT_WAIT_SYNC_MS;
+    // Express 默认无请求超时；明确拉长 socket 闲置，避免代理/运行时提前掐断
+    req.setTimeout(timeoutMs + 5_000);
+    res.setTimeout(timeoutMs + 5_000);
+    const sync = await waitForLiveSync(context, since, timeoutMs);
+    res.json({ success: true, ...sync });
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    res.status(500).json({ success: false, error: msg });
+  }
+});
+
+/** 桥接心跳 */
+app.post('/domain-entry/bridge-heartbeat', async (req, res) => {
+  try {
+    const body = (req.body ?? {}) as {
+      contextEnv?: string;
+      context?: string;
+      pageHost?: string;
+      bridgeVersion?: string;
+    };
+    const contextEnv = String(body.contextEnv || body.context || '').trim();
+    if (!contextEnv) {
+      res.status(400).json({ success: false, error: '缺少 contextEnv' });
+      return;
+    }
+    const hb = await saveBridgeHeartbeat({
+      contextEnv,
+      pageHost: body.pageHost,
+      bridgeVersion: body.bridgeVersion,
+    });
+    res.json({ success: true, heartbeat: hb });
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    res.status(400).json({ success: false, error: msg });
+  }
+});
+
+app.get('/domain-entry/bridge-status', async (req, res) => {
+  try {
+    const context = String(req.query?.context ?? req.query?.env ?? '').trim();
+    if (!context) {
+      res.status(400).json({ success: false, error: '缺少 context' });
+      return;
+    }
+    const status = await getBridgeStatus(context);
+    res.json({ success: true, ...status });
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    res.status(500).json({ success: false, error: msg });
+  }
+});
+
+/** 安装油猴桥接：浏览器打开此 URL，Tampermonkey 会提示安装/更新 */
+app.get('/domain-entry/bridge.user.js', (_req, res) => {
+  const file = path.resolve(process.cwd(), 'bridges', 'ccweb-desktop-bridge.user.js');
+  res.setHeader('Content-Type', 'text/javascript; charset=utf-8');
+  res.setHeader('Content-Disposition', 'inline; filename="ccweb-desktop-bridge.user.js"');
+  res.sendFile(file, (err) => {
+    if (err && !res.headersSent) {
+      res.status(404).json({ success: false, error: 'bridge 文件不存在' });
+    }
+  });
+});
+
+/** 桥接排障页：说明 + 一键打开安装 */
+app.get('/domain-entry/bridge-help', (_req, res) => {
+  const install = '/domain-entry/bridge.user.js';
+  res.type('html').send(`<!doctype html>
+<html lang="zh-CN"><head><meta charset="utf-8"/><title>ccweb-desktop-bridge 排障</title>
+<style>
+body{font-family:ui-sans-serif,system-ui;max-width:720px;margin:40px auto;padding:0 16px;line-height:1.6}
+code{background:#f4f4f5;padding:2px 6px;border-radius:4px}
+.ok{color:#16a34a}.bad{color:#dc2626}
+.warn{background:#fef3c7;border:1px solid #f59e0b;padding:12px 14px;border-radius:8px;margin:16px 0}
+a.btn{display:inline-block;margin:8px 8px 8px 0;padding:8px 14px;background:#2563eb;color:#fff;border-radius:8px;text-decoration:none}
+</style></head><body>
+<h1>Domain Entry 桥接排障</h1>
+<p>桌面 <b>MF 联调</b> 是唯一控制面；薄油猴桥接只负责把配置写入业务页
+<code>localStorage['domain-debug-helper-ccweb']</code>（供 <code>domainEntry.js</code> 读取）。
+与 CCWEB 开发助手插件无关。</p>
+<p>桌面显示「桥接未连接」= 业务页上的油猴脚本没有成功请求 <code>127.0.0.1:41738</code>。</p>
+<div class="warn">
+  <b>最常见根因（控制台完全没有 [ccweb-desktop-bridge]、装了也像「没用」）：</b><br/>
+  Chrome <b>138+</b>（你当前是 155）默认关闭油猴的 <b>「允许运行用户脚本 / Allow User Scripts」</b>，
+  脚本装上了也<strong>不会注入页面</strong>，控制台自然无日志。<br/>
+  请打开
+  <a href="chrome://extensions/?id=dhdgffkkebhmkfjojejmpbldmpobfkfo">篡改猴详情页</a>
+  → 打开 <b>允许运行用户脚本</b> → 再硬刷业务页。
+</div>
+<ol>
+<li>确认桌面 API 已开（本页能打开即表示 API 正常）。</li>
+<li><b>必做：</b>打开篡改猴详情，开启 <b>允许运行用户脚本</b>（Chrome 138+；老版 Chrome 则开扩展页「开发者模式」）。</li>
+<li>点击下方按钮安装/更新脚本到 <b>v1.8.10</b>（Tampermonkey 会弹窗；若仍显示旧版，点更新/重新安装）。</li>
+<li>油猴管理页确认脚本<strong>已启用</strong>，站点含 <code>*.chanjet.com</code>。</li>
+<li>第一次运行若弹「允许访问 127.0.0.1」，必须允许。</li>
+<li><strong>硬刷</strong>业务页（Cmd+Shift+R），控制台应出现：<code>[ccweb-desktop-bridge] 1.8.10 ready</code></li>
+<li>也可在 Console 执行 <code>window.__CCWEB_DESKTOP_BRIDGE__</code>，有对象即说明已注入。</li>
+<li>v1.8+ 长轮询；「打印日志 / 本地node」只写 LS（本地node 不改 MF）；「刷新 RemoteEntry」会 reload。</li>
+<li>若只有 <code>GM_xmlhttpRequest 仍不可用</code>：换 Tampermonkey 正式版 / 检查脚本 @grant。</li>
+</ol>
+<p>
+  <a class="btn" href="${install}">安装 / 更新桥接 v1.8.10</a>
+  <a class="btn" href="/domain-entry/bridge-status?context=inte" target="_blank">查看 inte 连接状态 JSON</a>
+</p>
+<p id="st">检测中…</p>
+<script>
+fetch('/domain-entry/bridge-status?context=inte').then(r=>r.json()).then(j=>{
+  const el=document.getElementById('st');
+  if(j.connected){ el.className='ok'; el.textContent='当前 inte：已连接 '+ (j.bridgeVersion||'')+' @ '+(j.pageHost||''); }
+  else { el.className='bad'; el.textContent='当前 inte：未连接 — '+ (j.hint||''); }
+}).catch(e=>{ document.getElementById('st').textContent=String(e); });
+</script>
+</body></html>`);
+});
+
+/** Domain Entry：导出页面 localStorage 契约 JSON（指定业务环境） */
+app.get('/domain-entry/export/page-config', async (req, res) => {
+  try {
+    const contextEnv = String(req.query?.context ?? req.query?.env ?? 'inte').trim() as MfEnvId;
+    const exported = await exportPageConfig(contextEnv);
+    res.json({ success: true, ...exported });
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
     res.status(500).json({ success: false, error: msg });
@@ -1208,7 +1622,7 @@ app.post('/merge/biz-solution-pretest', async (_req, res) => {
   res.end();
 });
 
-/** 合并 biz-solution：目标分支 test-260423，无 pnpm run release，SSE 流式输出 */
+/** 合并 biz-solution：目标分支 test-260922，无 pnpm run release，SSE 流式输出 */
 app.post('/merge/biz-solution', async (_req, res) => {
   recordMerge('biz-solution', 'POST /merge/biz-solution');
   res.setHeader('Content-Type', 'text/event-stream');
@@ -1235,7 +1649,7 @@ app.post('/merge/biz-solution', async (_req, res) => {
   res.end();
 });
 
-/** 合并 scm：目标分支 test-260423，无 pnpm run release，SSE 流式输出 */
+/** 合并 scm：目标分支 test-260922，无 pnpm run release，SSE 流式输出 */
 app.post('/merge/scm', async (_req, res) => {
   recordMerge('scm', 'POST /merge/scm');
   res.setHeader('Content-Type', 'text/event-stream');
